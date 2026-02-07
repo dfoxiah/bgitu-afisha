@@ -1,0 +1,24 @@
+
+# Node.js
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.log
+*.tsbuildinfo
+Untitled-*.txt
+
+# Environment files
+.env
+.env.*.local
+.env.local
+
+# Vercel
+.vercel/
+
+# Node.js Tools for Visual Studio
+.ntvs_analysis.dat
+
+# Local nested repo copy
+bgitu-afisha/

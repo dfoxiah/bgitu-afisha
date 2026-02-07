@@ -1,0 +1,614 @@
+'use client'
+
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
+import Button from '@/components/ui/Button'
+import { showToast } from '@/lib/toast'
+
+type AdminUser = {
+  id: string
+  name: string | null
+  email: string
+  role: 'STUDENT' | 'TEACHER' | 'ADMIN'
+  department: string | null
+  group: string | null
+  groupChangeCount: number
+  bio: string | null
+  createdAt: string
+  updatedAt?: string
+}
+
+type AdminEvent = {
+  id: string
+  title: string
+  category: string
+  date: string
+  time: string
+  location: string
+  maxParticipants: number
+  isPast: boolean
+  creator: { id: string; name: string | null; email: string }
+  moderators: { id: string; name: string | null; email: string }[]
+}
+
+type AuditLog = {
+  id: string
+  action: string
+  entityType: string
+  entityId: string | null
+  createdAt: string
+  actor?: { id: string; name: string | null; email: string | null; role?: string | null } | null
+  metadata?: Record<string, any> | null
+}
+
+const downloadCsv = (filename: string, rows: Array<Record<string, string | number | null | undefined>>) => {
+  if (rows.length === 0) return
+  const headers = Object.keys(rows[0])
+  const escapeValue = (value: string | number | null | undefined) => {
+    const str = value === null || value === undefined ? '' : String(value)
+    return `"${str.replace(/"/g, '""')}"`
+  }
+  const csv = [
+    headers.map(escapeValue).join(','),
+    ...rows.map(row => headers.map(key => escapeValue(row[key])).join(','))
+  ].join('\n')
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(link.href)
+}
+
+const normalizeDateValue = (value: string) => {
+  if (!value) return value
+  return value.includes('T') ? value.slice(0, 10) : value
+}
+
+const parseModeratorEmails = (value: string) => (
+  value
+    .split(',')
+    .map(email => email.trim())
+    .filter(Boolean)
+)
+
+export default function AdminPage() {
+  const router = useRouter()
+  const { data: session, status } = useSession()
+  const [activeTab, setActiveTab] = useState<'users' | 'events' | 'logs'>('users')
+  const [loading, setLoading] = useState(false)
+
+  const [users, setUsers] = useState<AdminUser[]>([])
+  const [events, setEvents] = useState<AdminEvent[]>([])
+  const [logs, setLogs] = useState<AuditLog[]>([])
+
+  const [userSearch, setUserSearch] = useState('')
+  const [userRoleFilter, setUserRoleFilter] = useState<'ALL' | 'STUDENT' | 'TEACHER' | 'ADMIN'>('ALL')
+  const [eventSearch, setEventSearch] = useState('')
+  const [eventCategory, setEventCategory] = useState('ALL')
+  const [eventStatus, setEventStatus] = useState<'ALL' | 'UPCOMING' | 'PAST'>('ALL')
+  const [logAction, setLogAction] = useState('')
+  const [logEntityType, setLogEntityType] = useState('')
+
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
+  const [selectedEvent, setSelectedEvent] = useState<AdminEvent | null>(null)
+  const [userPassword, setUserPassword] = useState('')
+
+  const [newUser, setNewUser] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'STUDENT',
+    department: '',
+    group: ''
+  })
+
+  const canAccess = useMemo(() => session?.user?.role === 'ADMIN', [session])
+  const categoryOptions = useMemo(
+    () => ([
+      { value: 'CONCERT', label: 'Концерт' },
+      { value: 'INTERNAL_ACTIVITY', label: 'Внутривузовская активность' },
+      { value: 'PUBLIC_EVENT', label: 'Общественное мероприятие' },
+      { value: 'COMPETITION', label: 'Соревнование' },
+      { value: 'LECTURE', label: 'Лекция' },
+      { value: 'MASTERCLASS', label: 'Мастер-класс' },
+      { value: 'VOLUNTEER', label: 'Волонтёрская активность' },
+      { value: 'NEWS', label: 'Новость' }
+    ]),
+    []
+  )
+  const categoryLabelMap = useMemo(() => (
+    categoryOptions.reduce<Record<string, string>>((acc, item) => {
+      acc[item.value] = item.label
+      return acc
+    }, {})
+  ), [categoryOptions])
+
+  useEffect(() => {
+    if (status === 'authenticated' && !canAccess) {
+      router.replace('/')
+    }
+  }, [status, canAccess, router])
+
+  const fetchUsers = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (userSearch) params.set('search', userSearch)
+      if (userRoleFilter !== 'ALL') params.set('role', userRoleFilter)
+      const res = await fetch(`/api/admin/users?${params.toString()}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Ошибка загрузки пользователей')
+      setUsers(data)
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка загрузки пользователей', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [userSearch, userRoleFilter])
+
+  const fetchEvents = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (eventSearch) params.set('search', eventSearch)
+      if (eventCategory !== 'ALL') params.set('category', eventCategory)
+      if (eventStatus === 'UPCOMING') params.set('upcoming', 'true')
+      if (eventStatus === 'PAST') params.set('past', 'true')
+      const res = await fetch(`/api/admin/events?${params.toString()}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Ошибка загрузки мероприятий')
+      setEvents(data)
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка загрузки мероприятий', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [eventSearch, eventCategory, eventStatus])
+
+  const fetchLogs = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      params.set('limit', '100')
+      if (logAction) params.set('action', logAction)
+      if (logEntityType) params.set('entityType', logEntityType)
+      const res = await fetch(`/api/admin/logs?${params.toString()}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Ошибка загрузки логов')
+      setLogs(data)
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка загрузки логов', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [logAction, logEntityType])
+
+  useEffect(() => {
+    if (!canAccess) return
+    if (activeTab === 'users') fetchUsers()
+    if (activeTab === 'events') fetchEvents()
+    if (activeTab === 'logs') fetchLogs()
+  }, [activeTab, canAccess, fetchUsers, fetchEvents, fetchLogs])
+
+  const handleCreateUser = async () => {
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser)
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Ошибка создания пользователя')
+      showToast('Пользователь создан', 'success')
+      setNewUser({ name: '', email: '', password: '', role: 'STUDENT', department: '', group: '' })
+      await fetchUsers()
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка создания пользователя', 'error')
+    }
+  }
+
+  const handleUpdateUser = async () => {
+    if (!selectedUser) return
+    try {
+      const payload: any = { ...selectedUser }
+      if (userPassword.trim()) {
+        payload.password = userPassword.trim()
+      }
+      const res = await fetch(`/api/admin/users/${selectedUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Ошибка обновления пользователя')
+      showToast('Пользователь обновлён', 'success')
+      setSelectedUser(null)
+      setUserPassword('')
+      await fetchUsers()
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка обновления пользователя', 'error')
+    }
+  }
+
+  const handleDeleteUser = async (id: string) => {
+    if (!confirm('Удалить пользователя?')) return
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Ошибка удаления')
+      showToast('Пользователь удалён', 'success')
+      await fetchUsers()
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка удаления пользователя', 'error')
+    }
+  }
+
+  const handleUpdateEvent = async () => {
+    if (!selectedEvent) return
+    try {
+      const res = await fetch(`/api/admin/events/${selectedEvent.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: selectedEvent.title,
+          category: selectedEvent.category,
+          date: selectedEvent.date,
+          time: selectedEvent.time,
+          location: selectedEvent.location,
+          maxParticipants: selectedEvent.maxParticipants,
+          moderators: selectedEvent.moderators.map(m => m.email)
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Ошибка обновления мероприятия')
+      showToast('Мероприятие обновлено', 'success')
+      setSelectedEvent(null)
+      await fetchEvents()
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка обновления мероприятия', 'error')
+    }
+  }
+
+  const handleDeleteEvent = async (id: string) => {
+    if (!confirm('Удалить мероприятие?')) return
+    try {
+      const res = await fetch(`/api/admin/events/${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Ошибка удаления')
+      showToast('Мероприятие удалено', 'success')
+      await fetchEvents()
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка удаления мероприятия', 'error')
+    }
+  }
+
+  const handleExportUsers = () => {
+    const rows = users.map(user => ({
+      id: user.id,
+      name: user.name || '',
+      email: user.email,
+      role: user.role,
+      department: user.department || '',
+      group: user.group || '',
+      groupChangeCount: user.groupChangeCount,
+      createdAt: user.createdAt
+    }))
+    downloadCsv(`users-${new Date().toISOString().slice(0, 10)}.csv`, rows)
+  }
+
+  const handleExportEvents = () => {
+    const rows = events.map(event => ({
+      id: event.id,
+      title: event.title,
+      category: event.category,
+      date: event.date,
+      time: event.time,
+      location: event.location,
+      creator: event.creator?.email || '',
+      moderators: event.moderators.map(m => m.email).join(';')
+    }))
+    downloadCsv(`events-${new Date().toISOString().slice(0, 10)}.csv`, rows)
+  }
+
+  const handleExportLogs = () => {
+    const rows = logs.map(log => ({
+      id: log.id,
+      action: log.action,
+      entityType: log.entityType,
+      entityId: log.entityId || '',
+      actor: log.actor?.email || '',
+      createdAt: log.createdAt,
+      metadata: log.metadata ? JSON.stringify(log.metadata) : ''
+    }))
+    downloadCsv(`logs-${new Date().toISOString().slice(0, 10)}.csv`, rows)
+  }
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-light-gray">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-accent"></div>
+      </div>
+    )
+  }
+
+  if (!canAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-light-gray">
+        <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+          <p className="text-gray-700">Недостаточно прав для доступа к админ‑панели</p>
+          <button
+            onClick={() => router.push('/')}
+            className="mt-4 bg-primary text-white px-4 py-2 rounded-lg hover:bg-secondary transition-colors"
+          >
+            На главную
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-light-gray px-4 md:px-5% py-8">
+      <div className="container mx-auto">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Админ‑панель</h1>
+            <p className="text-sm text-gray-500">Управление пользователями, мероприятиями и аудит‑логами</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => {
+              if (activeTab === 'users') fetchUsers()
+              if (activeTab === 'events') fetchEvents()
+              if (activeTab === 'logs') fetchLogs()
+            }} disabled={loading}>
+              Обновить
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 mb-6">
+          {(['users', 'events', 'logs'] as const).map(tab => (
+            <button
+              key={tab}
+              className={`px-4 py-2 rounded-full ${activeTab === tab ? 'bg-white shadow text-primary' : 'text-gray-600'}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab === 'users' ? 'Пользователи' : tab === 'events' ? 'Мероприятия' : 'Логи'}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'users' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-4">
+              <div className="liquid-card p-4 flex flex-wrap gap-3 items-center">
+                <input
+                  className="flex-grow px-4 py-2 rounded-lg border border-gray-200"
+                  placeholder="Поиск по имени, email, группе"
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                />
+                <select
+                  className="px-3 py-2 border rounded-lg"
+                  value={userRoleFilter}
+                  onChange={(e) => setUserRoleFilter(e.target.value as any)}
+                >
+                  <option value="ALL">Все роли</option>
+                  <option value="STUDENT">STUDENT</option>
+                  <option value="TEACHER">TEACHER</option>
+                  <option value="ADMIN">ADMIN</option>
+                </select>
+                <Button variant="secondary" onClick={fetchUsers}>Найти</Button>
+                <Button variant="secondary" onClick={handleExportUsers}>Экспорт CSV</Button>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow p-4 overflow-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-500">
+                      <th className="py-2">Имя</th>
+                      <th>Email</th>
+                      <th>Роль</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map(user => (
+                      <tr key={user.id} className="border-t">
+                        <td className="py-2">{user.name || '—'}</td>
+                        <td>{user.email}</td>
+                        <td>{user.role}</td>
+                        <td className="text-right space-x-2">
+                          <button className="text-accent" onClick={() => {
+                            setSelectedUser(user)
+                            setUserPassword('')
+                          }}>
+                            Редактировать
+                          </button>
+                          <button className="text-red-600" onClick={() => handleDeleteUser(user.id)}>Удалить</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl shadow p-4">
+                <h3 className="font-semibold mb-3">Создать пользователя</h3>
+                <div className="space-y-3">
+                  <input className="w-full px-3 py-2 border rounded" placeholder="Имя" value={newUser.name} onChange={(e) => setNewUser(prev => ({ ...prev, name: e.target.value }))} />
+                  <input className="w-full px-3 py-2 border rounded" placeholder="Email" value={newUser.email} onChange={(e) => setNewUser(prev => ({ ...prev, email: e.target.value }))} />
+                  <input className="w-full px-3 py-2 border rounded" placeholder="Пароль" type="password" value={newUser.password} onChange={(e) => setNewUser(prev => ({ ...prev, password: e.target.value }))} />
+                  <select className="w-full px-3 py-2 border rounded" value={newUser.role} onChange={(e) => setNewUser(prev => ({ ...prev, role: e.target.value }))}>
+                    <option value="STUDENT">STUDENT</option>
+                    <option value="TEACHER">TEACHER</option>
+                    <option value="ADMIN">ADMIN</option>
+                  </select>
+                  <input className="w-full px-3 py-2 border rounded" placeholder="Кафедра/факультет" value={newUser.department} onChange={(e) => setNewUser(prev => ({ ...prev, department: e.target.value }))} />
+                  <input className="w-full px-3 py-2 border rounded" placeholder="Группа" value={newUser.group} onChange={(e) => setNewUser(prev => ({ ...prev, group: e.target.value }))} />
+                  <Button variant="primary" onClick={handleCreateUser}>Создать</Button>
+                </div>
+              </div>
+
+              {selectedUser && (
+                <div className="bg-white rounded-2xl shadow p-4">
+                  <h3 className="font-semibold mb-3">Редактирование</h3>
+                  <div className="space-y-3">
+                    <input className="w-full px-3 py-2 border rounded" value={selectedUser.name || ''} onChange={(e) => setSelectedUser(prev => prev ? ({ ...prev, name: e.target.value }) : prev)} />
+                    <input className="w-full px-3 py-2 border rounded" value={selectedUser.email} onChange={(e) => setSelectedUser(prev => prev ? ({ ...prev, email: e.target.value }) : prev)} />
+                    <select className="w-full px-3 py-2 border rounded" value={selectedUser.role} onChange={(e) => setSelectedUser(prev => prev ? ({ ...prev, role: e.target.value as AdminUser['role'] }) : prev)}>
+                      <option value="STUDENT">STUDENT</option>
+                      <option value="TEACHER">TEACHER</option>
+                      <option value="ADMIN">ADMIN</option>
+                    </select>
+                    <input className="w-full px-3 py-2 border rounded" placeholder="Кафедра" value={selectedUser.department || ''} onChange={(e) => setSelectedUser(prev => prev ? ({ ...prev, department: e.target.value }) : prev)} />
+                    <input className="w-full px-3 py-2 border rounded" placeholder="Группа" value={selectedUser.group || ''} onChange={(e) => setSelectedUser(prev => prev ? ({ ...prev, group: e.target.value }) : prev)} />
+                    <input className="w-full px-3 py-2 border rounded" placeholder="Счётчик смен группы" value={selectedUser.groupChangeCount} onChange={(e) => setSelectedUser(prev => prev ? ({ ...prev, groupChangeCount: Number(e.target.value) || 0 }) : prev)} />
+                    <input className="w-full px-3 py-2 border rounded" placeholder="Новый пароль (необязательно)" type="password" value={userPassword} onChange={(e) => setUserPassword(e.target.value)} />
+                    <div className="flex gap-2">
+                      <Button variant="primary" onClick={handleUpdateUser}>Сохранить</Button>
+                      <Button variant="secondary" onClick={() => { setSelectedUser(null); setUserPassword('') }}>Отмена</Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'events' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-4">
+              <div className="liquid-card p-4 flex flex-wrap gap-3 items-center">
+                <input
+                  className="flex-grow px-4 py-2 rounded-lg border border-gray-200"
+                  placeholder="Поиск по названию или описанию"
+                  value={eventSearch}
+                  onChange={(e) => setEventSearch(e.target.value)}
+                />
+                <select className="px-3 py-2 border rounded-lg" value={eventCategory} onChange={(e) => setEventCategory(e.target.value)}>
+                  <option value="ALL">Все категории</option>
+                  {categoryOptions.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <select className="px-3 py-2 border rounded-lg" value={eventStatus} onChange={(e) => setEventStatus(e.target.value as any)}>
+                  <option value="ALL">Все</option>
+                  <option value="UPCOMING">Будущие</option>
+                  <option value="PAST">Прошедшие</option>
+                </select>
+                <Button variant="secondary" onClick={fetchEvents}>Найти</Button>
+                <Button variant="secondary" onClick={handleExportEvents}>Экспорт CSV</Button>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow p-4 overflow-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-500">
+                      <th className="py-2">Название</th>
+                      <th>Категория</th>
+                      <th>Дата</th>
+                      <th>Статус</th>
+                      <th>Создатель</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {events.map(event => (
+                      <tr key={event.id} className="border-t">
+                        <td className="py-2">{event.title}</td>
+                        <td>{categoryLabelMap[event.category] || event.category}</td>
+                        <td>{new Date(event.date).toLocaleDateString('ru-RU')}</td>
+                        <td>{event.isPast ? 'Прошедшее' : 'Будущее'}</td>
+                        <td>{event.creator?.name || event.creator?.email}</td>
+                        <td className="text-right space-x-2">
+                          <button className="text-accent" onClick={() => setSelectedEvent({
+                            ...event,
+                            date: normalizeDateValue(event.date)
+                          })}>
+                            Редактировать
+                          </button>
+                          <button className="text-red-600" onClick={() => handleDeleteEvent(event.id)}>Удалить</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {selectedEvent && (
+              <div className="bg-white rounded-2xl shadow p-4 space-y-3">
+                <h3 className="font-semibold">Редактирование мероприятия</h3>
+                <input className="w-full px-3 py-2 border rounded" value={selectedEvent.title} onChange={(e) => setSelectedEvent(prev => prev ? ({ ...prev, title: e.target.value }) : prev)} />
+                <input className="w-full px-3 py-2 border rounded" value={selectedEvent.location || ''} onChange={(e) => setSelectedEvent(prev => prev ? ({ ...prev, location: e.target.value }) : prev)} />
+                <select
+                  className="w-full px-3 py-2 border rounded"
+                  value={selectedEvent.category}
+                  onChange={(e) => setSelectedEvent(prev => prev ? ({ ...prev, category: e.target.value }) : prev)}
+                >
+                  {categoryOptions.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <input className="w-full px-3 py-2 border rounded" type="date" value={selectedEvent.date} onChange={(e) => setSelectedEvent(prev => prev ? ({ ...prev, date: e.target.value }) : prev)} />
+                <input className="w-full px-3 py-2 border rounded" value={selectedEvent.time || ''} onChange={(e) => setSelectedEvent(prev => prev ? ({ ...prev, time: e.target.value }) : prev)} />
+                <input className="w-full px-3 py-2 border rounded" type="number" min="0" value={selectedEvent.maxParticipants ?? 0} onChange={(e) => setSelectedEvent(prev => prev ? ({ ...prev, maxParticipants: Number(e.target.value) || 0 }) : prev)} />
+                <input
+                  className="w-full px-3 py-2 border rounded"
+                  placeholder="Модераторы (email через запятую)"
+                  value={selectedEvent.moderators.map(m => m.email).join(', ')}
+                  onChange={(e) => setSelectedEvent(prev => prev ? ({
+                    ...prev,
+                    moderators: parseModeratorEmails(e.target.value).map(email => ({ id: email, email, name: null }))
+                  }) : prev)}
+                />
+                <div className="flex gap-2">
+                  <Button variant="primary" onClick={handleUpdateEvent}>Сохранить</Button>
+                  <Button variant="secondary" onClick={() => setSelectedEvent(null)}>Отмена</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'logs' && (
+          <div className="space-y-4">
+            <div className="liquid-card p-4 flex flex-wrap gap-3 items-center">
+              <input className="px-3 py-2 border rounded" placeholder="Action (например, EVENT_UPDATE)" value={logAction} onChange={(e) => setLogAction(e.target.value)} />
+              <input className="px-3 py-2 border rounded" placeholder="EntityType (User/Event)" value={logEntityType} onChange={(e) => setLogEntityType(e.target.value)} />
+              <Button variant="secondary" onClick={fetchLogs}>Найти</Button>
+              <Button variant="secondary" onClick={handleExportLogs}>Экспорт CSV</Button>
+            </div>
+            <div className="bg-white rounded-2xl shadow p-4">
+              <div className="text-sm text-gray-500 mb-3">Последние действия (до 100 записей)</div>
+              <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                {logs.map(log => (
+                  <div key={log.id} className="border border-gray-200 rounded-lg p-3">
+                    <div className="text-xs text-gray-500">
+                      {new Date(log.createdAt).toLocaleString('ru-RU')}
+                    </div>
+                    <div className="font-medium text-gray-800">{log.action}</div>
+                    <div className="text-sm text-gray-600">
+                      {log.entityType}{log.entityId ? `: ${log.entityId}` : ''}
+                    </div>
+                    {log.actor && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        Автор: {log.actor.name || log.actor.email} ({log.actor.role})
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

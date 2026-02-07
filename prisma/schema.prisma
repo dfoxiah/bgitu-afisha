@@ -1,0 +1,209 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String?
+  email         String         @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role           @default(STUDENT)
+  password      String?
+  department    String?
+  group         String?
+  groupChangeCount Int         @default(0)
+  bio           String?        @db.Text
+  privacyConsentAt DateTime?
+  termsConsentAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  
+  accounts          Account[]
+  sessions          Session[]
+  eventsCreated     Event[]             @relation("EventCreator")
+  eventsModerated   EventModerator[]
+  eventParticipants EventParticipant[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]          @relation("AuditActor")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Event {
+  id                String       @id @default(cuid())
+  title             String
+  category          EventCategory
+  date              DateTime
+  time              String
+  duration          String
+  location          String
+  description       String       @db.Text
+  maxParticipants   Int
+  currentParticipants Int        @default(0)
+  isPast            Boolean      @default(false)
+  removedFromCalendar Boolean    @default(false)
+  isNews            Boolean      @default(false)
+  images            String[]     // JSON array stored as text
+  responsible       String
+  contact           String
+  
+  // Relations
+  creatorId         String
+  creator           User                @relation("EventCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  moderators        EventModerator[]
+  eventParticipants EventParticipant[]
+  
+  // Report
+  report            EventReport?
+  
+  // Metadata
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  
+  @@index([date])
+  @@index([category])
+  @@index([isPast])
+}
+
+model EventModerator {
+  eventId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
+  @@index([userId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  action    String
+  entityType String
+  entityId  String?
+  metadata  Json?
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model EventParticipant {
+  eventId   String
+  userId    String
+  status    ParticipantStatus @default(PENDING)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
+  @@index([eventId, status])
+  @@index([userId, status])
+}
+
+model EventReport {
+  id                String   @id @default(cuid())
+  eventId           String   @unique
+  event             Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  summary           String   @db.Text
+  tasks             String[] // JSON array stored as text
+  comment           String?  @db.Text
+  reportDate        DateTime
+  activeParticipants String[] // JSON array stored as text
+  images            String[] // JSON array stored as text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  content   String           @db.Text
+  type      NotificationType
+  read      Boolean          @default(false)
+  metadata  Json?            // Store additional data as JSON
+  createdAt DateTime         @default(now())
+  
+  @@index([userId, read])
+  @@index([createdAt])
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum EventCategory {
+  CONCERT
+  INTERNAL_ACTIVITY
+  PUBLIC_EVENT
+  COMPETITION
+  LECTURE
+  MASTERCLASS
+  VOLUNTEER
+  NEWS
+}
+
+enum NotificationType {
+  NEW
+  CHANGE
+  COMPLETE
+  EVENT
+  SYSTEM
+}
+
+enum ParticipantStatus {
+  PENDING
+  CONFIRMED
+}

@@ -1,0 +1,25 @@
+{
+    "version": "0.2",
+    "language": "en,ru",
+    "words": [
+      "дебаггер",
+      "дебаггером",
+      "nextauth",
+      "bgitu",
+      "tsx",
+      "prisma",
+      "tailwindcss",
+      "autoprefixer",
+      "postcss",
+      "eslint",
+      "vercel",
+      "cuid",
+      "yandex"
+    ],
+    "ignorePaths": [
+      "node_modules",
+      "package.json",
+      "tsconfig.json",
+      "*.log"
+    ]
+  }

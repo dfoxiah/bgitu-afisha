@@ -1,0 +1,28 @@
+'use client'
+
+import { usePathname } from 'next/navigation'
+import Header from '@/components/layout/Header'
+import Footer from '@/components/layout/Footer'
+import ToastProvider from '@/components/ui/ToastProvider'
+import DebuggerInitializer from '@/components/dev/DebuggerInitializer'
+
+type LayoutShellProps = {
+  children: React.ReactNode
+}
+
+export default function LayoutShell({ children }: LayoutShellProps) {
+  const pathname = usePathname()
+  const hideChrome = pathname === '/login' || pathname === '/register'
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      {!hideChrome && <Header />}
+      <main className={`flex-grow relative z-0 ${hideChrome ? '' : 'pt-24'}`}>
+        {children}
+      </main>
+      {!hideChrome && <Footer />}
+      <ToastProvider />
+      <DebuggerInitializer />
+    </div>
+  )
+}
