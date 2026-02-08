@@ -7,6 +7,18 @@ const prisma = new PrismaClient()
 async function main() {
   console.log('🌱 Начало сидинга базы данных...')
 
+  const allowReset = process.env.SEED_RESET === 'true'
+  const existingUsers = await prisma.user.count()
+
+  if (existingUsers > 0 && !allowReset) {
+    console.log('ℹ️ Seed пропущен: база уже содержит данные. Установите SEED_RESET=true для полной пересборки.')
+    return
+  }
+
+  if (existingUsers > 0 && allowReset) {
+    console.log('⚠️ SEED_RESET=true: выполняется полная очистка базы данных.')
+  }
+
   // Очистка существующих данных (в правильном порядке)
   await prisma.auditLog.deleteMany()
   await prisma.eventModerator.deleteMany()
