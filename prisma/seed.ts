@@ -65,6 +65,7 @@ async function main() {
   const adminSeedPassword =
     process.env.ADMIN_SEED_PASSWORD ||
     (process.env.NODE_ENV !== 'production' ? 'admin12345' : '')
+  const adminSeedName = process.env.ADMIN_SEED_NAME || 'Администратор'
 
   if (adminSeedPassword) {
     const hashedAdminPassword = await bcrypt.hash(adminSeedPassword, 10)
@@ -73,7 +74,9 @@ async function main() {
     await prisma.user.createMany({
       data: adminEmails.map((email, index) => ({
         email,
-        name: `Администратор ${index + 1}`,
+        name: adminSeedName.includes('{n}')
+          ? adminSeedName.replace('{n}', String(index + 1))
+          : adminSeedName,
         password: hashedAdminPassword,
         role: 'ADMIN',
         privacyConsentAt: consentAt,
