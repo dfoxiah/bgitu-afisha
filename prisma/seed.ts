@@ -34,13 +34,15 @@ async function main() {
   const consentAt = new Date()
 
   // Создание тестовых пользователей
-  const hashedTeacherPassword = await bcrypt.hash('teacher', 10)
+  const teacherSeedEmail = process.env.TEACHER_SEED_EMAIL || 'MainTeacher2026@bgitu.ru'
+  const teacherSeedPassword = process.env.TEACHER_SEED_PASSWORD || 'T9mW2pK7sL8xQ4cN'
+  const hashedTeacherPassword = await bcrypt.hash(teacherSeedPassword, 10)
   const hashedStudentPassword = await bcrypt.hash('student', 10)
 
   const teacher = await prisma.user.create({
     data: {
-      email: 'teacher@bgitu.ru',
-      name: 'Иван Петров',
+      email: teacherSeedEmail,
+      name: 'Main Teacher',
       password: hashedTeacherPassword,
       role: 'TEACHER',
       department: 'Кафедра информационных технологий',
@@ -63,20 +65,30 @@ async function main() {
 
   // Администраторы (3 учётные записи)
   const adminSeedPassword =
-    process.env.ADMIN_SEED_PASSWORD ||
-    (process.env.NODE_ENV !== 'production' ? 'admin12345' : '')
-  const adminSeedName = process.env.ADMIN_SEED_NAME || 'Администратор'
+    process.env.ADMIN_SEED_PASSWORD || 'R5mQ9tX2sL7pV8cN'
+  const adminSeedName = process.env.ADMIN_SEED_NAME
+  const defaultAdminEmails = [
+    'AdminNovaQ7K3Z9X@bgitu.ru',
+    'AdminNovaQ7K3Z9Y@bgitu.ru',
+    'AdminNovaQ7K3Z9Z@bgitu.ru'
+  ]
+  const adminEmails = (process.env.ADMIN_SEED_EMAILS || '')
+    .split(',')
+    .map((email) => email.trim())
+    .filter(Boolean)
+  const resolvedAdminEmails = adminEmails.length > 0 ? adminEmails : defaultAdminEmails
 
   if (adminSeedPassword) {
     const hashedAdminPassword = await bcrypt.hash(adminSeedPassword, 10)
-    const adminEmails = ['admin1@bgitu.ru', 'admin2@bgitu.ru', 'admin3@bgitu.ru']
 
     await prisma.user.createMany({
-      data: adminEmails.map((email, index) => ({
+      data: resolvedAdminEmails.map((email, index) => ({
         email,
-        name: adminSeedName.includes('{n}')
-          ? adminSeedName.replace('{n}', String(index + 1))
-          : adminSeedName,
+        name: adminSeedName
+          ? (adminSeedName.includes('{n}')
+            ? adminSeedName.replace('{n}', String(index + 1))
+            : adminSeedName)
+          : email.split('@')[0],
         password: hashedAdminPassword,
         role: 'ADMIN',
         privacyConsentAt: consentAt,
@@ -192,10 +204,10 @@ async function main() {
   })
 
   console.log('✅ Сидинг базы данных завершен!')
-  console.log(`👨‍🏫 Преподаватель: teacher@bgitu.ru / teacher`)
+  console.log(`👨‍🏫 Преподаватель: ${teacherSeedEmail} / ${teacherSeedPassword}`)
   console.log(`👩‍🎓 Студент: student@bgitu.ru / student`)
   if (adminSeedPassword) {
-    console.log(`🛠️ Админы: admin1@bgitu.ru, admin2@bgitu.ru, admin3@bgitu.ru`)
+    console.log(`🛠️ Админы: ${resolvedAdminEmails.join(', ')}`)
     if (process.env.NODE_ENV !== 'production') {
       console.log(`🔐 Пароль админов (dev): ${adminSeedPassword}`)
     }

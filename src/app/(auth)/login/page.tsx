@@ -149,7 +149,7 @@ export default function LoginPage() {
   const handleDemoLogin = async (type: 'teacher' | 'student') => {
     if (!showDemo) return
     const demoCredentials = type === 'teacher' 
-      ? { email: 'teacher@bgitu.ru', password: 'teacher' }
+      ? { email: 'MainTeacher2026@bgitu.ru', password: 'T9mW2pK7sL8xQ4cN' }
       : { email: 'student@bgitu.ru', password: 'student' }
     
     setCredentials(demoCredentials)
@@ -358,7 +358,7 @@ export default function LoginPage() {
                   </button>
                 </div>
                 <div className="mt-4 space-y-1 text-xs">
-                  <p className="font-medium">Преподаватель: teacher@bgitu.ru / teacher</p>
+                  <p className="font-medium">Преподаватель: MainTeacher2026@bgitu.ru / T9mW2pK7sL8xQ4cN</p>
                   <p className="font-medium">Студент: student@bgitu.ru / student</p>
                 </div>
               </>

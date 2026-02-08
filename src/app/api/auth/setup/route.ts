@@ -8,9 +8,21 @@ export async function GET(_req: NextRequest) {
   }
 
   try {
+    const teacherSeedEmail = process.env.TEACHER_SEED_EMAIL || 'MainTeacher2026@bgitu.ru';
+    const defaultAdminEmails = [
+      'AdminNovaQ7K3Z9X@bgitu.ru',
+      'AdminNovaQ7K3Z9Y@bgitu.ru',
+      'AdminNovaQ7K3Z9Z@bgitu.ru'
+    ];
+    const adminEmails = (process.env.ADMIN_SEED_EMAILS || '')
+      .split(',')
+      .map((email) => email.trim())
+      .filter(Boolean);
+    const resolvedAdminEmails = adminEmails.length > 0 ? adminEmails : defaultAdminEmails;
+
     // Проверяем, есть ли тестовые пользователи
     const teacher = await prisma.user.findUnique({
-      where: { email: 'teacher@bgitu.ru' }
+      where: { email: teacherSeedEmail }
     });
     
     const student = await prisma.user.findUnique({
@@ -18,7 +30,7 @@ export async function GET(_req: NextRequest) {
     });
 
     const admins = await prisma.user.findMany({
-      where: { email: { in: ['admin1@bgitu.ru', 'admin2@bgitu.ru', 'admin3@bgitu.ru'] } },
+      where: { email: { in: resolvedAdminEmails } },
       select: { id: true, email: true, role: true }
     });
     
@@ -49,14 +61,29 @@ export async function POST(_req: NextRequest) {
   }
 
   try {
+    const teacherSeedEmail = process.env.TEACHER_SEED_EMAIL || 'MainTeacher2026@bgitu.ru';
+    const teacherSeedPassword = process.env.TEACHER_SEED_PASSWORD || 'T9mW2pK7sL8xQ4cN';
+    const adminSeedPassword = process.env.ADMIN_SEED_PASSWORD || 'R5mQ9tX2sL7pV8cN';
+    const adminSeedName = process.env.ADMIN_SEED_NAME;
+    const defaultAdminEmails = [
+      'AdminNovaQ7K3Z9X@bgitu.ru',
+      'AdminNovaQ7K3Z9Y@bgitu.ru',
+      'AdminNovaQ7K3Z9Z@bgitu.ru'
+    ];
+    const adminEmails = (process.env.ADMIN_SEED_EMAILS || '')
+      .split(',')
+      .map((email) => email.trim())
+      .filter(Boolean);
+    const resolvedAdminEmails = adminEmails.length > 0 ? adminEmails : defaultAdminEmails;
+
     // Создаем тестовых пользователей если их нет
-    const hashedTeacherPassword = await bcrypt.hash('teacher', 10);
+    const hashedTeacherPassword = await bcrypt.hash(teacherSeedPassword, 10);
     const hashedStudentPassword = await bcrypt.hash('student', 10);
     const consentAt = new Date();
     
     // Проверяем существующих
     const existingTeacher = await prisma.user.findUnique({
-      where: { email: 'teacher@bgitu.ru' }
+      where: { email: teacherSeedEmail }
     });
     
     const existingStudent = await prisma.user.findUnique({
@@ -66,8 +93,8 @@ export async function POST(_req: NextRequest) {
     if (!existingTeacher) {
       await prisma.user.create({
         data: {
-          email: 'teacher@bgitu.ru',
-          name: 'Иван Петров',
+          email: teacherSeedEmail,
+          name: 'Main Teacher',
           password: hashedTeacherPassword,
           role: 'TEACHER',
           department: 'Кафедра информационных технологий',
@@ -91,21 +118,23 @@ export async function POST(_req: NextRequest) {
       });
     }
 
-    const adminPassword = process.env.ADMIN_SEED_PASSWORD || 'admin12345';
-    const hashedAdminPassword = await bcrypt.hash(adminPassword, 10);
-    const adminEmails = ['admin1@bgitu.ru', 'admin2@bgitu.ru', 'admin3@bgitu.ru'];
+    const hashedAdminPassword = await bcrypt.hash(adminSeedPassword, 10);
     const existingAdmins = await prisma.user.findMany({
-      where: { email: { in: adminEmails } },
+      where: { email: { in: resolvedAdminEmails } },
       select: { email: true }
     });
     const existingAdminEmails = new Set(existingAdmins.map(a => a.email));
 
-    const adminsToCreate = adminEmails.filter(email => !existingAdminEmails.has(email));
+    const adminsToCreate = resolvedAdminEmails.filter(email => !existingAdminEmails.has(email));
     if (adminsToCreate.length > 0) {
       await prisma.user.createMany({
         data: adminsToCreate.map((email, index) => ({
           email,
-          name: `Администратор ${index + 1}`,
+          name: adminSeedName
+            ? (adminSeedName.includes('{n}')
+              ? adminSeedName.replace('{n}', String(index + 1))
+              : adminSeedName)
+            : email.split('@')[0],
           password: hashedAdminPassword,
           role: 'ADMIN',
           privacyConsentAt: consentAt,
@@ -118,9 +147,9 @@ export async function POST(_req: NextRequest) {
       success: true,
       message: "Тестовые пользователи созданы/проверены",
       users: {
-        teacher: 'teacher@bgitu.ru / teacher',
+        teacher: `${teacherSeedEmail} / ${teacherSeedPassword}`,
         student: 'student@bgitu.ru / student',
-        admins: 'admin1@bgitu.ru / admin2@bgitu.ru / admin3@bgitu.ru'
+        admins: resolvedAdminEmails.join(' / ')
       }
     });
   } catch (error) {
