@@ -8,28 +8,24 @@ async function main() {
   console.log('🌱 Начало сидинга базы данных...')
 
   const allowReset = process.env.SEED_RESET === 'true'
-  const existingUsers = await prisma.user.count()
+  const allowPasswordUpdate = process.env.SEED_UPDATE_PASSWORDS === 'true'
 
-  if (existingUsers > 0 && !allowReset) {
-    console.log('ℹ️ Seed пропущен: база уже содержит данные. Установите SEED_RESET=true для полной пересборки.')
-    return
-  }
-
-  if (existingUsers > 0 && allowReset) {
+  if (allowReset) {
     console.log('⚠️ SEED_RESET=true: выполняется полная очистка базы данных.')
+    // Очистка существующих данных (в правильном порядке)
+    await prisma.auditLog.deleteMany()
+    await prisma.eventModerator.deleteMany()
+    await prisma.notification.deleteMany()
+    await prisma.eventReport.deleteMany()
+    await prisma.eventParticipant.deleteMany()
+    await prisma.event.deleteMany()
+    await prisma.account.deleteMany()
+    await prisma.session.deleteMany()
+    await prisma.verificationToken.deleteMany()
+    await prisma.user.deleteMany()
+  } else {
+    console.log('ℹ️ Seed работает в режиме добавления (без очистки данных).')
   }
-
-  // Очистка существующих данных (в правильном порядке)
-  await prisma.auditLog.deleteMany()
-  await prisma.eventModerator.deleteMany()
-  await prisma.notification.deleteMany()
-  await prisma.eventReport.deleteMany()
-  await prisma.eventParticipant.deleteMany()
-  await prisma.event.deleteMany()
-  await prisma.account.deleteMany()
-  await prisma.session.deleteMany()
-  await prisma.verificationToken.deleteMany()
-  await prisma.user.deleteMany()
 
   const consentAt = new Date()
 
@@ -39,29 +35,65 @@ async function main() {
   const hashedTeacherPassword = await bcrypt.hash(teacherSeedPassword, 10)
   const hashedStudentPassword = await bcrypt.hash('student', 10)
 
-  const teacher = await prisma.user.create({
-    data: {
-      email: teacherSeedEmail,
-      name: 'Main Teacher',
-      password: hashedTeacherPassword,
-      role: 'TEACHER',
-      department: 'Кафедра информационных технологий',
-      privacyConsentAt: consentAt,
-      termsConsentAt: consentAt
-    }
+  const existingTeacher = await prisma.user.findUnique({
+    where: { email: teacherSeedEmail }
   })
 
-  const student = await prisma.user.create({
-    data: {
-      email: 'student@bgitu.ru',
-      name: 'Мария Сидорова',
-      password: hashedStudentPassword,
-      role: 'STUDENT',
-      group: 'ИС-21',
-      privacyConsentAt: consentAt,
-      termsConsentAt: consentAt
-    }
+  const teacher = existingTeacher
+    ? await prisma.user.update({
+        where: { email: teacherSeedEmail },
+        data: {
+          name: existingTeacher.name || 'Main Teacher',
+          role: 'TEACHER',
+          department: existingTeacher.department || 'Кафедра информационных технологий',
+          privacyConsentAt: existingTeacher.privacyConsentAt || consentAt,
+          termsConsentAt: existingTeacher.termsConsentAt || consentAt,
+          ...(allowPasswordUpdate || !existingTeacher.password
+            ? { password: hashedTeacherPassword }
+            : {})
+        }
+      })
+    : await prisma.user.create({
+        data: {
+          email: teacherSeedEmail,
+          name: 'Main Teacher',
+          password: hashedTeacherPassword,
+          role: 'TEACHER',
+          department: 'Кафедра информационных технологий',
+          privacyConsentAt: consentAt,
+          termsConsentAt: consentAt
+        }
+      })
+
+  const existingStudent = await prisma.user.findUnique({
+    where: { email: 'student@bgitu.ru' }
   })
+
+  const student = existingStudent
+    ? await prisma.user.update({
+        where: { email: 'student@bgitu.ru' },
+        data: {
+          name: existingStudent.name || 'Мария Сидорова',
+          role: 'STUDENT',
+          group: existingStudent.group || 'ИС-21',
+          privacyConsentAt: existingStudent.privacyConsentAt || consentAt,
+          termsConsentAt: existingStudent.termsConsentAt || consentAt,
+          ...(allowPasswordUpdate || !existingStudent.password
+            ? { password: hashedStudentPassword }
+            : {})
+        }
+      })
+    : await prisma.user.create({
+        data: {
+          email: 'student@bgitu.ru',
+          name: 'Мария Сидорова',
+          password: hashedStudentPassword,
+          role: 'STUDENT',
+          group: 'ИС-21',
+          privacyConsentAt: consentAt,
+          termsConsentAt: consentAt
+        }
+      })
 
   // Администраторы (3 учётные записи)
   const adminSeedPassword =
@@ -81,25 +113,50 @@ async function main() {
   if (adminSeedPassword) {
     const hashedAdminPassword = await bcrypt.hash(adminSeedPassword, 10)
 
-    await prisma.user.createMany({
-      data: resolvedAdminEmails.map((email, index) => ({
-        email,
-        name: adminSeedName
-          ? (adminSeedName.includes('{n}')
-            ? adminSeedName.replace('{n}', String(index + 1))
-            : adminSeedName)
-          : email.split('@')[0],
-        password: hashedAdminPassword,
-        role: 'ADMIN',
-        privacyConsentAt: consentAt,
-        termsConsentAt: consentAt
-      }))
-    })
+    for (let index = 0; index < resolvedAdminEmails.length; index += 1) {
+      const email = resolvedAdminEmails[index]
+      const existingAdmin = await prisma.user.findUnique({ where: { email } })
+      const name = adminSeedName
+        ? (adminSeedName.includes('{n}')
+          ? adminSeedName.replace('{n}', String(index + 1))
+          : adminSeedName)
+        : email.split('@')[0]
+
+      if (!existingAdmin) {
+        await prisma.user.create({
+          data: {
+            email,
+            name,
+            password: hashedAdminPassword,
+            role: 'ADMIN',
+            privacyConsentAt: consentAt,
+            termsConsentAt: consentAt
+          }
+        })
+      } else {
+        await prisma.user.update({
+          where: { email },
+          data: {
+            name: existingAdmin.name || name,
+            role: 'ADMIN',
+            privacyConsentAt: existingAdmin.privacyConsentAt || consentAt,
+            termsConsentAt: existingAdmin.termsConsentAt || consentAt,
+            ...(allowPasswordUpdate || !existingAdmin.password
+              ? { password: hashedAdminPassword }
+              : {})
+          }
+        })
+      }
+    }
   } else {
     console.log('⚠️ ADMIN_SEED_PASSWORD не задан. Админы не созданы.')
   }
 
-  // Создание тестовых мероприятий
+  // Создание тестовых мероприятий (только если их нет)
+  const existingEvents = await prisma.event.count()
+  if (existingEvents > 0 && !allowReset) {
+    console.log('ℹ️ События уже существуют, пропускаем создание тестовых мероприятий.')
+  } else {
   const makeDate = (daysFromNow: number, hours: number, minutes: number) => {
     const date = new Date()
     date.setDate(date.getDate() + daysFromNow)
@@ -111,9 +168,9 @@ async function main() {
   const event2Date = makeDate(30, 18, 0)
   const event3Date = makeDate(-60, 9, 0)
 
-  await prisma.event.create({
-    data: {
-      title: 'День открытых дверей БГИТУ',
+    await prisma.event.create({
+      data: {
+        title: 'День открытых дверей БГИТУ',
       category: EventCategory.PUBLIC_EVENT,
       date: event1Date,
       time: '10:00 - 14:00',
@@ -137,9 +194,9 @@ async function main() {
     }
   })
 
-  await prisma.event.create({
-    data: {
-      title: 'Концерт ко Дню студента',
+    await prisma.event.create({
+      data: {
+        title: 'Концерт ко Дню студента',
       category: EventCategory.CONCERT,
       date: event2Date,
       time: '18:00 - 21:00',
@@ -155,9 +212,9 @@ async function main() {
     }
   })
 
-  const event3 = await prisma.event.create({
-    data: {
-      title: 'Научная конференция "Инновации-2024"',
+    const event3 = await prisma.event.create({
+      data: {
+        title: 'Научная конференция "Инновации-2024"',
       category: EventCategory.LECTURE,
       date: event3Date,
       time: '09:00 - 18:00',
@@ -173,9 +230,9 @@ async function main() {
     }
   })
 
-  await prisma.eventReport.create({
-    data: {
-      eventId: event3.id,
+    await prisma.eventReport.create({
+      data: {
+        eventId: event3.id,
       summary: 'Конференция прошла успешно, было представлено 25 докладов',
       tasks: ['Подготовка зала', 'Регистрация участников', 'Кофе-брейк'],
       reportDate: event3Date,
@@ -184,10 +241,10 @@ async function main() {
     }
   })
 
-  await prisma.notification.createMany({
-    data: [
-      {
-        userId: student.id,
+    await prisma.notification.createMany({
+      data: [
+        {
+          userId: student.id,
         title: 'Новое мероприятие',
         content: 'Создано новое мероприятие "День открытых дверей БГИТУ"',
         type: NotificationType.NEW,
@@ -201,7 +258,8 @@ async function main() {
         read: true
       }
     ]
-  })
+    })
+  }
 
   console.log('✅ Сидинг базы данных завершен!')
   console.log(`👨‍🏫 Преподаватель: ${teacherSeedEmail} / ${teacherSeedPassword}`)
