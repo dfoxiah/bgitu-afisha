@@ -17,7 +17,7 @@ export default function LayoutShell({ children }: LayoutShellProps) {
   return (
     <div className="min-h-screen flex flex-col">
       {!hideChrome && <Header />}
-      <main className={`flex-grow relative z-0 ${hideChrome ? '' : 'pt-24'}`}>
+      <main className={`flex-grow relative z-0 ${hideChrome ? '' : 'pt-20 sm:pt-24'}`}>
         {children}
       </main>
       {!hideChrome && <Footer />}

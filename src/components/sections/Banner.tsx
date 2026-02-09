@@ -25,7 +25,7 @@ const Banner = ({ events }: BannerProps) => {
   if (events.length === 0) return null
 
   return (
-    <section className="banner relative h-96 overflow-hidden rounded-2xl mx-5% my-4 border border-white/60 shadow-2xl">
+    <section className="banner relative h-64 sm:h-72 lg:h-96 overflow-hidden rounded-2xl mx-4 sm:mx-5% my-4 border border-white/60 shadow-2xl">
       {events.map((event, index) => (
         <div 
           key={event.id}
@@ -40,13 +40,13 @@ const Banner = ({ events }: BannerProps) => {
             })`
           }}
         >
-          <div className="banner-content absolute bottom-0 left-0 right-0 p-8 text-white">
-            <h2 className="banner-title text-3xl font-bold mb-3">{event.title}</h2>
-            <p className="banner-text text-lg mb-5">
+          <div className="banner-content absolute bottom-0 left-0 right-0 p-5 sm:p-8 text-white">
+            <h2 className="banner-title text-2xl sm:text-3xl font-bold mb-2 sm:mb-3">{event.title}</h2>
+            <p className="banner-text text-sm sm:text-lg mb-4 sm:mb-5">
               {new Date(event.date).toLocaleDateString('ru-RU')} • {event.location}
             </p>
             <button 
-              className="banner-btn bg-white text-primary px-7 py-3 rounded-3xl font-semibold hover:bg-gray-100 transition-colors"
+              className="banner-btn bg-white text-primary px-5 sm:px-7 py-2.5 sm:py-3 rounded-3xl text-sm sm:text-base font-semibold hover:bg-gray-100 transition-colors"
               onClick={() => router.push(`/events/${event.id}`)}
             >
               Подробнее
@@ -58,14 +58,14 @@ const Banner = ({ events }: BannerProps) => {
       {events.length > 1 && (
         <>
           <button 
-            className="banner-arrow prev-arrow absolute left-5 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 rounded-full flex items-center justify-center text-primary opacity-0 hover:opacity-100 transition-opacity shadow-custom"
+            className="banner-arrow prev-arrow hidden sm:flex absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 bg-white/80 rounded-full items-center justify-center text-primary opacity-80 hover:opacity-100 transition-opacity shadow-custom"
             onClick={() => setCurrentSlide((prev) => (prev - 1 + events.length) % events.length)}
           >
             <i className="fas fa-chevron-left"></i>
           </button>
           
           <button 
-            className="banner-arrow next-arrow absolute right-5 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 rounded-full flex items-center justify-center text-primary opacity-0 hover:opacity-100 transition-opacity shadow-custom"
+            className="banner-arrow next-arrow hidden sm:flex absolute right-4 sm:right-5 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 bg-white/80 rounded-full items-center justify-center text-primary opacity-80 hover:opacity-100 transition-opacity shadow-custom"
             onClick={() => setCurrentSlide((prev) => (prev + 1) % events.length)}
           >
             <i className="fas fa-chevron-right"></i>

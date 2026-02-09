@@ -362,6 +362,15 @@ export function AppProvider({
         return
       }
 
+      const contentType = response.headers.get('content-type') || ''
+      if (!contentType.includes('application/json')) {
+        debugRef.current.error('notifications', 'Unexpected notifications response', {
+          status: response.status,
+          contentType
+        })
+        return
+      }
+
       const data = await response.json()
       const normalized = data.map((n: any) => ({
         ...n,
@@ -710,8 +719,12 @@ export function AppProvider({
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Ошибка отправки уведомления')
+      const contentType = response.headers.get('content-type') || ''
+      if (contentType.includes('application/json')) {
+        const error = await response.json()
+        throw new Error(error.error || 'Ошибка отправки уведомления')
+      }
+      throw new Error('Ошибка отправки уведомления')
     }
 
     await fetchNotifications()

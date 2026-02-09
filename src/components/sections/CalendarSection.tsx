@@ -65,12 +65,12 @@ const CalendarSection = ({ events }: CalendarSectionProps) => {
   }
 
   return (
-    <section className="calendar-section liquid-section p-8 mx-5% my-4">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="section-title text-2xl text-primary flex items-center gap-3">
+    <section className="calendar-section liquid-section p-3 sm:p-6 lg:p-8 mx-4 sm:mx-5% my-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
+        <h2 className="section-title text-lg sm:text-2xl text-primary flex items-center gap-3">
           <i className="fas fa-calendar-alt"></i> Календарь мероприятий
         </h2>
-        <div className="bg-light px-4 py-2 rounded-full text-sm text-primary flex items-center gap-2">
+        <div className="bg-light hidden sm:flex px-3 sm:px-4 py-2 rounded-full text-xs sm:text-sm text-primary items-center gap-2">
           <i className="fas fa-chart-bar"></i>
           <span>
             {calendarMonth.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}: {currentMonthEvents.length} мероприятий
@@ -85,7 +85,7 @@ const CalendarSection = ({ events }: CalendarSectionProps) => {
       />
       
       <button 
-        className="view-all-btn w-full mt-6 p-4 bg-white/70 border border-white/70 rounded-xl font-medium text-primary text-center hover:bg-white hover:border-accent transition-colors"
+        className="view-all-btn w-full mt-5 sm:mt-6 p-3 sm:p-4 bg-white/70 border border-white/70 rounded-xl font-medium text-sm sm:text-base text-primary text-center hover:bg-white hover:border-accent transition-colors"
         onClick={handleViewAll}
       >
         <i className="fas fa-list mr-2"></i> Все события этого месяца ({currentMonthEvents.length})

@@ -447,12 +447,12 @@ export default function ProfilePage() {
   return (
     <div className="profile-page px-4 md:px-5% py-8 bg-light-gray min-h-screen">
       <div className="container mx-auto max-w-4xl">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="section-title text-3xl font-bold text-primary flex items-center gap-3">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6 sm:mb-8">
+          <h2 className="section-title text-2xl sm:text-3xl font-bold text-primary flex items-center gap-3">
             <i className="fas fa-user-circle text-accent"></i>
             Настройки профиля
           </h2>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <Button
               type="button"
               variant="secondary"
@@ -461,20 +461,21 @@ export default function ProfilePage() {
               }}
               icon="arrow-left"
               debugContext="ProfilePage"
+              className="w-full sm:w-auto text-sm sm:text-base"
             >
               На главную
             </Button>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-            <span className="bg-accent/10 text-accent px-3 py-1 rounded-full">
-              {session.user.role === 'TEACHER' ? 'Преподаватель' : 
-               session.user.role === 'ADMIN' ? 'Администратор' : 'Студент'}
-            </span>
-            {isDirty && (
-              <span className="bg-sky-100 text-sky-700 px-3 py-1 rounded-full animate-pulse">
-                Есть несохраненные изменения
+            <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-gray-500">
+              <span className="bg-accent/10 text-accent px-3 py-1 rounded-full">
+                {session.user.role === 'TEACHER' ? 'Преподаватель' : 
+                 session.user.role === 'ADMIN' ? 'Администратор' : 'Студент'}
               </span>
-            )}
-          </div>
+              {isDirty && (
+                <span className="bg-sky-100 text-sky-700 px-3 py-1 rounded-full animate-pulse">
+                  Есть несохраненные изменения
+                </span>
+              )}
+            </div>
           </div>
         </div>
         
@@ -504,10 +505,10 @@ export default function ProfilePage() {
         )}
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1 space-y-6">
-            <div className="liquid-section p-6">
-              <div className="flex flex-col items-center text-center mb-6">
-                <div className="w-32 h-32 rounded-full border-4 border-white/70 overflow-hidden bg-gradient-to-br from-primary to-secondary mb-4 flex items-center justify-center shadow-xl profile-avatar-ring">
+          <div className="lg:col-span-1 space-y-4 sm:space-y-6">
+            <div className="liquid-section p-4 sm:p-6">
+              <div className="flex flex-col items-center text-center mb-5 sm:mb-6">
+                <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-white/70 overflow-hidden bg-gradient-to-br from-primary to-secondary mb-4 flex items-center justify-center shadow-xl profile-avatar-ring">
                   {session.user.image ? (
                     <>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -518,11 +519,11 @@ export default function ProfilePage() {
                       />
                     </>
                   ) : (
-                    <i className="fas fa-user text-6xl text-white"></i>
+                    <i className="fas fa-user text-5xl sm:text-6xl text-white"></i>
                   )}
                 </div>
-                <h3 className="text-xl font-bold text-primary mb-2">{session.user.name}</h3>
-                <p className="text-gray-600">{session.user.email}</p>
+                <h3 className="text-lg sm:text-xl font-bold text-primary mb-1.5 sm:mb-2">{session.user.name}</h3>
+                <p className="text-sm sm:text-base text-gray-600 break-all">{session.user.email}</p>
               </div>
               
               <div className="space-y-4">
@@ -541,7 +542,7 @@ export default function ProfilePage() {
               </div>
             </div>
             
-            <div className="liquid-section p-6">
+            <div className="liquid-section p-4 sm:p-6">
               <h4 className="font-semibold text-primary mb-4 flex items-center gap-2">
                 <i className="fas fa-chart-bar"></i>
                 Статистика
@@ -560,7 +561,7 @@ export default function ProfilePage() {
           </div>
           
           <div className="lg:col-span-2">
-            <div className="liquid-section p-8">
+            <div className="liquid-section p-4 sm:p-6 lg:p-8">
               <form onSubmit={handleSubmit}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                   <div className="form-group">
@@ -663,64 +664,64 @@ export default function ProfilePage() {
                     <i className="fas fa-bell"></i>
                     Уведомления
                   </h3>
-                  <div className="space-y-4 bg-white/70 border border-white/70 rounded-lg p-4">
-                    <label className="flex items-center gap-4 cursor-pointer p-3 hover:bg-white/50 rounded-lg transition-colors">
+                  <div className="space-y-3 sm:space-y-4 bg-white/70 border border-white/70 rounded-lg p-3 sm:p-4">
+                    <label className="flex items-start sm:items-center gap-3 sm:gap-4 cursor-pointer p-3 hover:bg-white/50 rounded-lg transition-colors">
                       <input
                         type="checkbox"
                         name="notifications.newEvents"
                         checked={formData.notifications.newEvents}
                         onChange={handleChange}
-                        className="w-5 h-5 text-accent rounded focus:ring-2 focus:ring-accent"
+                        className="w-5 h-5 text-accent rounded focus:ring-2 focus:ring-accent mt-1 sm:mt-0"
                       />
                       <div className="flex-1">
                         <div className="font-medium text-primary">Новые мероприятия</div>
                         <div className="text-sm text-gray-500">Уведомлять о новых мероприятиях в системе</div>
                       </div>
-                      <div className={`w-3 h-3 rounded-full ${formData.notifications.newEvents ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                      <div className={`w-3 h-3 rounded-full mt-1 sm:mt-0 ${formData.notifications.newEvents ? 'bg-green-500' : 'bg-gray-300'}`}></div>
                     </label>
                     
-                    <label className="flex items-center gap-4 cursor-pointer p-3 hover:bg-white/50 rounded-lg transition-colors">
+                    <label className="flex items-start sm:items-center gap-3 sm:gap-4 cursor-pointer p-3 hover:bg-white/50 rounded-lg transition-colors">
                       <input
                         type="checkbox"
                         name="notifications.changes"
                         checked={formData.notifications.changes}
                         onChange={handleChange}
-                        className="w-5 h-5 text-accent rounded focus:ring-2 focus:ring-accent"
+                        className="w-5 h-5 text-accent rounded focus:ring-2 focus:ring-accent mt-1 sm:mt-0"
                       />
                       <div className="flex-1">
                         <div className="font-medium text-primary">Изменения в моих мероприятиях</div>
                         <div className="text-sm text-gray-500">Уведомлять об изменениях в мероприятиях, где вы участник</div>
                       </div>
-                      <div className={`w-3 h-3 rounded-full ${formData.notifications.changes ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                      <div className={`w-3 h-3 rounded-full mt-1 sm:mt-0 ${formData.notifications.changes ? 'bg-green-500' : 'bg-gray-300'}`}></div>
                     </label>
                     
-                    <label className="flex items-center gap-4 cursor-pointer p-3 hover:bg-white/50 rounded-lg transition-colors">
+                    <label className="flex items-start sm:items-center gap-3 sm:gap-4 cursor-pointer p-3 hover:bg-white/50 rounded-lg transition-colors">
                       <input
                         type="checkbox"
                         name="notifications.news"
                         checked={formData.notifications.news}
                         onChange={handleChange}
-                        className="w-5 h-5 text-accent rounded focus:ring-2 focus:ring-accent"
+                        className="w-5 h-5 text-accent rounded focus:ring-2 focus:ring-accent mt-1 sm:mt-0"
                       />
                       <div className="flex-1">
                         <div className="font-medium text-primary">Новости университета</div>
                         <div className="text-sm text-gray-500">Получать новости и объявления от университета</div>
                       </div>
-                      <div className={`w-3 h-3 rounded-full ${formData.notifications.news ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                      <div className={`w-3 h-3 rounded-full mt-1 sm:mt-0 ${formData.notifications.news ? 'bg-green-500' : 'bg-gray-300'}`}></div>
                     </label>
                   </div>
                 </div>
                 
                 <div className="pt-8 border-t border-gray-200">
-                  <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div className="flex flex-wrap gap-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full sm:w-auto">
                       <Button 
                         type="submit" 
                         variant="primary"
                         loading={isSaving}
                         disabled={!isDirty || isSaving}
                         icon="save"
-                        className={saveEffect ? 'btn-celebrate' : ''}
+                        className={`w-full sm:w-auto ${saveEffect ? 'btn-celebrate' : ''}`}
                         debugContext="ProfilePage"
                       >
                         {isSaving ? 'Сохранение...' : 'Сохранить изменения'}
@@ -732,6 +733,7 @@ export default function ProfilePage() {
                         onClick={handleReset}
                         disabled={!isDirty || isSaving}
                         icon="undo"
+                        className="w-full sm:w-auto"
                         debugContext="ProfilePage"
                       >
                         Отменить
@@ -742,18 +744,20 @@ export default function ProfilePage() {
                         variant="secondary"
                         onClick={handleExportData}
                         icon="download"
+                        className="w-full sm:w-auto"
                         debugContext="ProfilePage"
                       >
                         Экспорт данных
                       </Button>
                     </div>
                     
-                    <div className="flex gap-4">
+                    <div className="flex w-full sm:w-auto">
                       <Button 
                         type="button" 
                         variant="danger"
                         onClick={handleLogout}
                         icon="sign-out-alt"
+                        className="w-full sm:w-auto"
                         debugContext="ProfilePage"
                       >
                         Выйти

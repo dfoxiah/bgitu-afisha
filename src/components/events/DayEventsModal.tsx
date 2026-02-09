@@ -42,15 +42,15 @@ const DayEventsModal = ({ isOpen, onClose, events, date }: DayEventsModalProps) 
                 onClose()
               }}
             >
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
                   <h4 className="font-semibold text-primary mb-2">{event.title}</h4>
-                  <div className="flex gap-4 text-sm text-gray-500">
+                  <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-4 text-sm text-gray-500">
                     <span><i className="fas fa-clock"></i> {event.time}</span>
                     <span><i className="fas fa-map-marker-alt"></i> {event.location}</span>
                   </div>
                 </div>
-                <span className="liquid-chip px-3 py-1 text-xs text-primary">
+                <span className="liquid-chip px-3 py-1 text-xs text-primary self-start sm:self-auto">
                   {CategoryDisplayMap[event.category as EventCategory] || event.category}
                 </span>
               </div>

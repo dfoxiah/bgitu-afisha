@@ -114,19 +114,19 @@ export default function EventsPage() {
         <div className="completion-celebration" aria-hidden="true"></div>
       )}
       <div className="container mx-auto">
-        <h2 className="section-title text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+        <h2 className="section-title text-xl sm:text-2xl font-bold text-gray-900 mb-5 sm:mb-6 flex items-center gap-3">
           <i className="fas fa-calendar-check text-accent"></i> Мои мероприятия
         </h2>
         
-        <div className="events-tabs liquid-section flex gap-2 p-2 mb-6">
+        <div className="events-tabs liquid-section flex flex-wrap gap-2 p-1.5 sm:p-2 mb-5 sm:mb-6">
           <button 
-            className={`events-tab px-6 py-2 rounded-full font-medium transition-colors relative ${activeTab === 'upcoming' ? 'text-primary bg-white/80 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`events-tab px-4 sm:px-6 py-2 text-sm sm:text-base rounded-full font-medium transition-colors relative ${activeTab === 'upcoming' ? 'text-primary bg-white/80 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             onClick={() => setActiveTab('upcoming')}
           >
             Будущие события
           </button>
           <button 
-            className={`events-tab px-6 py-2 rounded-full font-medium transition-colors relative ${activeTab === 'past' ? 'text-primary bg-white/80 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`events-tab px-4 sm:px-6 py-2 text-sm sm:text-base rounded-full font-medium transition-colors relative ${activeTab === 'past' ? 'text-primary bg-white/80 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             onClick={() => setActiveTab('past')}
           >
             Прошедшие события
@@ -137,9 +137,9 @@ export default function EventsPage() {
           {activeTab === 'upcoming' && (
             <>
               {upcomingEvents.length === 0 ? (
-                <div className="liquid-card text-center py-12">
-                  <i className="fas fa-calendar-times text-4xl text-gray-300 mb-4"></i>
-                  <h3 className="text-xl font-semibold text-gray-500 mb-2">Нет запланированных мероприятий</h3>
+                <div className="liquid-card text-center py-8 sm:py-12">
+                  <i className="fas fa-calendar-times text-3xl sm:text-4xl text-gray-300 mb-3 sm:mb-4"></i>
+                  <h3 className="text-base sm:text-xl font-semibold text-gray-500 mb-2">Нет запланированных мероприятий</h3>
                   <p className="text-gray-400">Создайте первое мероприятие или дождитесь публикации новых</p>
                 </div>
               ) : (
@@ -160,9 +160,9 @@ export default function EventsPage() {
           {activeTab === 'past' && (
             <>
               {pastEvents.length === 0 ? (
-                <div className="liquid-card text-center py-12">
-                  <i className="fas fa-history text-4xl text-gray-300 mb-4"></i>
-                  <h3 className="text-xl font-semibold text-gray-500 mb-2">Нет завершенных мероприятий</h3>
+                <div className="liquid-card text-center py-8 sm:py-12">
+                  <i className="fas fa-history text-3xl sm:text-4xl text-gray-300 mb-3 sm:mb-4"></i>
+                  <h3 className="text-base sm:text-xl font-semibold text-gray-500 mb-2">Нет завершенных мероприятий</h3>
                   <p className="text-gray-400">Здесь будут отображаться ваши прошедшие мероприятия</p>
                 </div>
               ) : (
@@ -185,7 +185,7 @@ export default function EventsPage() {
               variant="primary" 
               icon="plus" 
               onClick={handleCreateClick}
-              className="px-8 py-3 text-lg"
+              className="px-6 sm:px-8 py-2.5 sm:py-3 text-base sm:text-lg"
             >
               Создать новое мероприятие
             </Button>

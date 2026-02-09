@@ -256,17 +256,17 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
       size="lg"
     >
       <form onSubmit={handleSubmit}>
-        <div className="editor-tabs flex border-b border-gray-200 mb-6">
+        <div className="editor-tabs flex flex-wrap sm:flex-nowrap gap-2 sm:gap-0 border-b border-gray-200 mb-6 overflow-x-auto">
           <button 
             type="button"
-            className={`editor-tab px-6 py-3 font-medium transition-colors ${activeTab === 'basic' ? 'text-primary border-b-2 border-accent' : 'text-gray-500'}`}
+            className={`editor-tab px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors ${activeTab === 'basic' ? 'text-primary border-b-2 border-accent' : 'text-gray-500'}`}
             onClick={() => setActiveTab('basic')}
           >
             Основное
           </button>
           <button 
             type="button"
-            className={`editor-tab px-6 py-3 font-medium transition-colors ${activeTab === 'participants' ? 'text-primary border-b-2 border-accent' : 'text-gray-500'}`}
+            className={`editor-tab px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors ${activeTab === 'participants' ? 'text-primary border-b-2 border-accent' : 'text-gray-500'}`}
             onClick={() => setActiveTab('participants')}
           >
             Участники
@@ -380,12 +380,12 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
               </p>
               {canManageModerators ? (
                 <>
-                  <div className="flex gap-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <input
                       type="email"
                       value={newModerator}
                       onChange={(e) => setNewModerator(e.target.value)}
-                      className="flex-grow px-4 py-3 liquid-input"
+                      className="w-full sm:flex-grow px-4 py-3 liquid-input"
                       placeholder="email преподавателя"
                     />
                     <Button
@@ -393,6 +393,7 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
                       variant="secondary"
                       onClick={handleAddModerator}
                       disabled={!newModerator.trim()}
+                      className="w-full sm:w-auto"
                     >
                       Добавить
                     </Button>
@@ -483,12 +484,12 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
           <div className="editor-section space-y-6">
             <div className="form-group">
               <label className="form-label">Добавить участника по email</label>
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <input
                   type="email"
                   value={newParticipant}
                   onChange={(e) => setNewParticipant(e.target.value)}
-                  className="flex-grow px-4 py-3 liquid-input"
+                  className="w-full sm:flex-grow px-4 py-3 liquid-input"
                   placeholder="email@example.com"
                 />
                 <Button 
@@ -496,6 +497,7 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
                   variant="secondary"
                   onClick={handleAddParticipant}
                   disabled={!newParticipant.trim()}
+                  className="w-full sm:w-auto"
                 >
                   Добавить
                 </Button>
@@ -545,17 +547,19 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
           </div>
         )}
         
-        <div className="editor-actions flex justify-end gap-4 mt-8 pt-6 border-t border-gray-200">
+        <div className="editor-actions flex flex-col sm:flex-row sm:justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
           <Button 
             type="button" 
             variant="secondary" 
             onClick={onClose}
+            className="w-full sm:w-auto"
           >
             Отмена
           </Button>
           <Button 
             type="submit" 
             variant="primary"
+            className="w-full sm:w-auto"
           >
             {event ? "Сохранить изменения" : "Создать мероприятие"}
           </Button>

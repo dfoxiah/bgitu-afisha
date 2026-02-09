@@ -76,6 +76,9 @@ export default function RegisterPage() {
     if (formData.passwordConfirm !== formData.password) {
       errors.passwordConfirm = 'Пароли не совпадают'
     }
+    if (!formData.group.trim()) {
+      errors.group = '\u0413\u0440\u0443\u043f\u043f\u0430 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u0430'
+    }
     if (!formData.acceptPrivacy || !formData.acceptTerms) {
       errors.consent = 'Необходимо принять соглашения'
     }
@@ -181,10 +184,9 @@ export default function RegisterPage() {
                 />
                 {formErrors.email && <p className="form-error">{formErrors.email}</p>}
               </div>
-
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="form-label">Пароль *</label>
+                  <label className="form-label">{'\u041f\u0430\u0440\u043e\u043b\u044c *'}</label>
                   <input
                     type="password"
                     value={formData.password}
@@ -196,7 +198,7 @@ export default function RegisterPage() {
                   {formErrors.password && <p className="form-error">{formErrors.password}</p>}
                 </div>
                 <div>
-                  <label className="form-label">Повторите пароль *</label>
+                  <label className="form-label">{'\u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c *'}</label>
                   <input
                     type="password"
                     value={formData.passwordConfirm}
@@ -213,30 +215,31 @@ export default function RegisterPage() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="form-label">Кафедра / Факультет</label>
+                  <label className="form-label">{'\u041a\u0430\u0444\u0435\u0434\u0440\u0430 / \u0424\u0430\u043a\u0443\u043b\u044c\u0442\u0435\u0442'}</label>
                   <input
                     type="text"
                     value={formData.department}
                     onChange={(e) => handleChange('department', e.target.value)}
                     className="form-control"
-                    placeholder="Например: Кафедра ИТ"
+                    placeholder={'\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u041a\u0430\u0444\u0435\u0434\u0440\u0430 \u0418\u0422'}
                     disabled={loading}
                   />
                 </div>
                 <div>
-                  <label className="form-label">Группа</label>
+                  <label className="form-label">{'\u0413\u0440\u0443\u043f\u043f\u0430 *'}</label>
                   <input
                     type="text"
                     value={formData.group}
                     onChange={(e) => handleChange('group', e.target.value)}
-                    className="form-control"
-                    placeholder="Например: ИС-21"
+                    className={`form-control ${formErrors.group ? 'border-red-500' : ''}`}
+                    placeholder={'\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u0418\u0421-21'}
+                    required
                     disabled={loading}
                   />
-                  <p className="text-xs text-gray-500 mt-1">Группу можно изменить только один раз.</p>
+                  {formErrors.group && <p className="form-error">{formErrors.group}</p>}
+                  <p className="text-xs text-gray-500 mt-1">{'\u0413\u0440\u0443\u043f\u043f\u0443 \u043c\u043e\u0436\u043d\u043e \u0438\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u0442\u043e\u043b\u044c\u043a\u043e \u043e\u0434\u0438\u043d \u0440\u0430\u0437.'}</p>
                 </div>
               </div>
-
               <div className="space-y-2 text-sm text-gray-600">
                 <label className="flex items-start gap-2">
                   <input

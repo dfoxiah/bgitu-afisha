@@ -77,8 +77,14 @@ const NotificationBell = () => {
       </div>
 
       {isDropdownOpen && (
-        <div className="dropdown absolute top-14 right-0 bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl z-50 w-80 border border-white/70">
-          <div className="dropdown-header px-4 py-3 border-b border-white/70 font-semibold text-primary bg-white/70 rounded-t-2xl">
+        <div className="dropdown fixed inset-0 z-[960] sm:absolute sm:inset-auto sm:top-14 sm:right-0">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm sm:hidden"
+            onClick={() => setIsDropdownOpen(false)}
+            aria-hidden="true"
+          ></div>
+          <div className="absolute left-4 right-4 top-16 sm:static bg-white rounded-2xl shadow-2xl w-auto sm:w-80 border border-white/70 max-h-[75vh] sm:max-h-[70vh] overflow-hidden">
+            <div className="dropdown-header px-4 py-3 border-b border-white/70 font-semibold text-primary bg-white rounded-t-2xl">
             Уведомления
             {notifications.length > 0 && (
               <span className="text-sm text-gray-600 ml-2">
@@ -87,7 +93,7 @@ const NotificationBell = () => {
             )}
           </div>
           
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-[55vh] sm:max-h-80 overflow-y-auto">
             {notifications.length === 0 ? (
               <div className="p-4 text-center text-gray-500">
                 Нет уведомлений
@@ -159,7 +165,8 @@ const NotificationBell = () => {
               Создать уведомление
             </div>
           )}
-      </div>
+          </div>
+        </div>
       )}
 
       {isModalOpen && (

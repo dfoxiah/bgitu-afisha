@@ -12,11 +12,17 @@ export async function POST(req: NextRequest) {
 
     if (!email || !password || !name) {
       return NextResponse.json(
-        { error: "Заполните обязательные поля: email, пароль, имя" },
+        { error: "\u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u044b\u0435 \u043f\u043e\u043b\u044f: email, \u043f\u0430\u0440\u043e\u043b\u044c, \u0438\u043c\u044f" },
         { status: 400 }
       );
     }
 
+    if (!group || !String(group).trim()) {
+      return NextResponse.json(
+        { error: "\u0413\u0440\u0443\u043f\u043f\u0430 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u0430" },
+        { status: 400 }
+      );
+    }
     if (!acceptPrivacy || !acceptTerms) {
       return NextResponse.json(
         { error: "Необходимо принять пользовательское соглашение и политику конфиденциальности" },
@@ -37,6 +43,7 @@ export async function POST(req: NextRequest) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const consentAt = new Date();
+    const normalizedGroup = String(group).trim();
 
     const user = await prisma.user.create({
       data: {
@@ -45,7 +52,7 @@ export async function POST(req: NextRequest) {
         password: hashedPassword,
         role: "STUDENT",
         department: department || null,
-        group: group || null,
+        group: normalizedGroup,
         privacyConsentAt: consentAt,
         termsConsentAt: consentAt
       }

@@ -145,14 +145,14 @@ export default function EventDetailsPage() {
         
         <div className="liquid-section overflow-hidden">
           {/* Заголовок и категория */}
-          <div className="p-8 border-b">
+          <div className="p-4 sm:p-6 lg:p-8 border-b">
             <div className="flex flex-wrap items-center justify-between mb-4">
-              <span className={`inline-block px-4 py-1 rounded-full text-sm font-medium mb-2 ${getCategoryColor(event.category as EventCategory)}`}>
+              <span className={`inline-block px-3 sm:px-4 py-1 rounded-full text-xs sm:text-sm font-medium mb-2 ${getCategoryColor(event.category as EventCategory)}`}>
                 {categoryDisplayName}
               </span>
               <div className="text-sm text-gray-500">ID: {event.id.substring(0, 8)}...</div>
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">{event.title}</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">{event.title}</h1>
             <div className="flex items-center text-gray-600">
               <i className="fas fa-user-circle mr-2"></i>
               <span>Создатель: </span>
@@ -171,14 +171,14 @@ export default function EventDetailsPage() {
           </div>
 
           {/* Основная информация */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 p-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 p-4 sm:p-6 lg:p-8">
             <div className="flex items-start space-x-4">
-              <div className="w-12 h-12 bg-white/70 border border-white/70 rounded-xl flex items-center justify-center shadow">
-                <i className="fas fa-calendar text-accent text-xl"></i>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/70 border border-white/70 rounded-xl flex items-center justify-center shadow">
+                <i className="fas fa-calendar text-accent text-lg sm:text-xl"></i>
               </div>
               <div>
                 <div className="font-semibold text-gray-700">Дата</div>
-                <div className="text-lg">{eventDate.toLocaleDateString('ru-RU', {
+                <div className="text-base sm:text-lg">{eventDate.toLocaleDateString('ru-RU', {
                   weekday: 'long',
                   year: 'numeric',
                   month: 'long',
@@ -188,32 +188,32 @@ export default function EventDetailsPage() {
             </div>
             
             <div className="flex items-start space-x-4">
-              <div className="w-12 h-12 bg-white/70 border border-white/70 rounded-xl flex items-center justify-center shadow">
-                <i className="fas fa-clock text-accent text-xl"></i>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/70 border border-white/70 rounded-xl flex items-center justify-center shadow">
+                <i className="fas fa-clock text-accent text-lg sm:text-xl"></i>
               </div>
               <div>
                 <div className="font-semibold text-gray-700">Время</div>
-                <div className="text-lg">{event.time} ({event.duration})</div>
+                <div className="text-base sm:text-lg">{event.time} ({event.duration})</div>
               </div>
             </div>
             
             <div className="flex items-start space-x-4">
-              <div className="w-12 h-12 bg-white/70 border border-white/70 rounded-xl flex items-center justify-center shadow">
-                <i className="fas fa-map-marker-alt text-accent text-xl"></i>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/70 border border-white/70 rounded-xl flex items-center justify-center shadow">
+                <i className="fas fa-map-marker-alt text-accent text-lg sm:text-xl"></i>
               </div>
               <div>
                 <div className="font-semibold text-gray-700">Место</div>
-                <div className="text-lg">{event.location}</div>
+                <div className="text-base sm:text-lg">{event.location}</div>
               </div>
             </div>
             
             <div className="flex items-start space-x-4">
-              <div className="w-12 h-12 bg-white/70 border border-white/70 rounded-xl flex items-center justify-center shadow">
-                <i className="fas fa-users text-accent text-xl"></i>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/70 border border-white/70 rounded-xl flex items-center justify-center shadow">
+                <i className="fas fa-users text-accent text-lg sm:text-xl"></i>
               </div>
               <div>
                 <div className="font-semibold text-gray-700">Участники</div>
-                <div className="text-lg">
+                <div className="text-base sm:text-lg">
                   {event.currentParticipants}{event.maxParticipants > 0 ? `/${event.maxParticipants}` : ''}
                 </div>
                 {event.pendingParticipants && event.pendingParticipants.length > 0 && (
@@ -236,8 +236,8 @@ export default function EventDetailsPage() {
           </div>
 
           {/* Описание */}
-          <div className="px-8 pb-8">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">Описание</h3>
+          <div className="px-4 sm:px-6 lg:px-8 pb-6 sm:pb-8">
+            <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Описание</h3>
             <div className="prose max-w-none text-gray-700 leading-relaxed">
               {event.description.split('\n').map((paragraph, index) => (
                 <p key={index} className="mb-4">{paragraph}</p>
@@ -247,8 +247,8 @@ export default function EventDetailsPage() {
 
           {/* Изображения */}
           {event.images && event.images.length > 0 && (
-            <div className="px-8 pb-8">
-              <h3 className="text-xl font-semibold text-gray-900 mb-4">Фотографии</h3>
+            <div className="px-4 sm:px-6 lg:px-8 pb-6 sm:pb-8">
+              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Фотографии</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {event.images.map((image, index) => (
                   <button
@@ -271,17 +271,17 @@ export default function EventDetailsPage() {
           )}
 
           {/* Контактная информация */}
-          <div className="px-8 pb-8">
+          <div className="px-4 sm:px-6 lg:px-8 pb-6 sm:pb-8">
             <h4 className="text-lg font-semibold text-gray-900 mb-4">Контактная информация</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               <div className="liquid-card p-4">
                 <div className="font-medium text-gray-600 mb-1">Ответственный</div>
-                <div className="text-lg">{event.responsible}</div>
+                <div className="text-base sm:text-lg">{event.responsible}</div>
               </div>
               {event.contact && (
                 <div className="liquid-card p-4">
                   <div className="font-medium text-gray-600 mb-1">Контакт</div>
-                  <div className="text-lg">{event.contact}</div>
+                  <div className="text-base sm:text-lg">{event.contact}</div>
                 </div>
               )}
             </div>
@@ -289,7 +289,7 @@ export default function EventDetailsPage() {
 
           {/* Кнопка регистрации */}
           {!isPast && !isTeacher && (
-            <div className="px-8 pb-8">
+            <div className="px-4 sm:px-6 lg:px-8 pb-6 sm:pb-8">
               <div className={`join-portal ${joinEffect ? 'is-celebrating' : ''}`}>
                 <span className="join-sparkles" aria-hidden="true"></span>
                 <Button
@@ -297,7 +297,7 @@ export default function EventDetailsPage() {
                   fullWidth
                   onClick={handleRegister}
                   disabled={isParticipant || isPending || isFull || isRegistering}
-                  className={`py-4 text-lg ${joinEffect ? 'btn-celebrate' : ''}`}
+                  className={`py-3 sm:py-4 text-base sm:text-lg ${joinEffect ? 'btn-celebrate' : ''}`}
                   loading={isRegistering}
                 >
                   {isParticipant ? (
@@ -328,9 +328,9 @@ export default function EventDetailsPage() {
 
           {/* Отчет о мероприятии (если прошло) */}
           {isPast && event.report && (
-            <div className="px-8 pb-8 border-t pt-8">
-              <h3 className="text-xl font-semibold text-gray-900 mb-4">Отчет о мероприятии</h3>
-              <div className="bg-white/70 border border-white/70 p-6 rounded-2xl shadow">
+            <div className="px-4 sm:px-6 lg:px-8 pb-6 sm:pb-8 border-t pt-6 sm:pt-8">
+              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Отчет о мероприятии</h3>
+              <div className="bg-white/70 border border-white/70 p-4 sm:p-6 rounded-2xl shadow">
                 <h4 className="font-semibold text-lg mb-2">Итоги</h4>
                 <p className="mb-4">{event.report.summary}</p>
                 

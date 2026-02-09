@@ -82,7 +82,7 @@ export default function EventCard({
       className="event-card liquid-card liquid-card-hover overflow-hidden cursor-pointer flex flex-col h-full"
       onClick={() => onClick ? onClick(event) : router.push(`/events/${event.id}`)}
     >
-      <div className="relative h-48 overflow-hidden">
+      <div className="relative h-40 sm:h-48 overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img 
           src={imageError || !event.images || event.images.length === 0 ? placeholderImage : event.images[0]}
@@ -97,12 +97,12 @@ export default function EventCard({
         </div>
       </div>
       
-      <div className="p-5 flex flex-col flex-grow">
-        <h3 className="event-card-title text-lg font-semibold text-gray-900 mb-3 line-clamp-2">
+      <div className="p-4 sm:p-5 flex flex-col flex-grow">
+        <h3 className="event-card-title text-base sm:text-lg font-semibold text-gray-900 mb-2 sm:mb-3 line-clamp-2">
           {event.title}
         </h3>
         
-        <div className="event-card-meta space-y-2 mb-4 text-sm text-gray-600 flex-grow">
+        <div className="event-card-meta space-y-2 mb-4 text-xs sm:text-sm text-gray-600 flex-grow">
           <div className="flex items-center gap-2">
             <i className="fas fa-calendar text-accent w-4"></i>
             <span>{eventDate.toLocaleDateString('ru-RU')}</span>
@@ -157,7 +157,7 @@ export default function EventCard({
         )}
         
         <div className="flex justify-between items-center mt-auto pt-4 border-t border-gray-100">
-          <span className={`event-card-status text-xs px-3 py-1 rounded-full ${
+          <span className={`event-card-status text-[10px] sm:text-xs px-2.5 sm:px-3 py-1 rounded-full ${
             isPast 
               ? 'bg-gray-100 text-gray-600' 
               : 'bg-sky-50 text-sky-700'
@@ -168,14 +168,14 @@ export default function EventCard({
           {canModerate && !isPast && (
             <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
               <button 
-                className="edit-btn text-xs bg-sky-100 text-sky-700 px-3 py-1 rounded-full hover:bg-sky-200 transition-colors"
+                className="edit-btn text-[10px] sm:text-xs bg-sky-100 text-sky-700 px-2.5 sm:px-3 py-1 rounded-full hover:bg-sky-200 transition-colors"
                 onClick={() => onEdit && onEdit(event)}
               >
                 <i className="fas fa-edit mr-1"></i>
                 Редактировать
               </button>
               <button 
-                className="complete-btn text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full hover:bg-blue-200 transition-colors"
+                className="complete-btn text-[10px] sm:text-xs bg-blue-100 text-blue-700 px-2.5 sm:px-3 py-1 rounded-full hover:bg-blue-200 transition-colors"
                 onClick={() => onComplete && onComplete(event)}
               >
                 <i className="fas fa-check mr-1"></i>

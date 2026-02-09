@@ -114,10 +114,10 @@ export default function DashboardPage() {
 
   return (
     <div className="dashboard-page pb-8">
-      <div className="search-section px-5% py-6">
+      <div className="search-section px-4 sm:px-6 lg:px-5% py-5 sm:py-6">
         <div className="container mx-auto">
-          <div className="liquid-section p-6">
-            <h1 className="text-3xl font-bold text-primary mb-2">
+          <div className="liquid-section p-4 sm:p-6">
+            <h1 className="text-2xl sm:text-3xl font-bold text-primary mb-2">
               Добро пожаловать, {session.user?.name}!
             </h1>
             <p className="text-gray-600">
@@ -130,21 +130,21 @@ export default function DashboardPage() {
       <CategoryFilter />
 
       {searchQuery.trim() && (
-        <section className="search-results liquid-section p-6 mx-5% my-4">
+        <section className="search-results liquid-section p-4 sm:p-6 mx-4 sm:mx-5% my-4">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
             <div>
-              <h2 className="text-2xl font-semibold text-primary">
+              <h2 className="text-xl sm:text-2xl font-semibold text-primary">
                 Результаты поиска
               </h2>
               <p className="text-sm text-gray-500">
                 Найдено: {searchResults.length}
               </p>
             </div>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="px-4 py-2 border border-gray-300 rounded-lg bg-white"
+                className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg bg-white text-sm"
               >
                 <option value="date_desc">Сначала новые</option>
                 <option value="date_asc">Сначала старые</option>
@@ -154,7 +154,7 @@ export default function DashboardPage() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="px-4 py-2 border border-gray-300 rounded-lg bg-white"
+                className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg bg-white text-sm"
               >
                 <option value="all">Все мероприятия</option>
                 <option value="active">Активные</option>
@@ -168,7 +168,7 @@ export default function DashboardPage() {
               Ничего не найдено по запросу
             </div>
           ) : (
-            <div className="events-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="events-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {searchResults.map(event => (
                 <EventCard key={event.id} event={event} />
               ))}
@@ -188,9 +188,9 @@ export default function DashboardPage() {
       
       {events.length === 0 && (
         <div className="text-center py-12">
-          <div className="bg-white rounded-lg shadow-md p-8 mx-5%">
-            <i className="fas fa-calendar-plus text-5xl text-gray-300 mb-4"></i>
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">
+          <div className="bg-white rounded-lg shadow-md p-6 sm:p-8 mx-4 sm:mx-5%">
+            <i className="fas fa-calendar-plus text-4xl sm:text-5xl text-gray-300 mb-3 sm:mb-4"></i>
+            <h3 className="text-base sm:text-xl font-semibold text-gray-700 mb-2">
               Нет мероприятий
             </h3>
             <p className="text-gray-500">

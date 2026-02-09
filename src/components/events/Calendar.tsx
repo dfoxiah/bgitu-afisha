@@ -98,45 +98,45 @@ const Calendar = ({ events, onDayClick, onMonthChange }: CalendarProps) => {
   })
 
   return (
-    <div className="calendar-section liquid-section p-7 animate-fadeIn">
-      <div className="calendar-header flex justify-between items-center mb-5">
-        <div className="calendar-title flex items-center gap-3">
-          <i className="fas fa-calendar-alt text-accent text-xl"></i>
-          <h2 className="text-2xl font-semibold text-primary">
+    <div className="calendar-section rounded-xl sm:rounded-2xl bg-white/70 border border-white/70 p-3 sm:p-6 animate-fadeIn">
+      <div className="calendar-header flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3 sm:mb-5">
+        <div className="calendar-title flex flex-wrap items-center gap-2 sm:gap-3">
+          <i className="fas fa-calendar-alt text-accent text-lg sm:text-xl"></i>
+          <h2 className="text-base sm:text-2xl font-semibold text-primary">
             {format(currentMonth, 'LLLL yyyy', { locale: ru })}
           </h2>
-          <div className="calendar-count-badge bg-accent text-white px-3 py-1 rounded-full text-sm font-medium">
+          <div className="calendar-count-badge hidden sm:inline-flex bg-accent text-white px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-sm font-medium">
             {currentMonthEvents.length} мероприятий
           </div>
         </div>
         <div className="calendar-nav flex gap-2">
           <button 
-            className="calendar-nav-btn w-9 h-9 rounded-2xl bg-white/70 border border-white/70 shadow flex items-center justify-center cursor-pointer hover:bg-white/90 hover:border-accent transition-colors"
+            className="calendar-nav-btn w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-2xl bg-white/70 border border-white/70 shadow flex items-center justify-center cursor-pointer hover:bg-white/90 hover:border-accent transition-colors"
             onClick={prevMonth}
             title="Предыдущий месяц"
           >
-            <i className="fas fa-chevron-left text-sm"></i>
+            <i className="fas fa-chevron-left text-[10px] sm:text-sm"></i>
           </button>
           <button 
-            className="calendar-nav-btn w-9 h-9 rounded-2xl bg-white/70 border border-white/70 shadow flex items-center justify-center cursor-pointer hover:bg-white/90 hover:border-accent transition-colors"
+            className="calendar-nav-btn w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-2xl bg-white/70 border border-white/70 shadow flex items-center justify-center cursor-pointer hover:bg-white/90 hover:border-accent transition-colors"
             onClick={() => setCurrentMonth(new Date())}
             title="Текущий месяц"
           >
-            <i className="fas fa-dot-circle text-sm"></i>
+            <i className="fas fa-dot-circle text-[10px] sm:text-sm"></i>
           </button>
           <button 
-            className="calendar-nav-btn w-9 h-9 rounded-2xl bg-white/70 border border-white/70 shadow flex items-center justify-center cursor-pointer hover:bg-white/90 hover:border-accent transition-colors"
+            className="calendar-nav-btn w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-2xl bg-white/70 border border-white/70 shadow flex items-center justify-center cursor-pointer hover:bg-white/90 hover:border-accent transition-colors"
             onClick={nextMonth}
             title="Следующий месяц"
           >
-            <i className="fas fa-chevron-right text-sm"></i>
+            <i className="fas fa-chevron-right text-[10px] sm:text-sm"></i>
           </button>
         </div>
       </div>
       
-      <div className="calendar-grid grid grid-cols-7 gap-2 mb-5">
+      <div className="calendar-grid grid grid-cols-7 gap-1 sm:gap-2 mb-3 sm:mb-5">
         {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map(day => (
-          <div key={day} className="calendar-day text-center py-3 font-semibold text-gray-500 text-sm">
+          <div key={day} className="calendar-day text-center py-1.5 sm:py-3 font-semibold text-gray-500 text-[9px] sm:text-sm">
             {day}
           </div>
         ))}
@@ -150,7 +150,7 @@ const Calendar = ({ events, onDayClick, onMonthChange }: CalendarProps) => {
           return (
             <div 
               key={index}
-              className={`calendar-cell min-h-[90px] border rounded-radius-sm p-3 relative overflow-hidden cursor-pointer transition-all duration-300 ${
+              className={`calendar-cell min-h-[44px] sm:min-h-[80px] lg:min-h-[90px] border rounded-radius-sm p-1.5 sm:p-3 relative overflow-hidden cursor-pointer transition-all duration-300 ${
                 hasEvents ? 'has-event bg-accent/5 border-accent' : 'bg-white/60 border-white/70'
               } ${!isCurrentMonth ? 'other-month opacity-50' : ''} ${isToday ? 'today border-2 border-accent' : ''}`}
               onClick={() => {
@@ -161,7 +161,7 @@ const Calendar = ({ events, onDayClick, onMonthChange }: CalendarProps) => {
               title={hasEvents ? `${dayEvents.length} мероприятий` : 'Нет мероприятий'}
             >
               <div 
-                className="calendar-date flex items-center justify-between mb-1"
+                className="calendar-date flex items-center justify-between mb-0.5 sm:mb-1 text-[11px] sm:text-sm"
                 style={{ 
                   fontWeight: isCurrentMonth ? 600 : 400,
                   color: isCurrentMonth ? (isToday ? 'var(--accent)' : 'var(--text)') : 'var(--gray)'
@@ -169,20 +169,20 @@ const Calendar = ({ events, onDayClick, onMonthChange }: CalendarProps) => {
               >
                 <span>{format(day, 'd')}</span>
                 {hasEvents && (
-                  <span className="w-4 h-4 bg-accent text-white text-xs rounded-full flex items-center justify-center">
+                  <span className="hidden sm:flex w-3.5 h-3.5 sm:w-4 sm:h-4 bg-accent text-white text-[10px] sm:text-xs rounded-full items-center justify-center">
                     {dayEvents.length}
                   </span>
                 )}
               </div>
-              <div className="calendar-events">
+                            <div className="calendar-events hidden sm:block">
                 {dayEvents.slice(0, 2).map(event => (
                   <div 
                     key={event.id} 
                     className="calendar-event text-xs px-2 py-1 rounded-sm mb-1 overflow-hidden whitespace-nowrap text-ellipsis"
                     style={{ 
                       backgroundColor: getCategoryColor(event.category),
-                      color: 'white',
-                      cursor: 'pointer'
+                      color: "white",
+                      cursor: "pointer"
                     }}
                     title={`${event.title} (${event.time})`}
                     onClick={(e) => {
@@ -190,7 +190,7 @@ const Calendar = ({ events, onDayClick, onMonthChange }: CalendarProps) => {
                       handleEventClick(event)
                     }}
                   >
-                    {event.title.length > 12 ? event.title.substring(0, 12) + '...' : event.title}
+                    {event.title.length > 12 ? event.title.substring(0, 12) + "..." : event.title}
                   </div>
                 ))}
                 {dayEvents.length > 2 && (
@@ -199,12 +199,26 @@ const Calendar = ({ events, onDayClick, onMonthChange }: CalendarProps) => {
                   </div>
                 )}
               </div>
+              {hasEvents && (
+                <div className="calendar-events sm:hidden mt-0.5 flex flex-wrap gap-1">
+                  {dayEvents.slice(0, 4).map(event => (
+                    <span
+                      key={event.id}
+                      className="inline-block h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: getCategoryColor(event.category) }}
+                    ></span>
+                  ))}
+                  {dayEvents.length > 4 && (
+                    <span className="text-[9px] text-gray-500">+{dayEvents.length - 4}</span>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}
       </div>
       
-      <div className="mt-5 text-center text-gray-600 text-sm p-3 bg-light rounded-lg border border-border">
+      <div className="hidden sm:block mt-3 sm:mt-5 text-center text-gray-600 text-[10px] sm:text-sm p-2 sm:p-3 bg-light rounded-lg border border-border">
         <p>
           <i className="fas fa-info-circle mr-2"></i>
           В {format(currentMonth, 'LLLL yyyy', { locale: ru })}: <strong>{currentMonthEvents.length}</strong> мероприятий

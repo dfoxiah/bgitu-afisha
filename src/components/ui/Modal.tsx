@@ -45,7 +45,7 @@ export default function Modal({
 
   return ReactDOM.createPortal(
     <div 
-      className="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 opacity-0 invisible transition-all duration-300"
+      className="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[1000] opacity-0 invisible transition-all duration-300"
       style={{ opacity: isOpen ? 1 : 0, visibility: isOpen ? 'visible' : 'hidden' }}
       onClick={onClose}
     >
@@ -54,8 +54,8 @@ export default function Modal({
         style={{ transform: isOpen ? 'scale(1)' : 'scale(0.9)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="modal-header px-6 py-4 border-b border-white/70 flex justify-between items-center">
-          {title && <h3 className="text-xl font-semibold text-primary">{title}</h3>}
+        <div className="modal-header px-4 py-3 sm:px-6 sm:py-4 border-b border-white/70 flex justify-between items-center">
+          {title && <h3 className="text-lg sm:text-xl font-semibold text-primary">{title}</h3>}
           <button 
             className="modal-close text-2xl text-gray-500 hover:text-gray-700 transition-colors"
             onClick={onClose}
@@ -64,7 +64,7 @@ export default function Modal({
             &times;
           </button>
         </div>
-        <div className="modal-body p-6">
+        <div className="modal-body p-4 sm:p-6">
           {children}
         </div>
       </div>

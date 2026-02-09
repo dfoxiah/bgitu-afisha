@@ -71,16 +71,16 @@ const MonthEventsModal = ({ isOpen, onClose, events, month }: MonthEventsModalPr
                         onClose()
                       }}
                     >
-                      <div className="flex justify-between items-center">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                         <div className="flex-grow">
                           <h5 className="font-semibold text-gray-900 mb-1">{event.title}</h5>
-                          <div className="text-sm text-gray-500">
+                          <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-4 text-sm text-gray-500">
                             <span><i className="fas fa-clock mr-1"></i> {event.time}</span>
-                            <span className="ml-4"><i className="fas fa-map-marker-alt mr-1"></i> {event.location}</span>
+                            <span><i className="fas fa-map-marker-alt mr-1"></i> {event.location}</span>
                           </div>
                         </div>
-                        <div className="flex flex-col items-end">
-                          <span className="liquid-chip px-3 py-1 text-xs mb-1 text-primary">
+                        <div className="flex flex-row sm:flex-col items-start sm:items-end gap-2 sm:gap-1">
+                          <span className="liquid-chip px-3 py-1 text-xs text-primary">
                             {categoryDisplayName}
                           </span>
                           <span className="text-xs text-gray-500">

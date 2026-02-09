@@ -15,6 +15,8 @@ type AdminUser = {
   group: string | null
   groupChangeCount: number
   bio: string | null
+  privacyConsentAt?: string | null
+  termsConsentAt?: string | null
   createdAt: string
   updatedAt?: string
 }
@@ -25,9 +27,16 @@ type AdminEvent = {
   category: string
   date: string
   time: string
+  duration?: string
   location: string
+  description?: string
   maxParticipants: number
   isPast: boolean
+  isNews?: boolean
+  removedFromCalendar?: boolean
+  images?: string[]
+  responsible?: string
+  contact?: string
   creator: { id: string; name: string | null; email: string }
   moderators: { id: string; name: string | null; email: string }[]
 }
@@ -42,18 +51,25 @@ type AuditLog = {
   metadata?: Record<string, any> | null
 }
 
-const downloadCsv = (filename: string, rows: Array<Record<string, string | number | null | undefined>>) => {
-  if (rows.length === 0) return
-  const headers = Object.keys(rows[0])
-  const escapeValue = (value: string | number | null | undefined) => {
+type CsvValue = string | number | boolean | null | undefined
+
+const buildCsv = (headers: string[], rows: Array<Record<string, CsvValue>>, delimiter = ';') => {
+  const escapeValue = (value: CsvValue) => {
     const str = value === null || value === undefined ? '' : String(value)
     return `"${str.replace(/"/g, '""')}"`
   }
-  const csv = [
-    headers.map(escapeValue).join(','),
-    ...rows.map(row => headers.map(key => escapeValue(row[key])).join(','))
-  ].join('\n')
 
+  const lines = [
+    headers.map(escapeValue).join(delimiter),
+    ...rows.map(row => headers.map(key => escapeValue(row[key])).join(delimiter))
+  ]
+
+  return `\uFEFF${lines.join('\r\n')}`
+}
+
+const downloadCsv = (filename: string, headers: string[], rows: Array<Record<string, CsvValue>>) => {
+  if (rows.length === 0) return
+  const csv = buildCsv(headers, rows)
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
@@ -92,6 +108,15 @@ export default function AdminPage() {
   const [logAction, setLogAction] = useState('')
   const [logEntityType, setLogEntityType] = useState('')
 
+  const [importUsersFile, setImportUsersFile] = useState<File | null>(null)
+  const [importEventsFile, setImportEventsFile] = useState<File | null>(null)
+  const [importUsersMode, setImportUsersMode] = useState<'upsert' | 'create'>('upsert')
+  const [importEventsMode, setImportEventsMode] = useState<'upsert' | 'create'>('upsert')
+  const [importUsersResult, setImportUsersResult] = useState<any>(null)
+  const [importEventsResult, setImportEventsResult] = useState<any>(null)
+  const [importingUsers, setImportingUsers] = useState(false)
+  const [importingEvents, setImportingEvents] = useState(false)
+
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<AdminEvent | null>(null)
   const [userPassword, setUserPassword] = useState('')
@@ -126,11 +151,69 @@ export default function AdminPage() {
     }, {})
   ), [categoryOptions])
 
+  const userImportHeaders = [
+    'id',
+    'name',
+    'email',
+    'role',
+    'department',
+    'group',
+    'groupChangeCount',
+    'bio',
+    'privacyConsentAt',
+    'termsConsentAt',
+    'password'
+  ]
+
+  const eventImportHeaders = [
+    'id',
+    'title',
+    'category',
+    'date',
+    'time',
+    'duration',
+    'location',
+    'description',
+    'maxParticipants',
+    'isPast',
+    'isNews',
+    'removedFromCalendar',
+    'images',
+    'responsible',
+    'contact',
+    'creatorEmail',
+    'moderatorEmails'
+  ]
+
   useEffect(() => {
     if (status === 'authenticated' && !canAccess) {
       router.replace('/')
     }
   }, [status, canAccess, router])
+  const readJson = useCallback(async <T,>(res: Response) => {
+    const contentType = res.headers.get('content-type') || ''
+    if (res.redirected) {
+      router.replace(res.url)
+      throw new Error('\u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f \u0432\u0445\u043e\u0434')
+    }
+    const isJson = contentType.includes('application/json')
+    if (!isJson) {
+      await res.text()
+      throw new Error('\u0421\u0435\u0440\u0432\u0435\u0440 \u0432\u0435\u0440\u043d\u0443\u043b \u043d\u0435\u043e\u0436\u0438\u0434\u0430\u043d\u043d\u044b\u0439 \u043e\u0442\u0432\u0435\u0442')
+    }
+
+    const data = await res.json()
+    if (!res.ok) {
+      if (res.status === 401) {
+        router.replace('/login')
+      } else if (res.status === 403) {
+        router.replace('/')
+      }
+      throw new Error(data?.error || '\u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u043f\u0440\u043e\u0441\u0430')
+    }
+    return data as T
+  }, [router])
+
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
@@ -139,15 +222,14 @@ export default function AdminPage() {
       if (userSearch) params.set('search', userSearch)
       if (userRoleFilter !== 'ALL') params.set('role', userRoleFilter)
       const res = await fetch(`/api/admin/users?${params.toString()}`)
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Ошибка загрузки пользователей')
+      const data = await readJson<AdminUser[]>(res)
       setUsers(data)
     } catch (error: any) {
       showToast(error.message || 'Ошибка загрузки пользователей', 'error')
     } finally {
       setLoading(false)
     }
-  }, [userSearch, userRoleFilter])
+  }, [userSearch, userRoleFilter, readJson])
 
   const fetchEvents = useCallback(async () => {
     setLoading(true)
@@ -158,15 +240,14 @@ export default function AdminPage() {
       if (eventStatus === 'UPCOMING') params.set('upcoming', 'true')
       if (eventStatus === 'PAST') params.set('past', 'true')
       const res = await fetch(`/api/admin/events?${params.toString()}`)
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Ошибка загрузки мероприятий')
+      const data = await readJson<AdminEvent[]>(res)
       setEvents(data)
     } catch (error: any) {
       showToast(error.message || 'Ошибка загрузки мероприятий', 'error')
     } finally {
       setLoading(false)
     }
-  }, [eventSearch, eventCategory, eventStatus])
+  }, [eventSearch, eventCategory, eventStatus, readJson])
 
   const fetchLogs = useCallback(async () => {
     setLoading(true)
@@ -176,15 +257,72 @@ export default function AdminPage() {
       if (logAction) params.set('action', logAction)
       if (logEntityType) params.set('entityType', logEntityType)
       const res = await fetch(`/api/admin/logs?${params.toString()}`)
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Ошибка загрузки логов')
+      const data = await readJson<AuditLog[]>(res)
       setLogs(data)
     } catch (error: any) {
       showToast(error.message || 'Ошибка загрузки логов', 'error')
     } finally {
       setLoading(false)
     }
-  }, [logAction, logEntityType])
+  }, [logAction, logEntityType, readJson])
+
+  const resolveContentType = (file: File) => (
+    file.name.toLowerCase().endsWith('.json') ? 'application/json' : 'text/csv'
+  )
+
+  const handleImportUsers = useCallback(async () => {
+    if (!importUsersFile) {
+      showToast('Выберите файл для импорта пользователей', 'error')
+      return
+    }
+
+    setImportingUsers(true)
+    setImportUsersResult(null)
+
+    try {
+      const body = await importUsersFile.text()
+      const res = await fetch(`/api/admin/import?type=users&mode=${importUsersMode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': resolveContentType(importUsersFile) },
+        body
+      })
+      const data = await readJson<any>(res)
+      setImportUsersResult(data)
+      await fetchUsers()
+      showToast('Импорт пользователей завершён', 'success')
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка импорта пользователей', 'error')
+    } finally {
+      setImportingUsers(false)
+    }
+  }, [importUsersFile, importUsersMode, readJson, fetchUsers])
+
+  const handleImportEvents = useCallback(async () => {
+    if (!importEventsFile) {
+      showToast('Выберите файл для импорта мероприятий', 'error')
+      return
+    }
+
+    setImportingEvents(true)
+    setImportEventsResult(null)
+
+    try {
+      const body = await importEventsFile.text()
+      const res = await fetch(`/api/admin/import?type=events&mode=${importEventsMode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': resolveContentType(importEventsFile) },
+        body
+      })
+      const data = await readJson<any>(res)
+      setImportEventsResult(data)
+      await fetchEvents()
+      showToast('Импорт мероприятий завершён', 'success')
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка импорта мероприятий', 'error')
+    } finally {
+      setImportingEvents(false)
+    }
+  }, [importEventsFile, importEventsMode, readJson, fetchEvents])
 
   useEffect(() => {
     if (!canAccess) return
@@ -200,8 +338,7 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newUser)
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Ошибка создания пользователя')
+      await readJson(res)
       showToast('Пользователь создан', 'success')
       setNewUser({ name: '', email: '', password: '', role: 'STUDENT', department: '', group: '' })
       await fetchUsers()
@@ -222,8 +359,7 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Ошибка обновления пользователя')
+      await readJson(res)
       showToast('Пользователь обновлён', 'success')
       setSelectedUser(null)
       setUserPassword('')
@@ -237,8 +373,7 @@ export default function AdminPage() {
     if (!confirm('Удалить пользователя?')) return
     try {
       const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Ошибка удаления')
+      await readJson(res)
       showToast('Пользователь удалён', 'success')
       await fetchUsers()
     } catch (error: any) {
@@ -262,8 +397,7 @@ export default function AdminPage() {
           moderators: selectedEvent.moderators.map(m => m.email)
         })
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Ошибка обновления мероприятия')
+      await readJson(res)
       showToast('Мероприятие обновлено', 'success')
       setSelectedEvent(null)
       await fetchEvents()
@@ -276,8 +410,7 @@ export default function AdminPage() {
     if (!confirm('Удалить мероприятие?')) return
     try {
       const res = await fetch(`/api/admin/events/${id}`, { method: 'DELETE' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Ошибка удаления')
+      await readJson(res)
       showToast('Мероприятие удалено', 'success')
       await fetchEvents()
     } catch (error: any) {
@@ -294,9 +427,20 @@ export default function AdminPage() {
       department: user.department || '',
       group: user.group || '',
       groupChangeCount: user.groupChangeCount,
-      createdAt: user.createdAt
+      bio: user.bio || '',
+      privacyConsentAt: user.privacyConsentAt ? new Date(user.privacyConsentAt).toISOString() : '',
+      termsConsentAt: user.termsConsentAt ? new Date(user.termsConsentAt).toISOString() : '',
+      password: ''
     }))
-    downloadCsv(`users-${new Date().toISOString().slice(0, 10)}.csv`, rows)
+    downloadCsv(`users-${new Date().toISOString().slice(0, 10)}.csv`, userImportHeaders, rows)
+  }
+
+  const handleDownloadUsersTemplate = () => {
+    const row = userImportHeaders.reduce<Record<string, CsvValue>>((acc, key) => {
+      acc[key] = ''
+      return acc
+    }, {})
+    downloadCsv('users-import-template.csv', userImportHeaders, [row])
   }
 
   const handleExportEvents = () => {
@@ -304,13 +448,30 @@ export default function AdminPage() {
       id: event.id,
       title: event.title,
       category: event.category,
-      date: event.date,
-      time: event.time,
+      date: event.date ? new Date(event.date).toISOString().slice(0, 10) : '',
+      time: event.time || '',
+      duration: event.duration || '',
       location: event.location,
-      creator: event.creator?.email || '',
-      moderators: event.moderators.map(m => m.email).join(';')
+      description: event.description || '',
+      maxParticipants: event.maxParticipants ?? 0,
+      isPast: event.isPast ? 'true' : 'false',
+      isNews: event.isNews ? 'true' : 'false',
+      removedFromCalendar: event.removedFromCalendar ? 'true' : 'false',
+      images: event.images && event.images.length > 0 ? event.images.join('|') : '',
+      responsible: event.responsible || '',
+      contact: event.contact || '',
+      creatorEmail: event.creator?.email || '',
+      moderatorEmails: event.moderators.map(m => m.email).join('|')
     }))
-    downloadCsv(`events-${new Date().toISOString().slice(0, 10)}.csv`, rows)
+    downloadCsv(`events-${new Date().toISOString().slice(0, 10)}.csv`, eventImportHeaders, rows)
+  }
+
+  const handleDownloadEventsTemplate = () => {
+    const row = eventImportHeaders.reduce<Record<string, CsvValue>>((acc, key) => {
+      acc[key] = ''
+      return acc
+    }, {})
+    downloadCsv('events-import-template.csv', eventImportHeaders, [row])
   }
 
   const handleExportLogs = () => {
@@ -323,7 +484,15 @@ export default function AdminPage() {
       createdAt: log.createdAt,
       metadata: log.metadata ? JSON.stringify(log.metadata) : ''
     }))
-    downloadCsv(`logs-${new Date().toISOString().slice(0, 10)}.csv`, rows)
+    downloadCsv(`logs-${new Date().toISOString().slice(0, 10)}.csv`, [
+      'id',
+      'action',
+      'entityType',
+      'entityId',
+      'actor',
+      'createdAt',
+      'metadata'
+    ], rows)
   }
 
   if (status === 'loading') {
@@ -384,6 +553,59 @@ export default function AdminPage() {
         {activeTab === 'users' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-4">
+              <div className="liquid-card p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <h3 className="font-semibold text-primary">Импорт пользователей</h3>
+                  <div className="text-xs text-gray-500">CSV или JSON</div>
+                </div>
+                <div className="text-xs text-gray-500 break-all">
+                  Формат CSV: {userImportHeaders.join('; ')}. Разделитель `;`, кодировка UTF-8.
+                </div>
+                <div className="text-xs text-gray-500">
+                  Поле `password` опционально. Если пусто, пользователь не сможет войти по паролю.
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    type="file"
+                    accept=".csv,.json"
+                    className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                    onChange={(e) => setImportUsersFile(e.target.files?.[0] || null)}
+                  />
+                  <select
+                    className="px-3 py-2 border rounded-lg text-sm"
+                    value={importUsersMode}
+                    onChange={(e) => setImportUsersMode(e.target.value as any)}
+                  >
+                    <option value="upsert">Обновлять существующих</option>
+                    <option value="create">Только новые</option>
+                  </select>
+                  <Button
+                    variant="secondary"
+                    onClick={handleImportUsers}
+                    disabled={importingUsers}
+                  >
+                    {importingUsers ? 'Импорт...' : 'Импортировать'}
+                  </Button>
+                  <Button variant="secondary" onClick={handleDownloadUsersTemplate}>
+                    Шаблон CSV
+                  </Button>
+                </div>
+                {importUsersResult && (
+                  <div className="text-sm text-gray-600">
+                    Создано: {importUsersResult.created || 0}, обновлено: {importUsersResult.updated || 0}, пропущено: {importUsersResult.skipped || 0}, ошибок: {importUsersResult.errors?.length || 0}, предупреждений: {importUsersResult.warnings?.length || 0}
+                  </div>
+                )}
+                {importUsersResult?.errors?.length > 0 && (
+                  <div className="text-xs text-red-600 space-y-1">
+                    {importUsersResult.errors.slice(0, 5).map((err: string, idx: number) => (
+                      <div key={`${err}-${idx}`}>{err}</div>
+                    ))}
+                    {importUsersResult.errors.length > 5 && (
+                      <div>... ещё {importUsersResult.errors.length - 5} ошибок</div>
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="liquid-card p-4 flex flex-wrap gap-3 items-center">
                 <input
                   className="flex-grow px-4 py-2 rounded-lg border border-gray-200"
@@ -484,6 +706,62 @@ export default function AdminPage() {
         {activeTab === 'events' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-4">
+              <div className="liquid-card p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <h3 className="font-semibold text-primary">Импорт мероприятий</h3>
+                  <div className="text-xs text-gray-500">CSV или JSON</div>
+                </div>
+                <div className="text-xs text-gray-500 break-all">
+                  Формат CSV: {eventImportHeaders.join('; ')}. Разделитель `;`, кодировка UTF-8.
+                </div>
+                <div className="text-xs text-gray-500">
+                  Поле `creatorEmail` опционально — если пусто, создателем станет текущий администратор.
+                </div>
+                <div className="text-xs text-gray-500">
+                  Для списков используйте разделители `|` или `;` (например, images и moderatorEmails).
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    type="file"
+                    accept=".csv,.json"
+                    className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                    onChange={(e) => setImportEventsFile(e.target.files?.[0] || null)}
+                  />
+                  <select
+                    className="px-3 py-2 border rounded-lg text-sm"
+                    value={importEventsMode}
+                    onChange={(e) => setImportEventsMode(e.target.value as any)}
+                  >
+                    <option value="upsert">Обновлять существующие</option>
+                    <option value="create">Только новые</option>
+                  </select>
+                  <Button
+                    variant="secondary"
+                    onClick={handleImportEvents}
+                    disabled={importingEvents}
+                  >
+                    {importingEvents ? 'Импорт...' : 'Импортировать'}
+                  </Button>
+                  <Button variant="secondary" onClick={handleDownloadEventsTemplate}>
+                    Шаблон CSV
+                  </Button>
+                </div>
+                {importEventsResult && (
+                  <div className="text-sm text-gray-600">
+                    Создано: {importEventsResult.created || 0}, обновлено: {importEventsResult.updated || 0}, пропущено: {importEventsResult.skipped || 0}, ошибок: {importEventsResult.errors?.length || 0}, предупреждений: {importEventsResult.warnings?.length || 0}
+                  </div>
+                )}
+                {importEventsResult?.errors?.length > 0 && (
+                  <div className="text-xs text-red-600 space-y-1">
+                    {importEventsResult.errors.slice(0, 5).map((err: string, idx: number) => (
+                      <div key={`${err}-${idx}`}>{err}</div>
+                    ))}
+                    {importEventsResult.errors.length > 5 && (
+                      <div>... ещё {importEventsResult.errors.length - 5} ошибок</div>
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="liquid-card p-4 flex flex-wrap gap-3 items-center">
                 <input
                   className="flex-grow px-4 py-2 rounded-lg border border-gray-200"
