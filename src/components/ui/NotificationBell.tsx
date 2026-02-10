@@ -12,7 +12,7 @@ const NotificationBell = () => {
   const {
     notifications = [],
     markNotificationAsRead,
-    clearAllNotifications,
+    markAllNotificationsAsRead,
     refreshNotifications
   } = useAppContext()
   
@@ -49,8 +49,8 @@ const NotificationBell = () => {
 
 
   const handleClearAll = () => {
-    if (confirm('Вы уверены, что хотите очистить все уведомления?')) {
-      clearAllNotifications()
+    if (confirm('Отметить все уведомления как прочитанные?')) {
+      markAllNotificationsAsRead()
       setIsDropdownOpen(false)
       setActiveNotificationId(null)
     }
@@ -137,8 +137,8 @@ const NotificationBell = () => {
               className="dropdown-item px-4 py-3 border-t border-gray-200 hover:bg-red-50 cursor-pointer text-red-600 font-semibold"
               onClick={handleClearAll}
             >
-              <i className="fas fa-trash-alt mr-2"></i>
-              Очистить все уведомления
+              <i className="fas fa-check-double mr-2"></i>
+              Отметить все прочитанными
             </div>
           )}
 

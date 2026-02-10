@@ -166,3 +166,36 @@ export async function DELETE(req: NextRequest) {
     )
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
+    }
+
+    const result = await prisma.notification.updateMany({
+      where: { userId: session.user.id, read: false },
+      data: { read: true }
+    })
+
+    const { ip, userAgent } = buildAuditMeta(req)
+    await logAuditEvent({
+      actorId: session.user.id,
+      action: 'NOTIFICATIONS_MARK_READ',
+      entityType: 'Notification',
+      entityId: session.user.id,
+      metadata: { updated: result.count },
+      ip,
+      userAgent
+    })
+
+    return NextResponse.json({ success: true, updated: result.count })
+  } catch (error) {
+    console.error('Notifications PATCH error:', error)
+    return NextResponse.json(
+      { error: 'Ошибка сервера' },
+      { status: 500 }
+    )
+  }
+}

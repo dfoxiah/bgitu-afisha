@@ -75,13 +75,13 @@ export default function NotificationsPage() {
             <Button
               variant="secondary"
               onClick={() => {
-                if (confirm('Очистить все уведомления?')) {
+                if (confirm('Очистить историю уведомлений?')) {
                   clearAllNotifications()
                 }
               }}
               disabled={notifications.length === 0}
             >
-              Очистить все
+              Очистить историю
             </Button>
             <Link
               href="/dashboard"

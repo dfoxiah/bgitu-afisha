@@ -28,6 +28,7 @@ interface AppContextType {
   updateParticipantStatus: (eventId: string, userId: string, action: 'confirm' | 'reject') => Promise<void>
   refreshNotifications: () => Promise<void>
   markNotificationAsRead: (id: string) => void
+  markAllNotificationsAsRead: () => void
   clearAllNotifications: () => void
   sendEventNotification: (eventId: string, content: string, recipients: string, type?: NotificationType) => Promise<void>
   updateProfile: (data: any) => Promise<any>
@@ -692,6 +693,18 @@ export function AppProvider({
     })
   }, [debug])
 
+  const markAllNotificationsAsRead = useCallback(() => {
+    debug.info('notifications', 'Marking all notifications as read')
+
+    setNotifications(prev => prev.map(notification => ({ ...notification, read: true })))
+
+    fetch('/api/notifications', {
+      method: 'PATCH'
+    }).catch(error => {
+      debug.error('notifications', 'Failed to mark all notifications as read', error)
+    })
+  }, [debug])
+
   const clearAllNotifications = useCallback(() => {
     debug.info('notifications', 'Clearing all notifications')
     
@@ -788,6 +801,7 @@ export function AppProvider({
     updateParticipantStatus,
     refreshNotifications,
     markNotificationAsRead,
+    markAllNotificationsAsRead,
     clearAllNotifications,
     sendEventNotification,
     updateProfile,
@@ -813,6 +827,7 @@ export function AppProvider({
     updateParticipantStatus,
     refreshNotifications,
     markNotificationAsRead,
+    markAllNotificationsAsRead,
     clearAllNotifications,
     sendEventNotification,
     updateProfile,
