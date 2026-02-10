@@ -60,6 +60,10 @@ export interface User {
   privacyConsentAt?: Date | null
   termsConsentAt?: Date | null
   bio?: string | null
+  notifyNewEvents?: boolean
+  notifyChanges?: boolean
+  notifyNews?: boolean
+  notificationCategories?: EventCategory[]
   createdAt: Date
   updatedAt: Date
 }

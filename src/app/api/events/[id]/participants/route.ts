@@ -64,6 +64,12 @@ export async function POST(
       return NextResponse.json({ error: 'Участник не найден' }, { status: 404 })
     }
 
+    const notifyTarget = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { notifyChanges: true }
+    })
+    const shouldNotify = notifyTarget?.notifyChanges ?? true
+
     const prevStatus = participant.status
     let nextStatus: ParticipantStatus | 'REMOVED' = prevStatus
     let delta = 0
@@ -114,20 +120,22 @@ export async function POST(
           ? `Ваше участие в мероприятии «${event.title}» подтверждено. Дата: ${new Date(event.date).toLocaleDateString('ru-RU')} ${event.time || ''}`
           : `Ваша заявка на участие в мероприятии «${event.title}» отклонена.`
 
-      await tx.notification.create({
-        data: {
-          userId,
-          title,
-          content,
-          type: NotificationType.EVENT,
-          read: false,
-          metadata: {
-            eventId,
-            action,
-            approvedBy: session.user.email || session.user.name
+      if (shouldNotify) {
+        await tx.notification.create({
+          data: {
+            userId,
+            title,
+            content,
+            type: NotificationType.CHANGE,
+            read: false,
+            metadata: {
+              eventId,
+              action,
+              approvedBy: session.user.email || session.user.name
+            }
           }
-        }
-      })
+        })
+      }
     })
 
     const { ip, userAgent } = buildAuditMeta(req)

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { EventCategory, ParticipantStatus } from '@prisma/client'
+import { EventCategory, NotificationType, ParticipantStatus, Prisma } from '@prisma/client'
 import { buildAuditMeta, logAuditEvent } from '@/lib/audit'
 
 interface RouteParams {
@@ -117,6 +117,29 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   const adminId = session!.user!.id
 
   const { id } = await params
+  const existingEvent = await prisma.event.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      title: true,
+      date: true,
+      time: true,
+      location: true,
+      category: true,
+      eventParticipants: {
+        select: {
+          userId: true,
+          status: true
+        }
+      },
+      moderators: { select: { userId: true } }
+    }
+  })
+
+  if (!existingEvent) {
+    return NextResponse.json({ error: 'Мероприятие не найдено' }, { status: 404 })
+  }
+
   const body = await req.json()
   const updateData: any = {}
   let moderatorIds: string[] | null = null
@@ -146,14 +169,6 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   }
 
   if (body.date || body.time) {
-    const event = await prisma.event.findUnique({
-      where: { id },
-      select: { date: true, time: true }
-    })
-    if (!event) {
-      return NextResponse.json({ error: 'Мероприятие не найдено' }, { status: 404 })
-    }
-
     const formatLocalDate = (date: Date) => {
       const yyyy = date.getFullYear()
       const mm = String(date.getMonth() + 1).padStart(2, '0')
@@ -161,8 +176,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       return `${yyyy}-${mm}-${dd}`
     }
 
-    const incomingDate = body.date ? String(body.date) : formatLocalDate(new Date(event.date))
-    const incomingTime = body.time ? String(body.time).trim() : (event.time || '00:00')
+    const incomingDate = body.date ? String(body.date) : formatLocalDate(new Date(existingEvent.date))
+    const incomingTime = body.time ? String(body.time).trim() : (existingEvent.time || '00:00')
 
     const parsedDate = parseDateTime(incomingDate, incomingTime)
     if (!parsedDate) {
@@ -238,6 +253,92 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
   if (!updated) {
     return NextResponse.json({ error: 'Мероприятие не найдено' }, { status: 404 })
+  }
+
+  try {
+    const existingModeratorIds = existingEvent.moderators.map(m => m.userId)
+    const currentModeratorIds = moderatorIds ?? existingModeratorIds
+    const newlyAddedModeratorIds = moderatorIds
+      ? moderatorIds.filter(idValue => !existingModeratorIds.includes(idValue))
+      : []
+
+    const eventDateText = new Date(updated.date).toLocaleDateString('ru-RU')
+    const timeText = updated.time ? ` ${updated.time}` : ''
+    const locationText = updated.location ? `, место: ${updated.location}` : ''
+
+    const notifications: Prisma.NotificationCreateManyInput[] = []
+
+    const loadChangeRecipients = async (ids: string[]) => {
+      if (ids.length === 0) return new Set<string>()
+      const users = await prisma.user.findMany({
+        where: { id: { in: ids }, notifyChanges: true },
+        select: { id: true }
+      })
+      return new Set(users.map(user => user.id))
+    }
+
+    const addedRecipients = await loadChangeRecipients(newlyAddedModeratorIds)
+    for (const userId of newlyAddedModeratorIds) {
+      if (!addedRecipients.has(userId) || userId === adminId) continue
+      notifications.push({
+        userId,
+        title: 'Назначение модератором',
+        content: `Вас назначили модератором мероприятия «${updated.title}». Дата: ${eventDateText}${timeText}${locationText}`,
+        type: NotificationType.EVENT,
+        read: false,
+        metadata: { eventId: updated.id, action: 'moderator_added' }
+      })
+    }
+
+    const changedFields = Object.keys(updateData)
+    if (changedFields.length > 0) {
+      const fieldLabels: Record<string, string> = {
+        title: 'название',
+        description: 'описание',
+        location: 'место',
+        duration: 'длительность',
+        responsible: 'ответственный',
+        contact: 'контакт',
+        category: 'категория',
+        maxParticipants: 'лимит участников',
+        images: 'фотографии',
+        date: 'дата',
+        time: 'время',
+        isNews: 'статус новости',
+        removedFromCalendar: 'отображение'
+      }
+      const updatedFieldNames = changedFields
+        .map(field => fieldLabels[field])
+        .filter(Boolean)
+      const changeSummary = updatedFieldNames.length > 0
+        ? `Обновлены: ${updatedFieldNames.join(', ')}.`
+        : 'Обновлены детали мероприятия.'
+
+      const changeAudienceIds = new Set<string>()
+      existingEvent.eventParticipants.forEach(participant => {
+        changeAudienceIds.add(participant.userId)
+      })
+      currentModeratorIds.forEach(userId => changeAudienceIds.add(userId))
+      changeAudienceIds.delete(adminId)
+
+      const changeRecipients = await loadChangeRecipients(Array.from(changeAudienceIds))
+      for (const userId of Array.from(changeRecipients)) {
+        notifications.push({
+          userId,
+          title: 'Изменение мероприятия',
+          content: `Мероприятие «${updated.title}» было обновлено. ${changeSummary} Дата: ${eventDateText}${timeText}${locationText}`,
+          type: NotificationType.CHANGE,
+          read: false,
+          metadata: { eventId: updated.id, action: 'event_updated' }
+        })
+      }
+    }
+
+    if (notifications.length > 0) {
+      await prisma.notification.createMany({ data: notifications })
+    }
+  } catch (notifyError) {
+    console.error('Admin event notifications error:', notifyError)
   }
 
   const { ip, userAgent } = buildAuditMeta(req)

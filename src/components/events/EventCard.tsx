@@ -82,12 +82,12 @@ export default function EventCard({
       className="event-card liquid-card liquid-card-hover overflow-hidden cursor-pointer flex flex-col h-full"
       onClick={() => onClick ? onClick(event) : router.push(`/events/${event.id}`)}
     >
-      <div className="relative h-40 sm:h-48 overflow-hidden">
+      <div className="relative h-40 sm:h-48 overflow-hidden bg-gray-50 flex items-center justify-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img 
           src={imageError || !event.images || event.images.length === 0 ? placeholderImage : event.images[0]}
           alt={event.title}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-contain"
           onError={handleImageError}
         />
         <div className="absolute top-3 right-3">

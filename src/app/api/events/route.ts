@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { EventCategory, ParticipantStatus } from "@prisma/client";
+import { EventCategory, NotificationType, ParticipantStatus, Prisma } from "@prisma/client";
 import { buildAuditMeta, logAuditEvent } from "@/lib/audit";
 
 // Простой кэш в памяти (без setInterval)
@@ -616,6 +616,93 @@ export async function POST(req: NextRequest) {
       ip,
       userAgent
     });
+
+    try {
+      const eventDateText = new Date(newEvent.date).toLocaleDateString('ru-RU');
+      const timeText = newEvent.time ? ` ${newEvent.time}` : '';
+      const locationText = newEvent.location ? `, место: ${newEvent.location}` : '';
+      const participantIds = participantsToConnect.map(p => p.id);
+      const moderatorIds = moderatorsToConnect.map(m => m.userId);
+
+      const notifications: Prisma.NotificationCreateManyInput[] = [];
+
+      const changeRecipients = await prisma.user.findMany({
+        where: {
+          id: { in: [...participantIds, ...moderatorIds] },
+          notifyChanges: true
+        },
+        select: { id: true }
+      });
+      const changeRecipientIds = new Set(changeRecipients.map(user => user.id));
+
+      for (const userId of participantIds) {
+        if (!changeRecipientIds.has(userId)) continue;
+        notifications.push({
+          userId,
+          title: 'Добавление в мероприятие',
+          content: `Вас добавили в мероприятие «${newEvent.title}». Дата: ${eventDateText}${timeText}${locationText}`,
+          type: NotificationType.EVENT,
+          read: false,
+          metadata: { eventId: newEvent.id, action: 'participant_added' }
+        });
+      }
+
+      for (const userId of moderatorIds) {
+        if (!changeRecipientIds.has(userId)) continue;
+        notifications.push({
+          userId,
+          title: 'Назначение модератором',
+          content: `Вас назначили модератором мероприятия «${newEvent.title}». Дата: ${eventDateText}${timeText}${locationText}`,
+          type: NotificationType.EVENT,
+          read: false,
+          metadata: { eventId: newEvent.id, action: 'moderator_added' }
+        });
+      }
+
+      const excludedIds = new Set<string>([creatorId, ...participantIds, ...moderatorIds]);
+      const audienceWhere: any = {
+        id: { notIn: Array.from(excludedIds) },
+        OR: [
+          { notificationCategories: { isEmpty: true } },
+          { notificationCategories: { has: newEvent.category } }
+        ]
+      };
+
+      if (newEvent.isNews || newEvent.category === EventCategory.NEWS) {
+        audienceWhere.notifyNews = true;
+      } else {
+        audienceWhere.notifyNewEvents = true;
+      }
+
+      const audience = await prisma.user.findMany({
+        where: audienceWhere,
+        select: { id: true }
+      });
+
+      const newEventTitle = newEvent.isNews || newEvent.category === EventCategory.NEWS
+        ? 'Новая новость'
+        : 'Новое мероприятие';
+      const newEventContent = newEvent.isNews || newEvent.category === EventCategory.NEWS
+        ? `Новая новость: «${newEvent.title}». ${eventDateText}${timeText}`
+        : `Новое мероприятие: «${newEvent.title}». Дата: ${eventDateText}${timeText}${locationText}`;
+
+      for (const recipient of audience) {
+        notifications.push({
+          userId: recipient.id,
+          title: newEventTitle,
+          content: newEventContent,
+          type: NotificationType.NEW,
+          read: false,
+          metadata: { eventId: newEvent.id, action: 'event_new' }
+        });
+      }
+
+      if (notifications.length > 0) {
+        await prisma.notification.createMany({ data: notifications });
+      }
+    } catch (notifyError) {
+      console.error('Event notifications error:', notifyError);
+    }
     
     // Сериализуем ответ
     const { confirmed, pending } = splitParticipants(newEvent.eventParticipants);

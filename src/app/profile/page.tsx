@@ -1,13 +1,15 @@
 ﻿// src/app/profile/page.tsx
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSession, signOut, getSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/contexts/AppContext'
 import Button from '@/components/ui/Button'
 import { useDebugger } from '@/lib/debugger'
 import { showToast } from '@/lib/toast'
+import { CategoryDisplayMap } from '@/types'
+import { EventCategory } from '@prisma/client'
 
 interface ProfileFormData {
   name: string
@@ -19,6 +21,7 @@ interface ProfileFormData {
     newEvents: boolean
     changes: boolean
     news: boolean
+    categories: EventCategory[]
   }
 }
 
@@ -27,6 +30,14 @@ export default function ProfilePage() {
   const { data: session, status, update: updateSession } = useSession()
   const { updateProfile } = useAppContext()
   const debug = useDebugger('ProfilePage')
+  const allCategories = useMemo(() => Object.values(EventCategory) as EventCategory[], [])
+  const categoryOptions = useMemo(
+    () => allCategories.map(category => ({
+      value: category,
+      label: CategoryDisplayMap[category] || category
+    })),
+    [allCategories]
+  )
   
   const [formData, setFormData] = useState<ProfileFormData>({
     name: '',
@@ -37,7 +48,8 @@ export default function ProfilePage() {
     notifications: {
       newEvents: true,
       changes: true,
-      news: false
+      news: false,
+      categories: []
     }
   })
   
@@ -81,6 +93,11 @@ export default function ProfilePage() {
         hasGroup: !!session.user.group
       })
 
+      const savedCategories = Array.isArray(session.user.notificationCategories)
+        ? session.user.notificationCategories
+        : []
+      const resolvedCategories = savedCategories.length > 0 ? savedCategories : allCategories
+
       const newFormData: ProfileFormData = {
         name: session.user.name || '',
         email: session.user.email || '',
@@ -88,31 +105,18 @@ export default function ProfilePage() {
         group: session.user.group || '',
         bio: session.user.bio || '',
         notifications: {
-          newEvents: true,
-          changes: true,
-          news: false
+          newEvents: session.user.notifyNewEvents ?? true,
+          changes: session.user.notifyChanges ?? true,
+          news: session.user.notifyNews ?? false,
+          categories: resolvedCategories
         }
       }
 
       setGroupChangeCount(session.user.groupChangeCount ?? 0)
       setFormData(newFormData)
       setOriginalData(newFormData)
-      
-      const savedNotifications = localStorage.getItem('user_notifications')
-      if (savedNotifications) {
-        try {
-          const notifications = JSON.parse(savedNotifications)
-          setFormData(prev => ({
-            ...prev,
-            notifications: { ...prev.notifications, ...notifications }
-          }))
-          debug.debug('storage', 'Loaded notifications from localStorage', notifications)
-        } catch (error) {
-          debug.error('storage', 'Failed to parse saved notifications', error)
-        }
-      }
     }
-  }, [session, debug])
+  }, [session, debug, allCategories])
 
   useEffect(() => {
     if (status === 'loading') {
@@ -151,8 +155,19 @@ export default function ProfilePage() {
     Object.keys(formData).forEach(key => {
       if (key === 'notifications') {
         Object.keys(formData.notifications).forEach(subKey => {
-          if (formData.notifications[subKey as keyof typeof formData.notifications] !== 
-              originalData.notifications[subKey as keyof typeof originalData.notifications]) {
+          if (subKey === 'categories') {
+            const current = [...formData.notifications.categories].sort().join('|')
+            const original = [...originalData.notifications.categories].sort().join('|')
+            if (current !== original) {
+              changed.push('notifications.categories')
+            }
+            return
+          }
+
+          if (
+            formData.notifications[subKey as keyof typeof formData.notifications] !== 
+            originalData.notifications[subKey as keyof typeof originalData.notifications]
+          ) {
             changed.push(`notifications.${subKey}`)
           }
         })
@@ -230,13 +245,6 @@ export default function ProfilePage() {
           [notificationKey]: checked
         }
       }))
-      
-      const updatedNotifications = {
-        ...formData.notifications,
-        [notificationKey]: checked
-      }
-      localStorage.setItem('user_notifications', JSON.stringify(updatedNotifications))
-      debug.debug('storage', 'Saved notifications to localStorage', updatedNotifications)
     } else {
       setFormData(prev => ({ ...prev, [name]: value }))
     }
@@ -248,6 +256,35 @@ export default function ProfilePage() {
         return newErrors
       })
     }
+  }
+
+  const toggleCategory = (category: EventCategory) => {
+    setFormData(prev => {
+      const current = prev.notifications.categories.length > 0
+        ? prev.notifications.categories
+        : allCategories
+      const next = current.includes(category)
+        ? current.filter(item => item !== category)
+        : [...current, category]
+      const normalized = next.length === 0 ? [...allCategories] : next
+      return {
+        ...prev,
+        notifications: {
+          ...prev.notifications,
+          categories: normalized
+        }
+      }
+    })
+  }
+
+  const selectAllCategories = () => {
+    setFormData(prev => ({
+      ...prev,
+      notifications: {
+        ...prev.notifications,
+        categories: [...allCategories]
+      }
+    }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -288,7 +325,13 @@ export default function ProfilePage() {
         email: formData.email,
         department: formData.department,
         group: formData.group,
-        bio: formData.bio
+        bio: formData.bio,
+        notifications: {
+          newEvents: formData.notifications.newEvents,
+          changes: formData.notifications.changes,
+          news: formData.notifications.news,
+          categories: formData.notifications.categories
+        }
       })
       
       const duration = endTimer()
@@ -308,7 +351,11 @@ export default function ProfilePage() {
           department: formData.department,
           group: formData.group,
           bio: formData.bio,
-          groupChangeCount: response?.user?.groupChangeCount ?? groupChangeCount
+          groupChangeCount: response?.user?.groupChangeCount ?? groupChangeCount,
+          notifyNewEvents: formData.notifications.newEvents,
+          notifyChanges: formData.notifications.changes,
+          notifyNews: formData.notifications.news,
+          notificationCategories: formData.notifications.categories
         }
       })
 
@@ -709,6 +756,40 @@ export default function ProfilePage() {
                       </div>
                       <div className={`w-3 h-3 rounded-full mt-1 sm:mt-0 ${formData.notifications.news ? 'bg-green-500' : 'bg-gray-300'}`}></div>
                     </label>
+
+                    <div className="border-t border-gray-200 pt-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-medium text-primary">Категории мероприятий</div>
+                        {formData.notifications.categories.length < allCategories.length && (
+                          <button
+                            type="button"
+                            onClick={selectAllCategories}
+                            className="text-xs text-accent hover:text-primary transition-colors"
+                          >
+                            Выбрать все
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Выберите категории, по которым хотите получать уведомления о новых мероприятиях и новостях.
+                      </p>
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {categoryOptions.map(option => (
+                          <label
+                            key={option.value}
+                            className="flex items-center gap-3 p-2 rounded-lg border border-white/70 bg-white/70 hover:bg-white transition-colors cursor-pointer text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={formData.notifications.categories.includes(option.value)}
+                              onChange={() => toggleCategory(option.value)}
+                              className="w-4 h-4 text-accent rounded focus:ring-2 focus:ring-accent"
+                            />
+                            <span className="text-gray-700">{option.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
                 

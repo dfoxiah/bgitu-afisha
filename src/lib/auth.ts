@@ -5,7 +5,7 @@ import YandexProvider from "next-auth/providers/yandex";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { Role } from "@prisma/client";
+import { EventCategory, Role } from "@prisma/client";
 import { logAuditEvent } from "@/lib/audit";
 
 const authLog = (...args: any[]) => {
@@ -46,6 +46,10 @@ declare module "next-auth" {
       group?: string | null;
       groupChangeCount?: number;
       bio?: string | null;
+      notifyNewEvents?: boolean;
+      notifyChanges?: boolean;
+      notifyNews?: boolean;
+      notificationCategories?: EventCategory[];
     };
   }
   
@@ -57,6 +61,10 @@ declare module "next-auth" {
     privacyConsentAt?: Date | null;
     termsConsentAt?: Date | null;
     bio?: string | null;
+    notifyNewEvents?: boolean;
+    notifyChanges?: boolean;
+    notifyNews?: boolean;
+    notificationCategories?: EventCategory[];
   }
 }
 
@@ -71,6 +79,10 @@ declare module "next-auth/jwt" {
     picture?: string | null;
     groupChangeCount?: number;
     bio?: string | null;
+    notifyNewEvents?: boolean;
+    notifyChanges?: boolean;
+    notifyNews?: boolean;
+    notificationCategories?: EventCategory[];
   }
 }
 
@@ -124,6 +136,10 @@ export const authOptions: NextAuthOptions = {
             image: user.image,
             department: user.department,
             group: user.group,
+            notifyNewEvents: user.notifyNewEvents ?? true,
+            notifyChanges: user.notifyChanges ?? true,
+            notifyNews: user.notifyNews ?? false,
+            notificationCategories: user.notificationCategories ?? [],
           };
         } catch (error) {
           console.error("Auth error:", error);
@@ -195,6 +211,10 @@ export const authOptions: NextAuthOptions = {
         token.picture = user.image;
         token.groupChangeCount = user.groupChangeCount ?? 0;
         token.bio = user.bio;
+        token.notifyNewEvents = user.notifyNewEvents ?? true;
+        token.notifyChanges = user.notifyChanges ?? true;
+        token.notifyNews = user.notifyNews ?? false;
+        token.notificationCategories = user.notificationCategories ?? [];
       }
       
       // При обновлении сессии
@@ -205,6 +225,10 @@ export const authOptions: NextAuthOptions = {
         token.group = session.user.group;
         token.groupChangeCount = session.user.groupChangeCount ?? token.groupChangeCount ?? 0;
         token.bio = session.user.bio;
+        token.notifyNewEvents = session.user.notifyNewEvents ?? token.notifyNewEvents ?? true;
+        token.notifyChanges = session.user.notifyChanges ?? token.notifyChanges ?? true;
+        token.notifyNews = session.user.notifyNews ?? token.notifyNews ?? false;
+        token.notificationCategories = session.user.notificationCategories ?? token.notificationCategories ?? [];
       }
       
       return token;
@@ -226,6 +250,15 @@ export const authOptions: NextAuthOptions = {
         session.user.groupChangeCount =
           typeof token.groupChangeCount === "number" ? token.groupChangeCount : 0;
         session.user.bio = typeof token.bio === "string" ? token.bio : null;
+        session.user.notifyNewEvents =
+          typeof token.notifyNewEvents === "boolean" ? token.notifyNewEvents : true;
+        session.user.notifyChanges =
+          typeof token.notifyChanges === "boolean" ? token.notifyChanges : true;
+        session.user.notifyNews =
+          typeof token.notifyNews === "boolean" ? token.notifyNews : false;
+        session.user.notificationCategories = Array.isArray(token.notificationCategories)
+          ? (token.notificationCategories as EventCategory[])
+          : [];
       }
       
       authLog("Session callback:", session.user.email);

@@ -33,9 +33,12 @@ class DeveloperDebugger {
       ? localStorage.getItem('developer_debugger_config')
       : null;
 
-    this.config = savedConfig 
-      ? JSON.parse(savedConfig)
-      : {
+    if (savedConfig) {
+      try {
+        this.config = JSON.parse(savedConfig);
+      } catch (error) {
+        console.warn('Developer debugger config parse failed, resetting.', error);
+        this.config = {
           enabled: false,
           logLevel: 'debug',
           categories: ['all'],
@@ -43,6 +46,17 @@ class DeveloperDebugger {
           showComponentName: true,
           showStackTraces: false,
         };
+      }
+    } else {
+      this.config = {
+        enabled: false,
+        logLevel: 'debug',
+        categories: ['all'],
+        showTimestamps: true,
+        showComponentName: true,
+        showStackTraces: false,
+      };
+    }
   }
 
   static getInstance(): DeveloperDebugger {

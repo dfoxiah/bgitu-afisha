@@ -12,27 +12,27 @@ interface NotificationModalProps {
 
 const NotificationModal = ({ onClose }: NotificationModalProps) => {
   const { events, sendEventNotification } = useAppContext()
-  const [formData, setFormData] = useState({
-    eventId: '',
-    template: 'change' as 'change' | 'new' | 'reminder',
-    content: '',
-    recipients: 'all' as 'all' | 'confirmed' | 'pending'
-  })
-
-  const futureEvents = events.filter(event => !event.isPast)
-  const selectedEvent = futureEvents.find(event => event.id === formData.eventId)
-  
   const templates = {
     change: 'Изменение времени: Мероприятие "[Название]" перенесено на [Дата] [Время]',
-    new: 'Новое мероприятие: Приглашаем на [Название мероприятия] [Дата] [Время]',
+    custom: '',
     reminder: 'Напоминание: Завтра в [Время] состоится мероприятие "[Название]"'
   }
 
   const templateTypeMap = {
     change: 'CHANGE',
-    new: 'NEW',
+    custom: 'EVENT',
     reminder: 'EVENT'
   } as const
+
+  const [formData, setFormData] = useState({
+    eventId: '',
+    template: 'change' as 'change' | 'custom' | 'reminder',
+    content: templates.change,
+    recipients: 'all' as 'all' | 'confirmed' | 'pending'
+  })
+
+  const futureEvents = events.filter(event => !event.isPast)
+  const selectedEvent = futureEvents.find(event => event.id === formData.eventId)
 
   const previewContent = useMemo(() => {
     if (!formData.content) return ''
@@ -119,7 +119,7 @@ const NotificationModal = ({ onClose }: NotificationModalProps) => {
             className="liquid-input w-full px-4 py-3"
           >
             <option value="change">Изменение деталей</option>
-            <option value="new">Новое мероприятие</option>
+            <option value="custom">Свой шаблон</option>
             <option value="reminder">Напоминание</option>
           </select>
         </div>

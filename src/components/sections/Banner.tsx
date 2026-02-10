@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Event } from '@/types'
+import { getCategoryIcon } from '@/utils/eventCategoryIcons'
 
 interface BannerProps {
   events: Event[]
@@ -26,34 +27,51 @@ const Banner = ({ events }: BannerProps) => {
 
   return (
     <section className="banner relative h-64 sm:h-72 lg:h-96 overflow-hidden rounded-2xl mx-4 sm:mx-5% my-4 border border-white/60 shadow-2xl">
-      {events.map((event, index) => (
-        <div 
-          key={event.id}
-          className={`banner-slide absolute inset-0 bg-cover bg-center transition-opacity duration-500 ${
-            index === currentSlide ? 'opacity-100' : 'opacity-0'
-          }`}
-          style={{
-            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url(${
-              event.images && event.images.length > 0 
-                ? event.images[0] 
-                : 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80'
-            })`
-          }}
-        >
-          <div className="banner-content absolute bottom-0 left-0 right-0 p-5 sm:p-8 text-white">
-            <h2 className="banner-title text-2xl sm:text-3xl font-bold mb-2 sm:mb-3">{event.title}</h2>
-            <p className="banner-text text-sm sm:text-lg mb-4 sm:mb-5">
-              {new Date(event.date).toLocaleDateString('ru-RU')} • {event.location}
-            </p>
-            <button 
-              className="banner-btn bg-white text-primary px-5 sm:px-7 py-2.5 sm:py-3 rounded-3xl text-sm sm:text-base font-semibold hover:bg-gray-100 transition-colors"
-              onClick={() => router.push(`/events/${event.id}`)}
-            >
-              Подробнее
-            </button>
+      {events.map((event, index) => {
+        const hasImage = event.images && event.images.length > 0
+        const imageUrl = hasImage ? event.images[0] : null
+
+        return (
+          <div 
+            key={event.id}
+            className={`banner-slide absolute inset-0 transition-opacity duration-500 ${
+              index === currentSlide ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
+            {imageUrl ? (
+              <>
+                <div
+                  className="absolute inset-0 bg-center bg-cover scale-110 blur-sm"
+                  style={{ backgroundImage: `url(${imageUrl})` }}
+                ></div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imageUrl}
+                  alt={event.title}
+                  className="absolute inset-0 w-full h-full object-contain"
+                />
+              </>
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900 flex items-center justify-center">
+                <i className={`fas ${getCategoryIcon(event.category)} text-6xl sm:text-7xl lg:text-8xl text-white/80`}></i>
+              </div>
+            )}
+            <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-black/35 to-black/70"></div>
+            <div className="banner-content absolute bottom-0 left-0 right-0 p-5 sm:p-8 text-white">
+              <h2 className="banner-title text-2xl sm:text-3xl font-bold mb-2 sm:mb-3">{event.title}</h2>
+              <p className="banner-text text-sm sm:text-lg mb-4 sm:mb-5">
+                {new Date(event.date).toLocaleDateString('ru-RU')} • {event.location}
+              </p>
+              <button 
+                className="banner-btn bg-white text-primary px-5 sm:px-7 py-2.5 sm:py-3 rounded-3xl text-sm sm:text-base font-semibold hover:bg-gray-100 transition-colors"
+                onClick={() => router.push(`/events/${event.id}`)}
+              >
+                Подробнее
+              </button>
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
       
       {events.length > 1 && (
         <>

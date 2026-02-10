@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { EventCategory, ParticipantStatus } from "@prisma/client";
+import { EventCategory, NotificationType, ParticipantStatus, Prisma } from "@prisma/client";
 import { buildAuditMeta, logAuditEvent } from "@/lib/audit";
 
 const parseDateTime = (dateString: string, timeString?: string): Date | null => {
@@ -164,10 +164,19 @@ export async function PUT(
       where: { id: eventId },
       select: {
         id: true,
+        title: true,
+        location: true,
+        category: true,
         creatorId: true,
         date: true,
         time: true,
         maxParticipants: true,
+        eventParticipants: {
+          select: {
+            userId: true,
+            status: true
+          }
+        },
         moderators: {
           select: { userId: true }
         }
@@ -439,6 +448,134 @@ export async function PUT(
     }
 
     const { confirmed, pending } = splitParticipants(updated.eventParticipants);
+
+    try {
+      const existingParticipantIds = event.eventParticipants.map(p => p.userId);
+      const existingPendingIds = event.eventParticipants
+        .filter(p => p.status === ParticipantStatus.PENDING)
+        .map(p => p.userId);
+      const existingModeratorIds = event.moderators.map(m => m.userId);
+
+      const newlyAddedParticipantIds = confirmedParticipantIds
+        ? confirmedParticipantIds.filter(id => !existingParticipantIds.includes(id))
+        : [];
+      const newlyConfirmedIds = confirmedParticipantIds
+        ? confirmedParticipantIds.filter(id => existingPendingIds.includes(id))
+        : [];
+      const newlyAddedModeratorIds = moderatorIds
+        ? moderatorIds.filter(id => !existingModeratorIds.includes(id))
+        : [];
+
+      const eventDateText = new Date(updated.date).toLocaleDateString('ru-RU');
+      const timeText = updated.time ? ` ${updated.time}` : '';
+      const locationText = updated.location ? `, место: ${updated.location}` : '';
+
+      const notifications: Prisma.NotificationCreateManyInput[] = [];
+
+      const loadChangeRecipients = async (ids: string[]) => {
+        if (ids.length === 0) return new Set<string>();
+        const users = await prisma.user.findMany({
+          where: {
+            id: { in: ids },
+            notifyChanges: true
+          },
+          select: { id: true }
+        });
+        return new Set(users.map(user => user.id));
+      };
+
+      const addedRecipients = await loadChangeRecipients([
+        ...newlyAddedParticipantIds,
+        ...newlyConfirmedIds,
+        ...newlyAddedModeratorIds
+      ]);
+
+      for (const userId of newlyAddedParticipantIds) {
+        if (!addedRecipients.has(userId) || userId === session.user.id) continue;
+        notifications.push({
+          userId,
+          title: 'Добавление в мероприятие',
+          content: `Вас добавили в мероприятие «${updated.title}». Дата: ${eventDateText}${timeText}${locationText}`,
+          type: NotificationType.EVENT,
+          read: false,
+          metadata: { eventId: updated.id, action: 'participant_added' }
+        });
+      }
+
+      for (const userId of newlyConfirmedIds) {
+        if (!addedRecipients.has(userId) || userId === session.user.id) continue;
+        notifications.push({
+          userId,
+          title: 'Участие подтверждено',
+          content: `Ваше участие в мероприятии «${updated.title}» подтверждено. Дата: ${eventDateText}${timeText}${locationText}`,
+          type: NotificationType.CHANGE,
+          read: false,
+          metadata: { eventId: updated.id, action: 'participant_confirmed' }
+        });
+      }
+
+      for (const userId of newlyAddedModeratorIds) {
+        if (!addedRecipients.has(userId) || userId === session.user.id) continue;
+        notifications.push({
+          userId,
+          title: 'Назначение модератором',
+          content: `Вас назначили модератором мероприятия «${updated.title}». Дата: ${eventDateText}${timeText}${locationText}`,
+          type: NotificationType.EVENT,
+          read: false,
+          metadata: { eventId: updated.id, action: 'moderator_added' }
+        });
+      }
+
+      const changedFields = Object.keys(updateData);
+      if (changedFields.length > 0) {
+        const fieldLabels: Record<string, string> = {
+          title: 'название',
+          description: 'описание',
+          location: 'место',
+          duration: 'длительность',
+          responsible: 'ответственный',
+          contact: 'контакт',
+          category: 'категория',
+          maxParticipants: 'лимит участников',
+          images: 'фотографии',
+          date: 'дата',
+          time: 'время'
+        };
+        const updatedFieldNames = changedFields
+          .map(field => fieldLabels[field])
+          .filter(Boolean);
+        const changeSummary = updatedFieldNames.length > 0
+          ? `Обновлены: ${updatedFieldNames.join(', ')}.`
+          : 'Обновлены детали мероприятия.';
+
+        const changeAudienceIds = new Set<string>();
+        updated.eventParticipants.forEach(p => {
+          if (p.user?.id) changeAudienceIds.add(p.user.id);
+        });
+        updated.moderators?.forEach(m => {
+          if (m.user?.id) changeAudienceIds.add(m.user.id);
+        });
+        changeAudienceIds.delete(session.user.id);
+
+        const changeRecipients = await loadChangeRecipients(Array.from(changeAudienceIds));
+      for (const userId of Array.from(changeRecipients)) {
+        notifications.push({
+          userId,
+          title: 'Изменение мероприятия',
+          content: `Мероприятие «${updated.title}» было обновлено. ${changeSummary} Дата: ${eventDateText}${timeText}${locationText}`,
+          type: NotificationType.CHANGE,
+            read: false,
+            metadata: { eventId: updated.id, action: 'event_updated' }
+          });
+        }
+      }
+
+      if (notifications.length > 0) {
+        await prisma.notification.createMany({ data: notifications });
+      }
+    } catch (notifyError) {
+      console.error('Event update notifications error:', notifyError);
+    }
 
     const { ip, userAgent } = buildAuditMeta(req);
     await logAuditEvent({

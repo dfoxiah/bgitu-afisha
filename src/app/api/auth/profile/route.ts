@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { EventCategory } from "@prisma/client";
 import { buildAuditMeta, logAuditEvent } from "@/lib/audit";
 
 export const dynamic = 'force-dynamic';
@@ -38,6 +39,10 @@ export async function GET(_req: NextRequest) {
       group: user.group,
       groupChangeCount: user.groupChangeCount,
       bio: user.bio,
+      notifyNewEvents: user.notifyNewEvents,
+      notifyChanges: user.notifyChanges,
+      notifyNews: user.notifyNews,
+      notificationCategories: user.notificationCategories,
       privacyConsentAt: user.privacyConsentAt,
       termsConsentAt: user.termsConsentAt
     });
@@ -74,7 +79,17 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const allowedUpdates = ['name', 'image', 'department', 'group', 'bio'];
+    const allowedUpdates = [
+      'name',
+      'image',
+      'department',
+      'group',
+      'bio',
+      'notifyNewEvents',
+      'notifyChanges',
+      'notifyNews',
+      'notificationCategories'
+    ];
     const updates: Record<string, unknown> = {};
 
     allowedUpdates.forEach(field => {
@@ -82,6 +97,36 @@ export async function PUT(req: NextRequest) {
         updates[field] = body[field];
       }
     });
+
+    if (body.notifications && typeof body.notifications === "object") {
+      const notifications = body.notifications as Record<string, unknown>;
+      if (typeof notifications.newEvents === "boolean") {
+        updates.notifyNewEvents = notifications.newEvents;
+      }
+      if (typeof notifications.changes === "boolean") {
+        updates.notifyChanges = notifications.changes;
+      }
+      if (typeof notifications.news === "boolean") {
+        updates.notifyNews = notifications.news;
+      }
+      if (Array.isArray(notifications.categories)) {
+        const categories = notifications.categories
+          .map((value) => String(value).trim())
+          .filter((value) => Object.values(EventCategory).includes(value as EventCategory));
+        updates.notificationCategories = Array.from(new Set(categories));
+      }
+    }
+
+    if (updates.notificationCategories !== undefined) {
+      if (Array.isArray(updates.notificationCategories)) {
+        const categories = (updates.notificationCategories as unknown[])
+          .map((value) => String(value).trim())
+          .filter((value) => Object.values(EventCategory).includes(value as EventCategory));
+        updates.notificationCategories = Array.from(new Set(categories));
+      } else {
+        delete updates.notificationCategories;
+      }
+    }
 
     if (updates.group !== undefined) {
       const nextGroup = typeof updates.group === "string" ? updates.group.trim() : "";
@@ -131,7 +176,11 @@ export async function PUT(req: NextRequest) {
         department: result.department,
         group: result.group,
         groupChangeCount: result.groupChangeCount,
-        bio: result.bio
+        bio: result.bio,
+        notifyNewEvents: result.notifyNewEvents,
+        notifyChanges: result.notifyChanges,
+        notifyNews: result.notifyNews,
+        notificationCategories: result.notificationCategories
       }
     });
   } catch (error) {

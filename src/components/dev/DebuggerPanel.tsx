@@ -102,7 +102,7 @@ export default function DebuggerPanel() {
           <div>
             <label className="text-sm block mb-1">Categories:</label>
             <div className="flex flex-wrap gap-2">
-              {['auth', 'events', 'api', 'ui', 'db', 'profile', 'all'].map(cat => (
+              {['auth', 'events', 'api', 'ui', 'db', 'profile', 'validation', 'storage', 'component', 'performance', 'context', 'notifications', 'global', 'all'].map(cat => (
                 <label key={cat} className="flex items-center gap-1 text-xs">
                   <input
                     type="checkbox"

@@ -336,12 +336,14 @@ export function AppProvider({
     }
   }, [status])
 
-  const fetchNotifications = useCallback(async () => {
+  const fetchNotifications = useCallback(async (force = false) => {
     if (status !== 'authenticated' || !session?.user?.id) return
     const now = Date.now()
-    if (now < notificationsGlobalCooldownUntil) return
+    if (!force) {
+      if (now < notificationsGlobalCooldownUntil) return
+      if (now - lastNotificationsFetchRef.current < 15000) return
+    }
     if (notificationsGlobalInFlight) return
-    if (now - lastNotificationsFetchRef.current < 15000) return
     if (notificationsFetchingRef.current) return
     notificationsGlobalInFlight = true
     notificationsGlobalCooldownUntil = now + 30000
@@ -399,8 +401,7 @@ export function AppProvider({
       || now - lastNotificationsFetchRef.current > 30000
 
     if (shouldFetch) {
-      lastNotificationsFetchRef.current = now
-      await fetchNotifications()
+      await fetchNotifications(true)
     }
   }, [session?.user?.id, status, fetchNotifications])
 
@@ -727,7 +728,7 @@ export function AppProvider({
       throw new Error('Ошибка отправки уведомления')
     }
 
-    await fetchNotifications()
+    await fetchNotifications(true)
   }, [debug, fetchNotifications])
 
   const updateProfile = useCallback(async (data: any) => {

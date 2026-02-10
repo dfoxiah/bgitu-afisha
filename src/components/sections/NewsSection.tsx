@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Event } from '@/types'
 import ImageGalleryModal from '@/components/ui/ImageGalleryModal'
+import { EventCategory } from '@prisma/client'
+import { getCategoryIcon } from '@/utils/eventCategoryIcons'
 
 interface NewsSectionProps {
   events: Event[]
@@ -65,7 +67,7 @@ const NewsSection = ({ events = [] }: NewsSectionProps) => {
             ? event.images[0] 
             : event.report?.images && event.report.images.length > 0
             ? event.report.images[0]
-            : `https://placehold.co/600x400/4b86b4/ffffff?text=${encodeURIComponent(event.title.substring(0, 20))}`
+            : ''
           
           return (
             <div 
@@ -73,12 +75,22 @@ const NewsSection = ({ events = [] }: NewsSectionProps) => {
               className="news-card liquid-card liquid-card-hover overflow-hidden cursor-pointer"
               onClick={() => handleNewsClick(event)}
             >
-              <div 
-                className="news-image h-40 sm:h-48 bg-cover bg-center relative"
-                style={{ 
-                  backgroundImage: `linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), url(${imageUrl})`
-                }}
-              >
+              <div className="news-image h-40 sm:h-48 bg-gray-900 relative overflow-hidden">
+                {imageUrl ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={imageUrl}
+                      alt={event.title}
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/30 to-black/50"></div>
+                  </>
+                ) : (
+                  <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900 flex items-center justify-center">
+                    <i className={`fas ${getCategoryIcon(event.category as EventCategory)} text-4xl sm:text-5xl text-white/80`}></i>
+                  </div>
+                )}
                 {galleryImages.length > 0 && (
                   <button
                     type="button"
