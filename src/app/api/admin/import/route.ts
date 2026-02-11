@@ -483,7 +483,7 @@ export async function POST(req: NextRequest) {
       }
       const timeValue = rawTime || parsedDate.toTimeString().slice(0, 5)
 
-      const location = String(row.location || '').trim() || (isNewsImport ? '�� �������' : '')
+      const location = String(row.location || '').trim() || (isNewsImport ? 'Не указано' : '')
       const description = String(row.description || '').trim() || (isNewsImport ? title : '')
       if (!location) {
         result.errors.push(`Строка ${rowIndex}: отсутствует location`)
