@@ -14,7 +14,10 @@ export default function Header() {
   const router = useRouter()
   const pathname = usePathname()
   const { setSearchQuery, categories, selectedCategory, setSelectedCategory } = useAppContext()
-  const showSearch = status === 'authenticated' && !pathname.startsWith('/login') && !pathname.startsWith('/register')
+  const showSearch = status === 'authenticated'
+    && !pathname.startsWith('/login')
+    && !pathname.startsWith('/register')
+    && !pathname.startsWith('/news')
   const forceHardNavigate = pathname === '/profile'
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -60,6 +63,7 @@ export default function Header() {
     const items = [
       { href: '/', label: 'Главная', show: true },
       { href: '/events', label: 'Мероприятия', show: true },
+      { href: '/news', label: 'Новостная лента', show: true },
       { href: '/calendar', label: 'Календарь', show: true },
       { href: '/notifications', label: 'Уведомления', show: true }
     ]
@@ -124,6 +128,13 @@ export default function Header() {
                 onClick={hardNavigate('/events')}
               >
                 Мероприятия
+              </Link>
+              <Link 
+                href="/news" 
+                className={`nav-link pressable font-medium ${pathname === '/news' ? 'text-accent' : 'text-gray-600 hover:text-primary'}`}
+                onClick={hardNavigate('/news')}
+              >
+                Новостная лента
               </Link>
               <Link 
                 href="/calendar" 

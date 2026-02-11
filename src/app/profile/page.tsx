@@ -135,6 +135,50 @@ export default function ProfilePage() {
   }, [status])
 
   useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.replace('/login')
+    }
+  }, [status, router])
+
+  useEffect(() => {
+    if (status !== 'authenticated') return
+
+    let active = true
+    const verifyAccount = async () => {
+      try {
+        const response = await fetch('/api/auth/profile', {
+          method: 'GET',
+          headers: {
+            'Cache-Control': 'no-cache'
+          }
+        })
+
+        if (!active) return
+
+        if (response.status === 401 || response.status === 404) {
+          debug.warn('auth', 'Profile access revoked, signing out', {
+            status: response.status
+          })
+          await signOut({ redirect: true, callbackUrl: '/login' })
+        }
+      } catch (error) {
+        debug.error('auth', 'Failed to verify profile session', error)
+      }
+    }
+
+    verifyAccount()
+    const handleFocus = () => {
+      verifyAccount()
+    }
+
+    window.addEventListener('focus', handleFocus)
+    return () => {
+      active = false
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [status, debug])
+
+  useEffect(() => {
     if (status !== 'loading') return
     const timer = setTimeout(async () => {
       const freshSession = await getSession()

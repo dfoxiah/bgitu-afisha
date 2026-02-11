@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
   const category = searchParams.get('category')?.trim()
   const upcoming = searchParams.get('upcoming')
   const past = searchParams.get('past')
+  const news = searchParams.get('news')?.trim()
   const limit = Number(searchParams.get('limit') || 50)
   const offset = Number(searchParams.get('offset') || 0)
 
@@ -36,6 +37,20 @@ export async function GET(req: NextRequest) {
   }
   if (past === 'true') {
     where.isPast = true
+  }
+
+  if (news === 'true') {
+    const newsFilter = { OR: [{ isNews: true }, { category: EventCategory.NEWS }] }
+    if (where.OR) {
+      where.AND = where.AND || []
+      where.AND.push({ OR: where.OR })
+      delete where.OR
+    }
+    if (where.AND) {
+      where.AND.push(newsFilter)
+    } else {
+      where.AND = [newsFilter]
+    }
   }
 
   const events = await prisma.event.findMany({
@@ -65,3 +80,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(serialized)
 }
+
+
+
+

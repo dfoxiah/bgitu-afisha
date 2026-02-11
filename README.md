@@ -8,7 +8,7 @@
 ## Стек
 - Next.js 16 (App Router)
 - TypeScript
-- NextAuth.js (Credentials + OAuth)
+- NextAuth.js (Credentials + Yandex OAuth)
 - Prisma + PostgreSQL
 - Tailwind CSS
 
@@ -39,7 +39,6 @@
 - `NEXTAUTH_SECRET` — секрет для NextAuth.
 
 Опциональные OAuth:
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 - `YANDEX_CLIENT_ID`, `YANDEX_CLIENT_SECRET`, `YANDEX_SCOPE`
 
 Опциональные флаги:

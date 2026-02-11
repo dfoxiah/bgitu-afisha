@@ -116,6 +116,10 @@ export default function AdminPage() {
   const [importEventsResult, setImportEventsResult] = useState<any>(null)
   const [importingUsers, setImportingUsers] = useState(false)
   const [importingEvents, setImportingEvents] = useState(false)
+  const [importNewsFile, setImportNewsFile] = useState<File | null>(null)
+  const [importNewsMode, setImportNewsMode] = useState<'upsert' | 'create'>('upsert')
+  const [importNewsResult, setImportNewsResult] = useState<any>(null)
+  const [importingNews, setImportingNews] = useState(false)
 
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<AdminEvent | null>(null)
@@ -324,6 +328,33 @@ export default function AdminPage() {
     }
   }, [importEventsFile, importEventsMode, readJson, fetchEvents])
 
+  const handleImportNews = useCallback(async () => {
+    if (!importNewsFile) {
+      showToast('Выберите файл для импорта новостной ленты', 'error')
+      return
+    }
+
+    setImportingNews(true)
+    setImportNewsResult(null)
+
+    try {
+      const body = await importNewsFile.text()
+      const res = await fetch(`/api/admin/import?type=news&mode=${importNewsMode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': resolveContentType(importNewsFile) },
+        body
+      })
+      const data = await readJson<any>(res)
+      setImportNewsResult(data)
+      await fetchEvents()
+      showToast('Импорт новостной ленты завершён', 'success')
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка импорта новостей', 'error')
+    } finally {
+      setImportingNews(false)
+    }
+  }, [importNewsFile, importNewsMode, readJson, fetchEvents])
+
   useEffect(() => {
     if (!canAccess) return
     if (activeTab === 'users') fetchUsers()
@@ -443,26 +474,28 @@ export default function AdminPage() {
     downloadCsv('users-import-template.csv', userImportHeaders, [row])
   }
 
+  const mapEventRow = (event: AdminEvent) => ({
+    id: event.id,
+    title: event.title,
+    category: event.category,
+    date: event.date ? new Date(event.date).toISOString().slice(0, 10) : '',
+    time: event.time || '',
+    duration: event.duration || '',
+    location: event.location,
+    description: event.description || '',
+    maxParticipants: event.maxParticipants ?? 0,
+    isPast: event.isPast ? 'true' : 'false',
+    isNews: event.isNews ? 'true' : 'false',
+    removedFromCalendar: event.removedFromCalendar ? 'true' : 'false',
+    images: event.images && event.images.length > 0 ? event.images.join('|') : '',
+    responsible: event.responsible || '',
+    contact: event.contact || '',
+    creatorEmail: event.creator?.email || '',
+    moderatorEmails: event.moderators.map(m => m.email).join('|')
+  })
+
   const handleExportEvents = () => {
-    const rows = events.map(event => ({
-      id: event.id,
-      title: event.title,
-      category: event.category,
-      date: event.date ? new Date(event.date).toISOString().slice(0, 10) : '',
-      time: event.time || '',
-      duration: event.duration || '',
-      location: event.location,
-      description: event.description || '',
-      maxParticipants: event.maxParticipants ?? 0,
-      isPast: event.isPast ? 'true' : 'false',
-      isNews: event.isNews ? 'true' : 'false',
-      removedFromCalendar: event.removedFromCalendar ? 'true' : 'false',
-      images: event.images && event.images.length > 0 ? event.images.join('|') : '',
-      responsible: event.responsible || '',
-      contact: event.contact || '',
-      creatorEmail: event.creator?.email || '',
-      moderatorEmails: event.moderators.map(m => m.email).join('|')
-    }))
+    const rows = events.map(mapEventRow)
     downloadCsv(`events-${new Date().toISOString().slice(0, 10)}.csv`, eventImportHeaders, rows)
   }
 
@@ -472,6 +505,31 @@ export default function AdminPage() {
       return acc
     }, {})
     downloadCsv('events-import-template.csv', eventImportHeaders, [row])
+  }
+
+  const handleExportNews = async () => {
+    try {
+      const res = await fetch('/api/admin/events?news=true&limit=200')
+      const data = await readJson<AdminEvent[]>(res)
+      const rows = data.map(mapEventRow)
+      if (rows.length === 0) {
+        showToast('Нет новостей для экспорта', 'error')
+        return
+      }
+      downloadCsv(`news-${new Date().toISOString().slice(0, 10)}.csv`, eventImportHeaders, rows)
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка экспорта новостей', 'error')
+    }
+  }
+
+  const handleDownloadNewsTemplate = () => {
+    const row = eventImportHeaders.reduce<Record<string, CsvValue>>((acc, key) => {
+      acc[key] = ''
+      return acc
+    }, {})
+    row.category = 'NEWS'
+    row.isNews = 'true'
+    downloadCsv('news-import-template.csv', eventImportHeaders, [row])
   }
 
   const handleExportLogs = () => {
@@ -706,6 +764,62 @@ export default function AdminPage() {
         {activeTab === 'events' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-4">
+              <div className="liquid-card p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <h3 className="font-semibold text-primary">Импорт новостной ленты</h3>
+                  <div className="text-xs text-gray-500">CSV или JSON</div>
+                </div>
+                <div className="text-xs text-gray-500 break-all">
+                  Формат CSV: {eventImportHeaders.join('; ')}. Разделитель `;`, кодировка UTF-8.
+                </div>
+                <div className="text-xs text-gray-500">
+                  Для новостей `isNews` выставляется автоматически. Если `category` пустая, используется `NEWS`.
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    type="file"
+                    accept=".csv,.json"
+                    className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                    onChange={(e) => setImportNewsFile(e.target.files?.[0] || null)}
+                  />
+                  <select
+                    className="px-3 py-2 border rounded-lg text-sm"
+                    value={importNewsMode}
+                    onChange={(e) => setImportNewsMode(e.target.value as any)}
+                  >
+                    <option value="upsert">Обновлять существующие</option>
+                    <option value="create">Только новые</option>
+                  </select>
+                  <Button
+                    variant="secondary"
+                    onClick={handleImportNews}
+                    disabled={importingNews}
+                  >
+                    {importingNews ? 'Импорт...' : 'Импортировать'}
+                  </Button>
+                  <Button variant="secondary" onClick={handleDownloadNewsTemplate}>
+                    Шаблон CSV
+                  </Button>
+                  <Button variant="secondary" onClick={handleExportNews}>
+                    Экспорт CSV
+                  </Button>
+                </div>
+                {importNewsResult && (
+                  <div className="text-sm text-gray-600">
+                    Создано: {importNewsResult.created || 0}, обновлено: {importNewsResult.updated || 0}, пропущено: {importNewsResult.skipped || 0}, ошибок: {importNewsResult.errors?.length || 0}, предупреждений: {importNewsResult.warnings?.length || 0}
+                  </div>
+                )}
+                {importNewsResult?.errors?.length > 0 && (
+                  <div className="text-xs text-red-600 space-y-1">
+                    {importNewsResult.errors.slice(0, 5).map((err: string, idx: number) => (
+                      <div key={`${err}-${idx}`}>{err}</div>
+                    ))}
+                    {importNewsResult.errors.length > 5 && (
+                      <div>... ещё {importNewsResult.errors.length - 5} ошибок</div>
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="liquid-card p-4 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <h3 className="font-semibold text-primary">Импорт мероприятий</h3>

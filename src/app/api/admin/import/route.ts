@@ -76,6 +76,81 @@ const parseBoolean = (value: unknown) => {
   return undefined
 }
 
+const parseTimeParts = (value?: string | null) => {
+  if (!value) return null
+  const raw = String(value).trim()
+  if (!raw) return null
+  const match = raw.match(/(\d{1,2})\s*[:.]\s*(\d{2})/)
+  if (!match) return null
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null
+  return { hours, minutes }
+}
+
+const parseDateParts = (value: string) => {
+  const raw = value.trim()
+  if (!raw) return null
+
+  const ymd = raw.match(/^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/)
+  if (ymd) {
+    return { year: Number(ymd[1]), month: Number(ymd[2]), day: Number(ymd[3]) }
+  }
+
+  const dmy = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/)
+  if (dmy) {
+    return { year: Number(dmy[3]), month: Number(dmy[2]), day: Number(dmy[1]) }
+  }
+
+  if (/^\d{5,}$/.test(raw)) {
+    const serial = Number(raw)
+    if (Number.isFinite(serial) && serial >= 20000 && serial <= 80000) {
+      const excelEpoch = new Date(1899, 11, 30)
+      const date = new Date(excelEpoch.getTime() + serial * 24 * 60 * 60 * 1000)
+      return { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate() }
+    }
+  }
+
+  return null
+}
+
+const parseDateTime = (dateString: string, timeString?: string): Date | null => {
+  try {
+    const raw = String(dateString || '').trim()
+    if (!raw) return null
+
+    const explicitTime = parseTimeParts(timeString)
+
+    if (raw.includes('T')) {
+      const parsed = new Date(raw)
+      if (isNaN(parsed.getTime())) return null
+      if (explicitTime) {
+        parsed.setHours(explicitTime.hours, explicitTime.minutes, 0, 0)
+      }
+      return parsed
+    }
+
+    let datePart = raw
+    let embeddedTime: { hours: number; minutes: number } | null = null
+    if (raw.includes(' ')) {
+      const [first, ...rest] = raw.split(' ')
+      datePart = first
+      if (!explicitTime && rest.length > 0) {
+        embeddedTime = parseTimeParts(rest.join(' '))
+      }
+    }
+
+    const parts = parseDateParts(datePart)
+    if (!parts) return null
+
+    const time = explicitTime || embeddedTime || { hours: 0, minutes: 0 }
+    const date = new Date(parts.year, parts.month - 1, parts.day, time.hours, time.minutes, 0, 0)
+    return isNaN(date.getTime()) ? null : date
+  } catch {
+    return null
+  }
+}
+
 const parseOptionalDate = (value: unknown) => {
   if (value === null || value === undefined) return { value: undefined as Date | null | undefined }
   const raw = String(value).trim()
@@ -83,41 +158,9 @@ const parseOptionalDate = (value: unknown) => {
   const normalized = raw.toLowerCase()
   if (['null', 'none', '-'].includes(normalized)) return { value: null }
   if (['true', 'yes', '1', 'да'].includes(normalized)) return { value: new Date() }
-  const parsed = new Date(raw)
-  if (isNaN(parsed.getTime())) return { value: undefined as Date | null | undefined, error: 'invalid' }
+  const parsed = parseDateTime(raw)
+  if (!parsed || isNaN(parsed.getTime())) return { value: undefined as Date | null | undefined, error: 'invalid' }
   return { value: parsed }
-}
-
-const parseDateTime = (dateString: string, timeString?: string): Date | null => {
-  try {
-    if (!dateString) return null
-    if (dateString.includes('T')) {
-      const parsed = new Date(dateString)
-      if (isNaN(parsed.getTime())) return null
-      if (timeString) {
-        const [hours, minutes] = timeString.split(':').map(Number)
-        if (Number.isFinite(hours) && Number.isFinite(minutes)) {
-          parsed.setHours(hours, minutes, 0, 0)
-        }
-      }
-      return parsed
-    }
-    const [year, month, day] = dateString.split('-').map(Number)
-    if (!year || !month || !day) return null
-    let hours = 0
-    let minutes = 0
-    if (timeString) {
-      const parts = timeString.split(':').map(Number)
-      if (parts.length >= 2) {
-        hours = parts[0]
-        minutes = parts[1]
-      }
-    }
-    const date = new Date(year, month - 1, day, hours, minutes, 0, 0)
-    return isNaN(date.getTime()) ? null : date
-  } catch {
-    return null
-  }
 }
 
 const splitList = (value: unknown) => {
@@ -243,8 +286,8 @@ export async function POST(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const type = searchParams.get('type')
   const mode = (searchParams.get('mode') || 'upsert').toLowerCase()
-  if (!type || !['users', 'events'].includes(type)) {
-    return NextResponse.json({ error: 'Укажите type=users или type=events' }, { status: 400 })
+  if (!type || !['users', 'events', 'news'].includes(type)) {
+    return NextResponse.json({ error: 'Укажите type=users, events или news' }, { status: 400 })
   }
 
   const contentType = req.headers.get('content-type') || ''
@@ -263,6 +306,8 @@ export async function POST(req: NextRequest) {
         ? payload.users
         : Array.isArray(payload?.events)
         ? payload.events
+        : Array.isArray(payload?.news)
+        ? payload.news
         : []
       const aliases = type === 'users' ? USER_HEADER_ALIASES : EVENT_HEADER_ALIASES
       rows = data.map((item: any) => {
@@ -395,7 +440,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (type === 'events') {
+  if (type === 'events' || type === 'news') {
+    const isNewsImport = type === 'news'
     const creatorEmails = rows
       .map(row => String(row.creatorEmail || '').trim().toLowerCase())
       .filter(Boolean)
@@ -419,7 +465,10 @@ export async function POST(req: NextRequest) {
         continue
       }
 
-      const category = normalizeCategory(row.category)
+      let category = normalizeCategory(row.category)
+      if (!category && isNewsImport) {
+        category = EventCategory.NEWS
+      }
       if (!category) {
         result.errors.push(`Строка ${rowIndex}: некорректная категория (${row.category || ''})`)
         continue
@@ -434,8 +483,8 @@ export async function POST(req: NextRequest) {
       }
       const timeValue = rawTime || parsedDate.toTimeString().slice(0, 5)
 
-      const location = String(row.location || '').trim()
-      const description = String(row.description || '').trim()
+      const location = String(row.location || '').trim() || (isNewsImport ? '�� �������' : '')
+      const description = String(row.description || '').trim() || (isNewsImport ? title : '')
       if (!location) {
         result.errors.push(`Строка ${rowIndex}: отсутствует location`)
         continue
@@ -489,7 +538,7 @@ export async function POST(req: NextRequest) {
 
       const images = splitList(row.images)
       const isPast = parseBoolean(row.isPast) ?? false
-      const isNews = parseBoolean(row.isNews) ?? false
+      const isNews = isNewsImport ? true : (parseBoolean(row.isNews) ?? false)
       const removedFromCalendar = parseBoolean(row.removedFromCalendar) ?? false
 
       const payload = {
@@ -560,7 +609,7 @@ export async function POST(req: NextRequest) {
   const { ip, userAgent } = buildAuditMeta(req)
   await logAuditEvent({
     actorId: session!.user!.id,
-    action: type === 'users' ? 'ADMIN_USERS_IMPORT' : 'ADMIN_EVENTS_IMPORT',
+    action: type === 'users' ? 'ADMIN_USERS_IMPORT' : type === 'news' ? 'ADMIN_NEWS_IMPORT' : 'ADMIN_EVENTS_IMPORT',
     entityType: type === 'users' ? 'User' : 'Event',
     entityId: null,
     metadata: {
@@ -576,3 +625,14 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(result)
 }
+
+
+
+
+
+
+
+
+
+
+

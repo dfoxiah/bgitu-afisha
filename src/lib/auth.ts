@@ -1,6 +1,5 @@
 import type { NextAuthOptions, User } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import GoogleProvider from "next-auth/providers/google";
 import YandexProvider from "next-auth/providers/yandex";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
@@ -29,8 +28,6 @@ const nextAuthUrl = process.env.NEXTAUTH_URL ?? "";
 if (isProduction && !nextAuthUrl) {
   throw new Error("NEXTAUTH_URL is required in production.");
 }
-const googleClientId = process.env.GOOGLE_CLIENT_ID ?? "";
-const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET ?? "";
 const yandexClientId = process.env.YANDEX_CLIENT_ID ?? "";
 const yandexClientSecret = process.env.YANDEX_CLIENT_SECRET ?? "";
 
@@ -148,14 +145,6 @@ export const authOptions: NextAuthOptions = {
       },
       
     }),
-    ...(googleClientId && googleClientSecret
-      ? [
-          GoogleProvider({
-            clientId: googleClientId,
-            clientSecret: googleClientSecret,
-          }),
-        ]
-      : []),
     ...(yandexClientId && yandexClientSecret
       ? [
           YandexProvider({
@@ -235,6 +224,24 @@ export const authOptions: NextAuthOptions = {
     },
     
     async session({ session, token }) {
+      const tokenId = typeof token.id === "string" ? token.id : null;
+      const tokenEmail = typeof token.email === "string" ? token.email : null;
+
+      if (tokenId || tokenEmail) {
+        const existingUser = await prisma.user.findUnique({
+          where: tokenId ? { id: tokenId } : { email: tokenEmail! },
+          select: { id: true }
+        });
+
+        if (!existingUser) {
+          authLog("Session invalidated: user not found", tokenId ?? tokenEmail);
+          return null as any;
+        }
+      } else {
+        authLog("Session invalidated: token missing user identity");
+        return null as any;
+      }
+
       if (token && session.user) {
         if (typeof token.id === "string") {
           session.user.id = token.id;
@@ -261,7 +268,7 @@ export const authOptions: NextAuthOptions = {
           : [];
       }
       
-      authLog("Session callback:", session.user.email);
+      authLog("Session callback:", session?.user?.email);
       return session;
     },
     
