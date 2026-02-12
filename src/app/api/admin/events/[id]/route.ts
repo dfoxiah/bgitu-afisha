@@ -122,6 +122,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     select: {
       id: true,
       title: true,
+      description: true,
       date: true,
       time: true,
       location: true,
@@ -143,6 +144,13 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   const body = await req.json()
   const updateData: any = {}
   let moderatorIds: string[] | null = null
+  let reportPayload: {
+    summary?: string
+    reportDate?: Date
+    images?: string[]
+    tasks?: string[]
+    comment?: string | null
+  } | null = null
 
   if (body.title) updateData.title = String(body.title).trim()
   if (body.description) updateData.description = String(body.description).trim()
@@ -166,6 +174,37 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
   if (Array.isArray(body.images)) {
     updateData.images = body.images
+  }
+
+  if (body.report && typeof body.report === 'object') {
+    const reportInput = body.report as Record<string, any>
+    const summary = reportInput.summary !== undefined ? String(reportInput.summary).trim() : undefined
+    const comment = reportInput.comment !== undefined ? String(reportInput.comment).trim() : undefined
+    const reportDateRaw = reportInput.reportDate !== undefined ? String(reportInput.reportDate).trim() : undefined
+    let reportDate: Date | undefined
+    if (reportDateRaw) {
+      const parsedReportDate = parseDateTime(reportDateRaw)
+      if (!parsedReportDate) {
+        return NextResponse.json({ error: 'Неверный формат даты отчёта' }, { status: 400 })
+      }
+      reportDate = parsedReportDate
+    }
+
+    const images = Array.isArray(reportInput.images)
+      ? reportInput.images.map((value: any) => String(value).trim()).filter(Boolean)
+      : undefined
+
+    let tasks: string[] | undefined
+    if (Array.isArray(reportInput.tasks)) {
+      tasks = reportInput.tasks.map((value: any) => String(value).trim()).filter(Boolean)
+    } else if (typeof reportInput.tasks === 'string') {
+      tasks = reportInput.tasks
+        .split(/\r?\n/g)
+        .map((value: string) => value.trim())
+        .filter(Boolean)
+    }
+
+    reportPayload = { summary, comment, reportDate, images, tasks }
   }
 
   if (body.date || body.time) {
@@ -223,6 +262,44 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         where: { id },
         data: updateData
       })
+    }
+
+    if (reportPayload && (
+      reportPayload.summary !== undefined ||
+      reportPayload.reportDate !== undefined ||
+      reportPayload.images !== undefined ||
+      reportPayload.tasks !== undefined ||
+      reportPayload.comment !== undefined
+    )) {
+      const existingReport = await tx.eventReport.findUnique({ where: { eventId: id } })
+      if (existingReport) {
+        const reportUpdate: Prisma.EventReportUpdateInput = {}
+        if (reportPayload.summary !== undefined) reportUpdate.summary = reportPayload.summary
+        if (reportPayload.reportDate !== undefined) reportUpdate.reportDate = reportPayload.reportDate
+        if (reportPayload.images !== undefined) reportUpdate.images = reportPayload.images
+        if (reportPayload.tasks !== undefined) reportUpdate.tasks = reportPayload.tasks
+        if (reportPayload.comment !== undefined) reportUpdate.comment = reportPayload.comment
+        if (Object.keys(reportUpdate).length > 0) {
+          await tx.eventReport.update({
+            where: { eventId: id },
+            data: reportUpdate
+          })
+        }
+      } else {
+        await tx.eventReport.create({
+          data: {
+            eventId: id,
+            summary: reportPayload.summary !== undefined
+              ? reportPayload.summary
+              : updateData.description || existingEvent.description || existingEvent.title,
+            reportDate: reportPayload.reportDate || new Date(existingEvent.date),
+            tasks: reportPayload.tasks || [],
+            activeParticipants: [],
+            images: reportPayload.images || [],
+            comment: reportPayload.comment ?? null
+          }
+        })
+      }
     }
 
     if (moderatorIds !== null) {

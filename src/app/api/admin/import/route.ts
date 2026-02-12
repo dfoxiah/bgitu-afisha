@@ -503,21 +503,21 @@ export async function POST(req: NextRequest) {
       if (creatorId) {
         const creator = await prisma.user.findUnique({ where: { id: creatorId } })
         if (!creator) {
-          result.errors.push(`Строка ${rowIndex}: создатель не найден (creatorId=${creatorId})`)
-          continue
+          result.warnings.push(`Строка ${rowIndex}: создатель не найден (creatorId=${creatorId}), использован текущий администратор`)
+        } else {
+          resolvedCreatorId = creator.id
+          resolvedCreatorName = creator.name || ''
+          resolvedCreatorEmail = creator.email
         }
-        resolvedCreatorId = creator.id
-        resolvedCreatorName = creator.name || ''
-        resolvedCreatorEmail = creator.email
       } else if (creatorEmail) {
         const creator = userMap.get(creatorEmail)
         if (!creator) {
-          result.errors.push(`Строка ${rowIndex}: создатель не найден (creatorEmail=${creatorEmail})`)
-          continue
+          result.warnings.push(`Строка ${rowIndex}: создатель не найден (creatorEmail=${creatorEmail}), использован текущий администратор`)
+        } else {
+          resolvedCreatorId = creator.id
+          resolvedCreatorName = creator.name || ''
+          resolvedCreatorEmail = creator.email
         }
-        resolvedCreatorId = creator.id
-        resolvedCreatorName = creator.name || ''
-        resolvedCreatorEmail = creator.email
       }
 
       const moderatorList = splitList(row.moderatorEmails)

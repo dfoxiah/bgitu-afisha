@@ -6,12 +6,17 @@ import { useSession } from 'next-auth/react'
 import { useAppContext } from '@/contexts/AppContext'
 import SearchInput from '@/components/ui/SearchInput'
 import ImageGalleryModal from '@/components/ui/ImageGalleryModal'
-import { Event } from '@/types'
+import { Event, CategoryDisplayMap } from '@/types'
 import { EventCategory } from '@prisma/client'
 import { getCategoryIcon } from '@/utils/eventCategoryIcons'
 
-type FeedFilter = 'all' | 'news' | 'reports'
 type SortOrder = 'newest' | 'oldest'
+type CategoryFilter = 'all' | EventCategory
+
+const categoryOptions = Object.entries(CategoryDisplayMap).map(([value, label]) => ({
+  value: value as EventCategory,
+  label
+}))
 
 const toDate = (value?: Date | string | null) => {
   if (!value) return null
@@ -38,7 +43,7 @@ export default function NewsPage() {
   const { events, isLoading } = useAppContext()
   const router = useRouter()
 
-  const [filter, setFilter] = useState<FeedFilter>('all')
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all')
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest')
   const [query, setQuery] = useState('')
   const [galleryOpen, setGalleryOpen] = useState(false)
@@ -55,24 +60,12 @@ export default function NewsPage() {
     })
   }, [events])
 
-  const counts = useMemo(() => {
-    let news = 0
-    let reports = 0
-    baseItems.forEach(event => {
-      if (isNewsEvent(event)) news += 1
-      if (event.report) reports += 1
-    })
-    return { all: baseItems.length, news, reports }
-  }, [baseItems])
+  const totalCount = useMemo(() => baseItems.length, [baseItems])
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
     const result = baseItems.filter(event => {
-      const isNewsItem = isNewsEvent(event)
-      const isReportItem = Boolean(event.report)
-
-      if (filter === 'news' && !isNewsItem) return false
-      if (filter === 'reports' && !isReportItem) return false
+      if (categoryFilter !== 'all' && event.category !== categoryFilter) return false
 
       if (normalizedQuery) {
         const haystack = [
@@ -94,7 +87,7 @@ export default function NewsPage() {
     })
 
     return result
-  }, [baseItems, filter, query, sortOrder])
+  }, [baseItems, categoryFilter, query, sortOrder])
 
   const handleNewsClick = (event: Event) => {
     router.push(`/events/${event.id}`)
@@ -133,16 +126,16 @@ export default function NewsPage() {
     <div className="news-page px-4 md:px-5% py-8">
       <div className="container mx-auto max-w-6xl space-y-6">
         <div className="liquid-section p-5 sm:p-6 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="min-w-[220px]">
               <h1 className="text-2xl sm:text-3xl font-bold text-primary flex items-center gap-3">
                 <i className="fas fa-newspaper text-accent"></i> Новостная лента
               </h1>
               <p className="text-sm text-gray-500 mt-1">
-                Всего материалов: {counts.all}
+                Всего материалов: {totalCount}
               </p>
             </div>
-            <div className="w-full sm:w-[320px]">
+            <div className="w-full sm:w-[360px] sm:ml-auto">
               <SearchInput
                 placeholder="Поиск по новостям..."
                 onSearch={setQuery}
@@ -151,35 +144,22 @@ export default function NewsPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setFilter('all')}
-                className={`liquid-chip px-4 py-2 ${filter === 'all' ? 'text-primary' : 'text-gray-500'}`}
-              >
-                Все ({counts.all})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilter('news')}
-                className={`liquid-chip px-4 py-2 ${filter === 'news' ? 'text-primary' : 'text-gray-500'}`}
-              >
-                Новости ({counts.news})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilter('reports')}
-                className={`liquid-chip px-4 py-2 ${filter === 'reports' ? 'text-primary' : 'text-gray-500'}`}
-              >
-                Отчеты ({counts.reports})
-              </button>
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)}
+              className="liquid-input px-4 py-2 text-sm"
+            >
+              <option value="all">Все категории</option>
+              {categoryOptions.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
 
             <select
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value as SortOrder)}
-              className="ml-auto liquid-input px-4 py-2 text-sm"
+              className="liquid-input px-4 py-2 text-sm"
             >
               <option value="newest">Сначала новые</option>
               <option value="oldest">Сначала старые</option>
@@ -194,12 +174,8 @@ export default function NewsPage() {
         ) : (
           <div className="news-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {filteredItems.map(event => {
-              const isNewsItem = isNewsEvent(event)
-              const isReportItem = Boolean(event.report)
-              const badgeLabel = isReportItem && !isNewsItem ? 'Отчет' : 'Новость'
-              const badgeClass = isReportItem && !isNewsItem
-                ? 'bg-emerald-500/90'
-                : 'bg-accent/90'
+              const badgeLabel = 'Новость'
+              const badgeClass = 'bg-accent/90'
               const galleryImages = event.report?.images && event.report.images.length > 0
                 ? event.report.images
                 : (event.images || [])

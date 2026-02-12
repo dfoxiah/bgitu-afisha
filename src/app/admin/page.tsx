@@ -41,6 +41,29 @@ type AdminEvent = {
   moderators: { id: string; name: string | null; email: string }[]
 }
 
+type AdminReport = {
+  id: string
+  summary: string
+  reportDate: string
+  images: string[]
+  tasks?: string[]
+  comment?: string | null
+}
+
+type AdminEventDetails = AdminEvent & {
+  report?: AdminReport | null
+}
+
+type NewsEditorItem = {
+  id: string
+  title: string
+  date: string
+  content: string
+  images: string
+  tasks: string
+  hasReport: boolean
+}
+
 type AuditLog = {
   id: string
   action: string
@@ -90,6 +113,44 @@ const parseModeratorEmails = (value: string) => (
     .filter(Boolean)
 )
 
+const parseImageList = (value: string) => {
+  const raw = value.trim()
+  if (!raw) return []
+  const lines = raw.split(/\r?\n/g).map(item => item.trim()).filter(Boolean)
+  const result: string[] = []
+
+  lines.forEach((line) => {
+    if (line.startsWith('data:')) {
+      result.push(line)
+      return
+    }
+
+    line
+      .split(/[|,;]+/g)
+      .map(item => item.trim())
+      .filter(Boolean)
+      .forEach(item => result.push(item))
+  })
+
+  return result
+}
+
+const joinImageList = (images: string[]) => images.join('\n')
+
+const parseTaskList = (value: string) => (
+  value
+    .split(/\r?\n/g)
+    .map(item => item.trim())
+    .filter(Boolean)
+)
+
+const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = () => resolve(reader.result as string)
+  reader.onerror = () => reject(reader.error)
+  reader.readAsDataURL(file)
+})
+
 export default function AdminPage() {
   const router = useRouter()
   const { data: session, status } = useSession()
@@ -99,12 +160,15 @@ export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [events, setEvents] = useState<AdminEvent[]>([])
   const [logs, setLogs] = useState<AuditLog[]>([])
+  const [newsItems, setNewsItems] = useState<AdminEvent[]>([])
 
   const [userSearch, setUserSearch] = useState('')
   const [userRoleFilter, setUserRoleFilter] = useState<'ALL' | 'STUDENT' | 'TEACHER' | 'ADMIN'>('ALL')
   const [eventSearch, setEventSearch] = useState('')
   const [eventCategory, setEventCategory] = useState('ALL')
   const [eventStatus, setEventStatus] = useState<'ALL' | 'UPCOMING' | 'PAST'>('ALL')
+  const [newsSearch, setNewsSearch] = useState('')
+  const [newsLoading, setNewsLoading] = useState(false)
   const [logAction, setLogAction] = useState('')
   const [logEntityType, setLogEntityType] = useState('')
 
@@ -123,7 +187,9 @@ export default function AdminPage() {
 
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<AdminEvent | null>(null)
+  const [selectedNews, setSelectedNews] = useState<NewsEditorItem | null>(null)
   const [userPassword, setUserPassword] = useState('')
+  const [savingNews, setSavingNews] = useState(false)
 
   const [newUser, setNewUser] = useState({
     name: '',
@@ -253,6 +319,23 @@ export default function AdminPage() {
     }
   }, [eventSearch, eventCategory, eventStatus, readJson])
 
+  const fetchNews = useCallback(async () => {
+    setNewsLoading(true)
+    try {
+      const params = new URLSearchParams()
+      params.set('news', 'true')
+      params.set('limit', '200')
+      if (newsSearch) params.set('search', newsSearch)
+      const res = await fetch(`/api/admin/events?${params.toString()}`)
+      const data = await readJson<AdminEvent[]>(res)
+      setNewsItems(data)
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка загрузки новостей', 'error')
+    } finally {
+      setNewsLoading(false)
+    }
+  }, [newsSearch, readJson])
+
   const fetchLogs = useCallback(async () => {
     setLoading(true)
     try {
@@ -347,20 +430,98 @@ export default function AdminPage() {
       const data = await readJson<any>(res)
       setImportNewsResult(data)
       await fetchEvents()
+      await fetchNews()
       showToast('Импорт новостной ленты завершён', 'success')
     } catch (error: any) {
       showToast(error.message || 'Ошибка импорта новостей', 'error')
     } finally {
       setImportingNews(false)
     }
-  }, [importNewsFile, importNewsMode, readJson, fetchEvents])
+  }, [importNewsFile, importNewsMode, readJson, fetchEvents, fetchNews])
+
+  const loadNewsDetails = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/admin/events/${id}`)
+      const data = await readJson<AdminEventDetails>(res)
+      const report = data.report || null
+      const content = report?.summary || data.description || ''
+      const images = report?.images && report.images.length > 0 ? report.images : (data.images || [])
+      const tasks = report?.tasks && report.tasks.length > 0 ? report.tasks.join('\n') : ''
+      const dateValue = normalizeDateValue(report?.reportDate || data.date)
+      setSelectedNews({
+        id: data.id,
+        title: data.title,
+        date: dateValue,
+        content,
+        images: images.join('\n'),
+        tasks,
+        hasReport: Boolean(report)
+      })
+      setSelectedEvent(null)
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка загрузки новости', 'error')
+    }
+  }, [readJson])
+
+  const handleUpdateNews = async () => {
+    if (!selectedNews) return
+    const trimmedTitle = selectedNews.title.trim()
+    const trimmedContent = selectedNews.content.trim()
+    if (!trimmedTitle) {
+      showToast('Укажите заголовок новости', 'error')
+      return
+    }
+    if (!selectedNews.date) {
+      showToast('Укажите дату публикации', 'error')
+      return
+    }
+
+    setSavingNews(true)
+    try {
+      const images = parseImageList(selectedNews.images)
+      const tasks = parseTaskList(selectedNews.tasks)
+      const payload: any = { title: trimmedTitle }
+
+      if (selectedNews.hasReport) {
+        payload.report = {
+          summary: trimmedContent,
+          reportDate: selectedNews.date,
+          images,
+          tasks
+        }
+      } else {
+        payload.description = trimmedContent
+        payload.date = selectedNews.date
+        payload.images = images
+        payload.isNews = true
+      }
+
+      const res = await fetch(`/api/admin/events/${selectedNews.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      await readJson(res)
+      showToast('Новость обновлена', 'success')
+      setSelectedNews(null)
+      await fetchNews()
+      await fetchEvents()
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка обновления новости', 'error')
+    } finally {
+      setSavingNews(false)
+    }
+  }
 
   useEffect(() => {
     if (!canAccess) return
     if (activeTab === 'users') fetchUsers()
-    if (activeTab === 'events') fetchEvents()
+    if (activeTab === 'events') {
+      fetchEvents()
+      fetchNews()
+    }
     if (activeTab === 'logs') fetchLogs()
-  }, [activeTab, canAccess, fetchUsers, fetchEvents, fetchLogs])
+  }, [activeTab, canAccess, fetchUsers, fetchEvents, fetchNews, fetchLogs])
 
   const handleCreateUser = async () => {
     try {
@@ -437,6 +598,36 @@ export default function AdminPage() {
     }
   }
 
+  const handleNewsImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!selectedNews) return
+    if (!e.target.files) return
+
+    const currentImages = parseImageList(selectedNews.images)
+    const remainingSlots = Math.max(0, 10 - currentImages.length)
+    const files = Array.from(e.target.files).slice(0, remainingSlots)
+    if (files.length === 0) {
+      e.target.value = ''
+      return
+    }
+
+    try {
+      const newImages = await Promise.all(files.map(readFileAsDataUrl))
+      const updated = [...currentImages, ...newImages]
+      setSelectedNews(prev => prev ? ({ ...prev, images: joinImageList(updated) }) : prev)
+    } catch {
+      showToast('Не удалось загрузить изображения', 'error')
+    } finally {
+      e.target.value = ''
+    }
+  }
+
+  const handleRemoveNewsImage = (index: number) => {
+    if (!selectedNews) return
+    const currentImages = parseImageList(selectedNews.images)
+    const updated = currentImages.filter((_, idx) => idx !== index)
+    setSelectedNews(prev => prev ? ({ ...prev, images: joinImageList(updated) }) : prev)
+  }
+
   const handleDeleteEvent = async (id: string) => {
     if (!confirm('Удалить мероприятие?')) return
     try {
@@ -446,6 +637,20 @@ export default function AdminPage() {
       await fetchEvents()
     } catch (error: any) {
       showToast(error.message || 'Ошибка удаления мероприятия', 'error')
+    }
+  }
+
+  const handleDeleteNews = async (id: string) => {
+    if (!confirm('Удалить новость?')) return
+    try {
+      const res = await fetch(`/api/admin/events/${id}`, { method: 'DELETE' })
+      await readJson(res)
+      showToast('Новость удалена', 'success')
+      setSelectedNews(null)
+      await fetchNews()
+      await fetchEvents()
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка удаления новости', 'error')
     }
   }
 
@@ -576,6 +781,8 @@ export default function AdminPage() {
       </div>
     )
   }
+
+  const selectedNewsImages = selectedNews ? parseImageList(selectedNews.images) : []
 
   return (
     <div className="min-h-screen bg-light-gray px-4 md:px-5% py-8">
@@ -822,6 +1029,56 @@ export default function AdminPage() {
               </div>
               <div className="liquid-card p-4 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <h3 className="font-semibold text-primary">Редактор новостей</h3>
+                  <div className="text-xs text-gray-500">Редактирование материалов ленты</div>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    className="flex-grow px-3 py-2 border rounded-lg"
+                    placeholder="Поиск по новостям"
+                    value={newsSearch}
+                    onChange={(e) => setNewsSearch(e.target.value)}
+                  />
+                  <Button variant="secondary" onClick={fetchNews} disabled={newsLoading}>
+                    {newsLoading ? 'Загрузка...' : 'Найти'}
+                  </Button>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-100 overflow-auto max-h-[360px]">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-500">
+                        <th className="py-2 px-3">Название</th>
+                        <th className="px-3">Категория</th>
+                        <th className="px-3">Дата</th>
+                        <th className="px-3 text-right"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {newsItems.map(item => (
+                        <tr key={item.id} className="border-t">
+                          <td className="py-2 px-3">{item.title}</td>
+                          <td className="px-3">{categoryLabelMap[item.category] || item.category}</td>
+                          <td className="px-3">{new Date(item.date).toLocaleDateString('ru-RU')}</td>
+                          <td className="px-3 text-right">
+                            <button className="text-accent" onClick={() => loadNewsDetails(item.id)}>
+                              Редактировать
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {newsItems.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="py-6 text-center text-gray-500">
+                            Нет новостей по выбранным условиям
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="liquid-card p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <h3 className="font-semibold text-primary">Импорт мероприятий</h3>
                   <div className="text-xs text-gray-500">CSV или JSON</div>
                 </div>
@@ -919,10 +1176,13 @@ export default function AdminPage() {
                         <td>{event.isPast ? 'Прошедшее' : 'Будущее'}</td>
                         <td>{event.creator?.name || event.creator?.email}</td>
                         <td className="text-right space-x-2">
-                          <button className="text-accent" onClick={() => setSelectedEvent({
-                            ...event,
-                            date: normalizeDateValue(event.date)
-                          })}>
+                          <button className="text-accent" onClick={() => {
+                            setSelectedEvent({
+                              ...event,
+                              date: normalizeDateValue(event.date)
+                            })
+                            setSelectedNews(null)
+                          }}>
                             Редактировать
                           </button>
                           <button className="text-red-600" onClick={() => handleDeleteEvent(event.id)}>Удалить</button>
@@ -933,6 +1193,92 @@ export default function AdminPage() {
                 </table>
               </div>
             </div>
+
+            {selectedNews && (
+              <div className="bg-white rounded-2xl shadow p-4 space-y-3">
+                <h3 className="font-semibold">Редактирование новости</h3>
+                {selectedNews.hasReport && (
+                  <div className="text-xs text-gray-500">
+                    Материал создан на основе отчёта — будет обновлён текст отчёта и дата публикации.
+                  </div>
+                )}
+                <input
+                  className="w-full px-3 py-2 border rounded"
+                  value={selectedNews.title}
+                  onChange={(e) => setSelectedNews(prev => prev ? ({ ...prev, title: e.target.value }) : prev)}
+                />
+                <input
+                  className="w-full px-3 py-2 border rounded"
+                  type="date"
+                  value={selectedNews.date}
+                  onChange={(e) => setSelectedNews(prev => prev ? ({ ...prev, date: e.target.value }) : prev)}
+                />
+                <textarea
+                  className="w-full px-3 py-2 border rounded min-h-[140px]"
+                  placeholder="Текст новости"
+                  value={selectedNews.content}
+                  onChange={(e) => setSelectedNews(prev => prev ? ({ ...prev, content: e.target.value }) : prev)}
+                />
+                {selectedNews.hasReport && (
+                  <textarea
+                    className="w-full px-3 py-2 border rounded min-h-[90px]"
+                    placeholder="Задачи (по одной в строке)"
+                    value={selectedNews.tasks}
+                    onChange={(e) => setSelectedNews(prev => prev ? ({ ...prev, tasks: e.target.value }) : prev)}
+                  />
+                )}
+                <div className="space-y-2">
+                  <div className="text-sm text-gray-600">
+                    Изображения (до 10 фото). Можно загрузить файлы или вставить ссылки.
+                  </div>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleNewsImageUpload}
+                    className="w-full px-3 py-2 border rounded"
+                    disabled={selectedNewsImages.length >= 10}
+                  />
+                  {selectedNewsImages.length > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {selectedNewsImages.map((img, index) => (
+                        <div key={`${selectedNews.id}-img-${index}`} className="relative rounded-xl overflow-hidden border border-gray-200 bg-white">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={img}
+                            alt={`news-${index}`}
+                            className="w-full h-24 object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveNewsImage(index)}
+                            className="absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-sm"
+                            title="Удалить фото"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <textarea
+                  className="w-full px-3 py-2 border rounded min-h-[90px]"
+                  placeholder="Изображения (URL по строкам или через |)"
+                  value={selectedNews.images}
+                  onChange={(e) => setSelectedNews(prev => prev ? ({ ...prev, images: e.target.value }) : prev)}
+                />
+                <div className="flex gap-2">
+                  <Button variant="primary" onClick={handleUpdateNews} disabled={savingNews}>
+                    {savingNews ? 'Сохранение...' : 'Сохранить'}
+                  </Button>
+                  <Button variant="danger" onClick={() => handleDeleteNews(selectedNews.id)}>
+                    Удалить
+                  </Button>
+                  <Button variant="secondary" onClick={() => setSelectedNews(null)}>Отмена</Button>
+                </div>
+              </div>
+            )}
 
             {selectedEvent && (
               <div className="bg-white rounded-2xl shadow p-4 space-y-3">

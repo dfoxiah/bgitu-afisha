@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (news === 'true') {
-    const newsFilter = { OR: [{ isNews: true }, { category: EventCategory.NEWS }] }
+    const newsFilter = { OR: [{ isNews: true }, { category: EventCategory.NEWS }, { report: { isNot: null } }] }
     if (where.OR) {
       where.AND = where.AND || []
       where.AND.push({ OR: where.OR })
