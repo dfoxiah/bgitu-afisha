@@ -256,7 +256,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     }
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx) => {
     if (Object.keys(updateData).length > 0) {
       await tx.event.update({
         where: { id },
@@ -317,15 +317,16 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       }
     }
 
-    return tx.event.findUnique({
-      where: { id },
-      include: {
-        creator: { select: { id: true, name: true, email: true, role: true } },
-        moderators: {
-          select: { user: { select: { id: true, name: true, email: true, role: true } } }
-        }
+  })
+
+  const updated = await prisma.event.findUnique({
+    where: { id },
+    include: {
+      creator: { select: { id: true, name: true, email: true, role: true } },
+      moderators: {
+        select: { user: { select: { id: true, name: true, email: true, role: true } } }
       }
-    })
+    }
   })
 
   if (!updated) {
