@@ -80,6 +80,43 @@ const splitParticipants = (eventParticipants: Array<{ status: ParticipantStatus;
   return { confirmed, pending };
 };
 
+const buildEventAuditInfo = (
+  event: {
+    title: string;
+    category: EventCategory | string;
+    date: Date;
+    time: string | null;
+    location: string;
+    description?: string | null;
+    duration?: string | null;
+    maxParticipants: number;
+    currentParticipants?: number;
+    isNews?: boolean;
+    removedFromCalendar?: boolean;
+    images?: string[];
+    responsible?: string | null;
+    contact?: string | null;
+  },
+  participantsCount: number,
+  moderatorsCount: number
+) => ({
+  title: event.title,
+  category: String(event.category),
+  date: event.date.toISOString(),
+  time: event.time || "",
+  location: event.location,
+  description: event.description || "",
+  duration: event.duration || "",
+  maxParticipants: event.maxParticipants,
+  currentParticipants: participantsCount,
+  moderatorsCount,
+  imagesCount: Array.isArray(event.images) ? event.images.length : 0,
+  isNews: Boolean(event.isNews),
+  removedFromCalendar: Boolean(event.removedFromCalendar),
+  responsible: event.responsible || "",
+  contact: event.contact || ""
+});
+
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
@@ -603,6 +640,14 @@ export async function POST(req: NextRequest) {
     
     debugLog('POST /api/events - Event created successfully:', newEvent.id);
 
+    const confirmedParticipantEmails = newEvent.eventParticipants
+      .filter(participant => participant.status === ParticipantStatus.CONFIRMED)
+      .map(participant => participant.user?.email)
+      .filter((email): email is string => Boolean(email));
+    const moderatorEmailList = newEvent.moderators
+      .map(moderator => moderator.user?.email)
+      .filter((email): email is string => Boolean(email));
+
     const { ip, userAgent } = buildAuditMeta(req);
     await logAuditEvent({
       actorId: session.user.id,
@@ -611,7 +656,21 @@ export async function POST(req: NextRequest) {
       entityId: newEvent.id,
       metadata: {
         title: newEvent.title,
-        moderators: moderatorEmails
+        eventInfo: buildEventAuditInfo(
+          newEvent,
+          confirmedParticipantEmails.length,
+          moderatorEmailList.length
+        ),
+        participantChanges: {
+          added: confirmedParticipantEmails,
+          removed: [],
+          totalAfter: confirmedParticipantEmails.length
+        },
+        moderatorChanges: {
+          added: moderatorEmailList,
+          removed: [],
+          totalAfter: moderatorEmailList.length
+        }
       },
       ip,
       userAgent

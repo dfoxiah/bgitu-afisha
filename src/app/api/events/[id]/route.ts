@@ -56,6 +56,74 @@ const splitParticipants = (eventParticipants: Array<{ status: ParticipantStatus;
   return { confirmed, pending };
 };
 
+const toAuditValue = (value: unknown): unknown => {
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) {
+    return value.map(item => {
+      if (item instanceof Date) return item.toISOString();
+      if (item === null || item === undefined) return null;
+      if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") return item;
+      return String(item);
+    });
+  }
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
+  return JSON.stringify(value);
+};
+
+const buildFieldChanges = (
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  fields: string[]
+) => {
+  const changes: Record<string, { before: unknown; after: unknown }> = {};
+  fields.forEach((field) => {
+    const beforeValue = toAuditValue(before[field]);
+    const afterValue = toAuditValue(after[field]);
+    if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
+      changes[field] = { before: beforeValue, after: afterValue };
+    }
+  });
+  return changes;
+};
+
+const buildEventAuditInfo = (
+  event: {
+    title: string;
+    category: EventCategory | string;
+    date: Date;
+    time: string | null;
+    location: string;
+    description?: string | null;
+    duration?: string | null;
+    maxParticipants: number;
+    currentParticipants?: number;
+    isNews?: boolean;
+    removedFromCalendar?: boolean;
+    images?: string[];
+    responsible?: string | null;
+    contact?: string | null;
+  },
+  participantsCount: number,
+  moderatorsCount: number
+) => ({
+  title: event.title,
+  category: String(event.category),
+  date: event.date.toISOString(),
+  time: event.time || "",
+  location: event.location,
+  description: event.description || "",
+  duration: event.duration || "",
+  maxParticipants: event.maxParticipants,
+  currentParticipants: participantsCount,
+  moderatorsCount,
+  imagesCount: Array.isArray(event.images) ? event.images.length : 0,
+  isNews: Boolean(event.isNews),
+  removedFromCalendar: Boolean(event.removedFromCalendar),
+  responsible: event.responsible || "",
+  contact: event.contact || ""
+});
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -165,20 +233,40 @@ export async function PUT(
       select: {
         id: true,
         title: true,
+        description: true,
         location: true,
+        duration: true,
+        responsible: true,
+        contact: true,
         category: true,
         creatorId: true,
         date: true,
         time: true,
         maxParticipants: true,
+        currentParticipants: true,
+        isNews: true,
+        removedFromCalendar: true,
+        images: true,
         eventParticipants: {
           select: {
             userId: true,
-            status: true
+            status: true,
+            user: {
+              select: {
+                email: true
+              }
+            }
           }
         },
         moderators: {
-          select: { userId: true }
+          select: {
+            userId: true,
+            user: {
+              select: {
+                email: true
+              }
+            }
+          }
         }
       }
     });
@@ -577,6 +665,62 @@ export async function PUT(
       console.error('Event update notifications error:', notifyError);
     }
 
+    const beforeConfirmedParticipantEmails = event.eventParticipants
+      .filter(participant => participant.status === ParticipantStatus.CONFIRMED)
+      .map(participant => participant.user?.email)
+      .filter((email): email is string => Boolean(email));
+    const afterConfirmedParticipantEmails = confirmed
+      .map(participant => participant?.email)
+      .filter((email): email is string => Boolean(email));
+    const addedParticipantEmails = afterConfirmedParticipantEmails
+      .filter(email => !beforeConfirmedParticipantEmails.includes(email));
+    const removedParticipantEmails = beforeConfirmedParticipantEmails
+      .filter(email => !afterConfirmedParticipantEmails.includes(email));
+
+    const beforeModeratorEmails = event.moderators
+      .map(moderator => moderator.user?.email)
+      .filter((email): email is string => Boolean(email));
+    const afterModeratorEmails = updated.moderators
+      .map(moderator => moderator.user?.email)
+      .filter((email): email is string => Boolean(email));
+    const addedModeratorEmails = afterModeratorEmails
+      .filter(email => !beforeModeratorEmails.includes(email));
+    const removedModeratorEmails = beforeModeratorEmails
+      .filter(email => !afterModeratorEmails.includes(email));
+
+    const updatedFields = Object.keys(updateData);
+    const eventBeforeFields: Record<string, unknown> = {
+      title: event.title,
+      description: event.description,
+      location: event.location,
+      duration: event.duration,
+      responsible: event.responsible,
+      contact: event.contact,
+      category: event.category,
+      maxParticipants: event.maxParticipants,
+      images: event.images,
+      date: event.date,
+      time: event.time,
+      isNews: event.isNews,
+      removedFromCalendar: event.removedFromCalendar
+    };
+    const eventAfterFields: Record<string, unknown> = {
+      title: updated.title,
+      description: updated.description,
+      location: updated.location,
+      duration: updated.duration,
+      responsible: updated.responsible,
+      contact: updated.contact,
+      category: updated.category,
+      maxParticipants: updated.maxParticipants,
+      images: updated.images,
+      date: updated.date,
+      time: updated.time,
+      isNews: updated.isNews,
+      removedFromCalendar: updated.removedFromCalendar
+    };
+    const fieldChanges = buildFieldChanges(eventBeforeFields, eventAfterFields, updatedFields);
+
     const { ip, userAgent } = buildAuditMeta(req);
     await logAuditEvent({
       actorId: session.user.id,
@@ -584,9 +728,32 @@ export async function PUT(
       entityType: "Event",
       entityId: updated.id,
       metadata: {
-        updatedFields: Object.keys(updateData),
+        updatedFields,
+        fieldChanges,
         participantsUpdated: confirmedParticipantIds !== null,
-        moderatorsUpdated: moderatorIds !== null
+        participantChanges: {
+          added: addedParticipantEmails,
+          removed: removedParticipantEmails,
+          totalBefore: beforeConfirmedParticipantEmails.length,
+          totalAfter: afterConfirmedParticipantEmails.length
+        },
+        moderatorsUpdated: moderatorIds !== null,
+        moderatorChanges: {
+          added: addedModeratorEmails,
+          removed: removedModeratorEmails,
+          totalBefore: beforeModeratorEmails.length,
+          totalAfter: afterModeratorEmails.length
+        },
+        eventInfoBefore: buildEventAuditInfo(
+          event,
+          beforeConfirmedParticipantEmails.length,
+          beforeModeratorEmails.length
+        ),
+        eventInfo: buildEventAuditInfo(
+          updated,
+          afterConfirmedParticipantEmails.length,
+          afterModeratorEmails.length
+        )
       },
       ip,
       userAgent

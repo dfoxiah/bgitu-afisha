@@ -45,6 +45,91 @@ const parseDateTime = (dateString: string, timeString?: string): Date | null => 
   }
 }
 
+const toAuditValue = (value: unknown): unknown => {
+  if (value instanceof Date) return value.toISOString()
+  if (Array.isArray(value)) {
+    return value.map(item => {
+      if (item instanceof Date) return item.toISOString()
+      if (item === null || item === undefined) return null
+      if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') return item
+      return String(item)
+    })
+  }
+  if (value === null || value === undefined) return null
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value
+  return JSON.stringify(value)
+}
+
+const buildFieldChanges = (
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  fields: string[]
+) => {
+  const changes: Record<string, { before: unknown; after: unknown }> = {}
+  fields.forEach(field => {
+    const beforeValue = toAuditValue(before[field])
+    const afterValue = toAuditValue(after[field])
+    if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
+      changes[field] = { before: beforeValue, after: afterValue }
+    }
+  })
+  return changes
+}
+
+const buildEventAuditInfo = (
+  event: {
+    title: string
+    category: EventCategory | string
+    date: Date
+    time: string | null
+    location: string
+    description?: string | null
+    duration?: string | null
+    maxParticipants: number
+    currentParticipants?: number
+    isNews?: boolean
+    removedFromCalendar?: boolean
+    images?: string[]
+    responsible?: string | null
+    contact?: string | null
+  },
+  participantsCount: number,
+  moderatorsCount: number
+) => ({
+  title: event.title,
+  category: String(event.category),
+  date: event.date.toISOString(),
+  time: event.time || '',
+  location: event.location,
+  description: event.description || '',
+  duration: event.duration || '',
+  maxParticipants: event.maxParticipants,
+  currentParticipants: participantsCount,
+  moderatorsCount,
+  imagesCount: Array.isArray(event.images) ? event.images.length : 0,
+  isNews: Boolean(event.isNews),
+  removedFromCalendar: Boolean(event.removedFromCalendar),
+  responsible: event.responsible || '',
+  contact: event.contact || ''
+})
+
+const buildReportAuditInfo = (report: {
+  summary: string
+  reportDate: Date
+  images: string[]
+  tasks: string[]
+  comment: string | null
+} | null | undefined) => {
+  if (!report) return null
+  return {
+    summary: report.summary,
+    reportDate: report.reportDate.toISOString(),
+    imagesCount: Array.isArray(report.images) ? report.images.length : 0,
+    tasksCount: Array.isArray(report.tasks) ? report.tasks.length : 0,
+    comment: report.comment || ''
+  }
+}
+
 export async function GET(req: NextRequest, { params }: RouteParams) {
   const session = await getServerSession(authOptions)
   if (!isAdminSession(session)) {
@@ -126,14 +211,45 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       date: true,
       time: true,
       location: true,
+      duration: true,
+      responsible: true,
+      contact: true,
       category: true,
+      maxParticipants: true,
+      currentParticipants: true,
+      isNews: true,
+      removedFromCalendar: true,
+      images: true,
+      report: {
+        select: {
+          summary: true,
+          reportDate: true,
+          images: true,
+          tasks: true,
+          comment: true
+        }
+      },
       eventParticipants: {
         select: {
           userId: true,
-          status: true
+          status: true,
+          user: {
+            select: {
+              email: true
+            }
+          }
         }
       },
-      moderators: { select: { userId: true } }
+      moderators: {
+        select: {
+          userId: true,
+          user: {
+            select: {
+              email: true
+            }
+          }
+        }
+      }
     }
   })
 
@@ -322,6 +438,23 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   const updated = await prisma.event.findUnique({
     where: { id },
     include: {
+      report: {
+        select: {
+          summary: true,
+          reportDate: true,
+          images: true,
+          tasks: true,
+          comment: true
+        }
+      },
+      eventParticipants: {
+        select: {
+          status: true,
+          user: {
+            select: { id: true, email: true }
+          }
+        }
+      },
       creator: { select: { id: true, name: true, email: true, role: true } },
       moderators: {
         select: { user: { select: { id: true, name: true, email: true, role: true } } }
@@ -419,19 +552,126 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     console.error('Admin event notifications error:', notifyError)
   }
 
+  const beforeModeratorEmails = existingEvent.moderators
+    .map(moderator => moderator.user?.email)
+    .filter((email): email is string => Boolean(email))
+  const afterModeratorEmails = updated.moderators
+    .map(moderator => moderator.user?.email)
+    .filter((email): email is string => Boolean(email))
+  const addedModeratorEmails = afterModeratorEmails
+    .filter(email => !beforeModeratorEmails.includes(email))
+  const removedModeratorEmails = beforeModeratorEmails
+    .filter(email => !afterModeratorEmails.includes(email))
+
+  const beforeConfirmedParticipants = existingEvent.eventParticipants
+    .filter(participant => participant.status === ParticipantStatus.CONFIRMED)
+  const afterConfirmedParticipants = updated.eventParticipants
+    .filter(participant => participant.status === ParticipantStatus.CONFIRMED)
+
+  const updatedFields = Object.keys(updateData)
+  const eventBeforeFields: Record<string, unknown> = {
+    title: existingEvent.title,
+    description: existingEvent.description,
+    location: existingEvent.location,
+    duration: existingEvent.duration,
+    responsible: existingEvent.responsible,
+    contact: existingEvent.contact,
+    category: existingEvent.category,
+    maxParticipants: existingEvent.maxParticipants,
+    images: existingEvent.images,
+    date: existingEvent.date,
+    time: existingEvent.time,
+    isNews: existingEvent.isNews,
+    removedFromCalendar: existingEvent.removedFromCalendar
+  }
+  const eventAfterFields: Record<string, unknown> = {
+    title: updated.title,
+    description: updated.description,
+    location: updated.location,
+    duration: updated.duration,
+    responsible: updated.responsible,
+    contact: updated.contact,
+    category: updated.category,
+    maxParticipants: updated.maxParticipants,
+    images: updated.images,
+    date: updated.date,
+    time: updated.time,
+    isNews: updated.isNews,
+    removedFromCalendar: updated.removedFromCalendar
+  }
+  const fieldChanges = buildFieldChanges(eventBeforeFields, eventAfterFields, updatedFields)
+
+  const reportFieldsTouched = reportPayload
+    ? ([
+        reportPayload.summary !== undefined ? 'summary' : null,
+        reportPayload.reportDate !== undefined ? 'reportDate' : null,
+        reportPayload.images !== undefined ? 'images' : null,
+        reportPayload.tasks !== undefined ? 'tasks' : null,
+        reportPayload.comment !== undefined ? 'comment' : null
+      ].filter(Boolean) as string[])
+    : []
+  const reportBeforeFields: Record<string, unknown> = {
+    summary: existingEvent.report?.summary ?? null,
+    reportDate: existingEvent.report?.reportDate ?? null,
+    images: existingEvent.report?.images ?? [],
+    tasks: existingEvent.report?.tasks ?? [],
+    comment: existingEvent.report?.comment ?? null
+  }
+  const reportAfterFields: Record<string, unknown> = {
+    summary: updated.report?.summary ?? null,
+    reportDate: updated.report?.reportDate ?? null,
+    images: updated.report?.images ?? [],
+    tasks: updated.report?.tasks ?? [],
+    comment: updated.report?.comment ?? null
+  }
+  const reportFieldChanges = buildFieldChanges(reportBeforeFields, reportAfterFields, reportFieldsTouched)
+  for (const [key, value] of Object.entries(reportFieldChanges)) {
+    fieldChanges[`report.${key}`] = value
+  }
+
   const { ip, userAgent } = buildAuditMeta(req)
   await logAuditEvent({
     actorId: adminId,
     action: 'ADMIN_EVENT_UPDATE',
     entityType: 'Event',
     entityId: updated.id,
-    metadata: { updatedFields: Object.keys(updateData), moderatorsUpdated: moderatorIds !== null },
+    metadata: {
+      updatedFields,
+      moderatorsUpdated: moderatorIds !== null,
+      reportUpdated: reportFieldsTouched.length > 0,
+      fieldChanges,
+      moderatorChanges: {
+        added: addedModeratorEmails,
+        removed: removedModeratorEmails,
+        totalBefore: beforeModeratorEmails.length,
+        totalAfter: afterModeratorEmails.length
+      },
+      eventInfoBefore: buildEventAuditInfo(
+        existingEvent,
+        beforeConfirmedParticipants.length,
+        beforeModeratorEmails.length
+      ),
+      eventInfo: buildEventAuditInfo(
+        updated,
+        afterConfirmedParticipants.length,
+        afterModeratorEmails.length
+      ),
+      reportInfoBefore: buildReportAuditInfo(existingEvent.report),
+      reportInfo: buildReportAuditInfo(updated.report)
+    },
     ip,
     userAgent
   })
 
+  const { eventParticipants: _eventParticipants, ...updatedWithoutParticipants } = updated
   return NextResponse.json({
-    ...updated,
+    ...updatedWithoutParticipants,
+    report: updated.report
+      ? {
+          ...updated.report,
+          reportDate: updated.report.reportDate.toISOString()
+        }
+      : null,
     moderators: updated.moderators.map(m => m.user),
     date: updated.date.toISOString(),
     createdAt: updated.createdAt.toISOString(),
@@ -447,6 +687,62 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   const adminId = session!.user!.id
 
   const { id } = await params
+  const existingEvent = await prisma.event.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      date: true,
+      time: true,
+      location: true,
+      duration: true,
+      responsible: true,
+      contact: true,
+      category: true,
+      maxParticipants: true,
+      currentParticipants: true,
+      isNews: true,
+      removedFromCalendar: true,
+      images: true,
+      report: {
+        select: {
+          summary: true,
+          reportDate: true,
+          images: true,
+          tasks: true,
+          comment: true
+        }
+      },
+      eventParticipants: {
+        select: {
+          status: true,
+          user: {
+            select: { email: true }
+          }
+        }
+      },
+      moderators: {
+        select: {
+          user: {
+            select: { email: true }
+          }
+        }
+      }
+    }
+  })
+  if (!existingEvent) {
+    return NextResponse.json({ error: 'РњРµСЂРѕРїСЂРёСЏС‚РёРµ РЅРµ РЅР°Р№РґРµРЅРѕ' }, { status: 404 })
+  }
+
+  const confirmedParticipantEmails = existingEvent.eventParticipants
+    .filter(participant => participant.status === ParticipantStatus.CONFIRMED)
+    .map(participant => participant.user?.email)
+    .filter((email): email is string => Boolean(email))
+  const moderatorEmails = existingEvent.moderators
+    .map(moderator => moderator.user?.email)
+    .filter((email): email is string => Boolean(email))
+
   await prisma.event.delete({
     where: { id }
   })
@@ -457,7 +753,26 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     action: 'ADMIN_EVENT_DELETE',
     entityType: 'Event',
     entityId: id,
-    metadata: null,
+    metadata: {
+      eventInfo: buildEventAuditInfo(
+        existingEvent,
+        confirmedParticipantEmails.length,
+        moderatorEmails.length
+      ),
+      reportInfo: buildReportAuditInfo(existingEvent.report),
+      participantChanges: {
+        added: [],
+        removed: confirmedParticipantEmails,
+        totalBefore: confirmedParticipantEmails.length,
+        totalAfter: 0
+      },
+      moderatorChanges: {
+        added: [],
+        removed: moderatorEmails,
+        totalBefore: moderatorEmails.length,
+        totalAfter: 0
+      }
+    },
     ip,
     userAgent
   })

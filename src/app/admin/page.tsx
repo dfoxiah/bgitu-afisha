@@ -160,6 +160,109 @@ const formatOperationLabel = (action: string) => {
   return 'Действие'
 }
 
+const logFieldLabelMap: Record<string, string> = {
+  title: 'Название',
+  description: 'Описание',
+  location: 'Место',
+  duration: 'Длительность',
+  responsible: 'Ответственный',
+  contact: 'Контакт',
+  category: 'Категория',
+  maxParticipants: 'Лимит участников',
+  images: 'Фотографии',
+  date: 'Дата',
+  time: 'Время',
+  isNews: 'Новость',
+  removedFromCalendar: 'В календаре',
+  currentParticipants: 'Участников',
+  'report.summary': 'Отчёт: сводка',
+  'report.reportDate': 'Отчёт: дата',
+  'report.images': 'Отчёт: фото',
+  'report.tasks': 'Отчёт: задачи',
+  'report.comment': 'Отчёт: комментарий'
+}
+
+const logEventInfoLabelMap: Record<string, string> = {
+  title: 'Название',
+  category: 'Категория',
+  date: 'Дата',
+  time: 'Время',
+  location: 'Место',
+  description: 'Описание',
+  duration: 'Длительность',
+  maxParticipants: 'Лимит участников',
+  currentParticipants: 'Текущее число участников',
+  moderatorsCount: 'Число модераторов',
+  imagesCount: 'Количество фото',
+  isNews: 'Новость',
+  removedFromCalendar: 'В календаре',
+  responsible: 'Ответственный',
+  contact: 'Контакт'
+}
+
+const logReportInfoLabelMap: Record<string, string> = {
+  summary: 'Сводка',
+  reportDate: 'Дата отчёта',
+  imagesCount: 'Количество фото',
+  tasksCount: 'Количество задач',
+  comment: 'Комментарий'
+}
+
+const formatLogValue = (value: unknown): string => {
+  if (value === null || value === undefined) return '—'
+  if (typeof value === 'boolean') return value ? 'да' : 'нет'
+  if (typeof value === 'number') return String(value)
+  if (typeof value === 'string') return value || '—'
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '—'
+    return value.map(item => (typeof item === 'string' ? item : String(item))).join(', ')
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
+  return String(value)
+}
+
+const appendObjectDetails = (
+  lines: string[],
+  title: string,
+  value: unknown,
+  labels: Record<string, string>
+) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return
+  const entries = Object.entries(value as Record<string, unknown>)
+  if (entries.length === 0) return
+  lines.push(`${title}:`)
+  entries.forEach(([key, raw]) => {
+    const keyLabel = labels[key] || logFieldLabelMap[key] || key
+    lines.push(`- ${keyLabel}: ${formatLogValue(raw)}`)
+  })
+}
+
+const appendChangesDetails = (lines: string[], title: string, value: unknown) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return
+  const payload = value as Record<string, unknown>
+  const added = Array.isArray(payload.added) ? payload.added : []
+  const removed = Array.isArray(payload.removed) ? payload.removed : []
+  const totalBefore = typeof payload.totalBefore === 'number' ? payload.totalBefore : null
+  const totalAfter = typeof payload.totalAfter === 'number' ? payload.totalAfter : null
+
+  lines.push(`${title}: +${added.length}, -${removed.length}`)
+  if (added.length > 0) {
+    lines.push(`- Добавлено: ${formatLogValue(added)}`)
+  }
+  if (removed.length > 0) {
+    lines.push(`- Удалено: ${formatLogValue(removed)}`)
+  }
+  if (totalBefore !== null || totalAfter !== null) {
+    lines.push(`- Итого: ${totalBefore ?? '—'} -> ${totalAfter ?? '—'}`)
+  }
+}
+
 const buildLogDetails = (log: AuditLog) => {
   const lines: string[] = []
   const meta = log.metadata && typeof log.metadata === 'object' ? log.metadata : null
@@ -169,12 +272,45 @@ const buildLogDetails = (log: AuditLog) => {
   if (meta && Array.isArray((meta as any).updatedFields)) {
     const fields = (meta as any).updatedFields as string[]
     if (fields.length > 0) {
-      lines.push(`Изменено: ${fields.join(', ')}`)
+      const labels = fields.map(field => logFieldLabelMap[field] || field)
+      lines.push(`Изменено: ${labels.join(', ')}`)
     }
   }
 
+  if (meta && (meta as any).fieldChanges && typeof (meta as any).fieldChanges === 'object') {
+    const entries = Object.entries((meta as any).fieldChanges as Record<string, any>)
+    if (entries.length > 0) {
+      lines.push('Изменения по полям:')
+      entries.forEach(([field, value]) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return
+        const from = (value as any).before
+        const to = (value as any).after
+        const label = logFieldLabelMap[field] || field
+        lines.push(`- ${label}: ${formatLogValue(from)} -> ${formatLogValue(to)}`)
+      })
+    }
+  }
+
+  if (meta && typeof (meta as any).participantsUpdated === 'boolean') {
+    lines.push(`Участники обновлены: ${(meta as any).participantsUpdated ? 'да' : 'нет'}`)
+  }
   if (meta && typeof (meta as any).moderatorsUpdated === 'boolean') {
     lines.push(`Модераторы обновлены: ${(meta as any).moderatorsUpdated ? 'да' : 'нет'}`)
+  }
+  if (meta && typeof (meta as any).reportUpdated === 'boolean') {
+    lines.push(`Отчёт обновлён: ${(meta as any).reportUpdated ? 'да' : 'нет'}`)
+  }
+  if (meta && typeof (meta as any).title === 'string') {
+    lines.push(`Название: ${(meta as any).title}`)
+  }
+
+  if (meta) {
+    appendChangesDetails(lines, 'Изменения участников', (meta as any).participantChanges)
+    appendChangesDetails(lines, 'Изменения модераторов', (meta as any).moderatorChanges)
+    appendObjectDetails(lines, 'Мероприятие до изменений', (meta as any).eventInfoBefore, logEventInfoLabelMap)
+    appendObjectDetails(lines, 'Мероприятие после изменений', (meta as any).eventInfo, logEventInfoLabelMap)
+    appendObjectDetails(lines, 'Отчёт до изменений', (meta as any).reportInfoBefore, logReportInfoLabelMap)
+    appendObjectDetails(lines, 'Отчёт после изменений', (meta as any).reportInfo, logReportInfoLabelMap)
   }
 
   if (meta && typeof (meta as any).created === 'number') {
@@ -211,7 +347,6 @@ const buildLogDetails = (log: AuditLog) => {
 
   return { lines, meta }
 }
-
 export default function AdminPage() {
   const router = useRouter()
   const { data: session, status } = useSession()
