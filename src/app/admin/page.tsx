@@ -151,6 +151,67 @@ const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve,
   reader.readAsDataURL(file)
 })
 
+const formatOperationLabel = (action: string) => {
+  if (action.includes('CREATE')) return 'Создание'
+  if (action.includes('UPDATE')) return 'Изменение'
+  if (action.includes('DELETE')) return 'Удаление'
+  if (action.includes('IMPORT')) return 'Импорт'
+  if (action.includes('NOTIFY')) return 'Уведомление'
+  return 'Действие'
+}
+
+const buildLogDetails = (log: AuditLog) => {
+  const lines: string[] = []
+  const meta = log.metadata && typeof log.metadata === 'object' ? log.metadata : null
+
+  lines.push(`Операция: ${formatOperationLabel(log.action)}`)
+
+  if (meta && Array.isArray((meta as any).updatedFields)) {
+    const fields = (meta as any).updatedFields as string[]
+    if (fields.length > 0) {
+      lines.push(`Изменено: ${fields.join(', ')}`)
+    }
+  }
+
+  if (meta && typeof (meta as any).moderatorsUpdated === 'boolean') {
+    lines.push(`Модераторы обновлены: ${(meta as any).moderatorsUpdated ? 'да' : 'нет'}`)
+  }
+
+  if (meta && typeof (meta as any).created === 'number') {
+    lines.push(`Создано: ${(meta as any).created}`)
+  }
+  if (meta && typeof (meta as any).updated === 'number') {
+    lines.push(`Обновлено: ${(meta as any).updated}`)
+  }
+  if (meta && typeof (meta as any).skipped === 'number') {
+    lines.push(`Пропущено: ${(meta as any).skipped}`)
+  }
+  if (meta && typeof (meta as any).errors === 'number') {
+    lines.push(`Ошибок: ${(meta as any).errors}`)
+  }
+  if (meta && typeof (meta as any).warnings === 'number') {
+    lines.push(`Предупреждений: ${(meta as any).warnings}`)
+  }
+
+  if (meta && typeof (meta as any).email === 'string') {
+    lines.push(`Email: ${(meta as any).email}`)
+  }
+  if (meta && typeof (meta as any).role === 'string') {
+    lines.push(`Роль: ${(meta as any).role}`)
+  }
+  if (meta && typeof (meta as any).count === 'number') {
+    lines.push(`Количество: ${(meta as any).count}`)
+  }
+  if (meta && typeof (meta as any).recipients === 'string') {
+    lines.push(`Получатели: ${(meta as any).recipients}`)
+  }
+  if (meta && typeof (meta as any).scope === 'string') {
+    lines.push(`Область: ${(meta as any).scope}`)
+  }
+
+  return { lines, meta }
+}
+
 export default function AdminPage() {
   const router = useRouter()
   const { data: session, status } = useSession()
@@ -190,6 +251,7 @@ export default function AdminPage() {
   const [selectedNews, setSelectedNews] = useState<NewsEditorItem | null>(null)
   const [userPassword, setUserPassword] = useState('')
   const [savingNews, setSavingNews] = useState(false)
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null)
 
   const [newUser, setNewUser] = useState({
     name: '',
@@ -1331,7 +1393,16 @@ export default function AdminPage() {
                     <div className="text-xs text-gray-500">
                       {new Date(log.createdAt).toLocaleString('ru-RU')}
                     </div>
-                    <div className="font-medium text-gray-800">{log.action}</div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="font-medium text-gray-800">{log.action}</div>
+                      <button
+                        type="button"
+                        className="text-xs text-accent hover:text-primary"
+                        onClick={() => setExpandedLogId(prev => prev === log.id ? null : log.id)}
+                      >
+                        {expandedLogId === log.id ? 'Скрыть' : 'Подробности'}
+                      </button>
+                    </div>
                     <div className="text-sm text-gray-600">
                       {log.entityType}{log.entityId ? `: ${log.entityId}` : ''}
                     </div>
@@ -1340,6 +1411,21 @@ export default function AdminPage() {
                         Автор: {log.actor.name || log.actor.email} ({log.actor.role})
                       </div>
                     )}
+                    {expandedLogId === log.id && (() => {
+                      const details = buildLogDetails(log)
+                      return (
+                        <div className="mt-3 rounded-lg bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600 space-y-1">
+                          {details.lines.map((line, idx) => (
+                            <div key={`${log.id}-detail-${idx}`}>{line}</div>
+                          ))}
+                          {details.meta && (
+                            <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] text-gray-500">
+                              {JSON.stringify(details.meta, null, 2)}
+                            </pre>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 ))}
               </div>
