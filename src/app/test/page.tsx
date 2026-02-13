@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Internal test page used for local diagnostics and manual checks.
+ *
+ * Main logic:
+ * - Render testing widgets/scenarios.
+ * - Support quick manual verification during development.
+ *
+ * Integrations:
+ * - Dev-only components/helpers
+ * - App Router /test route
+ */
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 

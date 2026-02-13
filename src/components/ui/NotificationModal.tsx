@@ -1,4 +1,16 @@
-﻿'use client'
+/**
+ * File responsibility:
+ * Modal to send event notifications to selected participant groups.
+ *
+ * Main logic:
+ * - Provide message templates with token preview
+ * - Validate required form fields
+ * - Call AppContext notification sender with typed template mapping
+ *
+ * Integrations:
+ * - src/contexts/AppContext.tsx sendEventNotification()
+ */
+'use client'
 
 import { useMemo, useState } from 'react'
 import { useAppContext } from '@/contexts/AppContext'
@@ -10,9 +22,14 @@ interface NotificationModalProps {
   onClose: () => void
 }
 
+type NotificationTemplate = 'change' | 'custom' | 'reminder'
+
+const isNotificationTemplate = (value: string): value is NotificationTemplate =>
+  value === 'change' || value === 'custom' || value === 'reminder'
+
 const NotificationModal = ({ onClose }: NotificationModalProps) => {
   const { events, sendEventNotification } = useAppContext()
-  const templates = {
+  const templates: Record<NotificationTemplate, string> = {
     change: 'Изменение времени: Мероприятие "[Название]" перенесено на [Дата] [Время]',
     custom: '',
     reminder: 'Напоминание: Завтра в [Время] состоится мероприятие "[Название]"'
@@ -26,7 +43,7 @@ const NotificationModal = ({ onClose }: NotificationModalProps) => {
 
   const [formData, setFormData] = useState({
     eventId: '',
-    template: 'change' as 'change' | 'custom' | 'reminder',
+    template: 'change' as NotificationTemplate,
     content: templates.change,
     recipients: 'all' as 'all' | 'confirmed' | 'pending'
   })
@@ -51,11 +68,11 @@ const NotificationModal = ({ onClose }: NotificationModalProps) => {
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     
-    if (name === 'template') {
+    if (name === 'template' && isNotificationTemplate(value)) {
       setFormData(prev => ({
         ...prev,
-        template: value as any,
-        content: templates[value as keyof typeof templates]
+        template: value,
+        content: templates[value]
       }))
     } else {
       setFormData(prev => ({
@@ -164,11 +181,11 @@ const NotificationModal = ({ onClose }: NotificationModalProps) => {
           </select>
         </div>
 
-        <div className="flex justify-end gap-4 pt-4 border-t border-border">
-          <Button type="button" variant="secondary" onClick={onClose}>
+        <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-end sm:gap-4">
+          <Button type="button" variant="secondary" onClick={onClose} className="w-full sm:w-auto">
             Отмена
           </Button>
-          <Button type="submit" variant="primary">
+          <Button type="submit" variant="primary" className="w-full sm:w-auto">
             Отправить уведомление
           </Button>
         </div>

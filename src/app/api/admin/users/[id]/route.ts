@@ -1,21 +1,37 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import bcrypt from 'bcryptjs'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { Role } from '@prisma/client'
-import { buildAuditMeta, logAuditEvent } from '@/lib/audit'
+﻿/**
+ * File responsibility:
+ * Admin user details endpoint (get/update/delete).
+ *
+ * Main logic:
+ * - Return selected user fields
+ * - Update role/profile/password
+ * - Delete user with self-delete protection
+ *
+ * Integrations:
+ * - src/app/admin/page.tsx
+ */
 
-interface RouteParams {
+import { NextRequest, NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import bcrypt from "bcryptjs"
+import { Role } from "@prisma/client"
+import { authOptions } from "@/lib/auth"
+import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
+import { prisma } from "@/lib/prisma"
+import { ensureAdminSession } from "@/server/admin/admin-session"
+import { errorJson } from "@/server/shared/http-response"
+
+type RouteParams = {
   params: Promise<{ id: string }>
 }
 
-const isAdminSession = (session: any) => session?.user?.id && session.user.role === 'ADMIN'
+const isRole = (value: string): value is Role =>
+  value === "STUDENT" || value === "TEACHER" || value === "ADMIN"
 
-export async function GET(req: NextRequest, { params }: RouteParams) {
+export async function GET(_req: NextRequest, { params }: RouteParams) {
   const session = await getServerSession(authOptions)
-  if (!isAdminSession(session)) {
-    return NextResponse.json({ error: 'Недостаточно прав' }, { status: 403 })
+  if (!ensureAdminSession(session)) {
+    return errorJson(403, "FORBIDDEN", "Недостаточно прав")
   }
 
   const { id } = await params
@@ -33,12 +49,12 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       privacyConsentAt: true,
       termsConsentAt: true,
       createdAt: true,
-      updatedAt: true
-    }
+      updatedAt: true,
+    },
   })
 
   if (!user) {
-    return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 })
+    return errorJson(404, "NOT_FOUND", "Пользователь не найден")
   }
 
   return NextResponse.json(user)
@@ -46,48 +62,61 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
   const session = await getServerSession(authOptions)
-  if (!isAdminSession(session)) {
-    return NextResponse.json({ error: 'Недостаточно прав' }, { status: 403 })
+  const adminId = ensureAdminSession(session)
+  if (!adminId) {
+    return errorJson(403, "FORBIDDEN", "Недостаточно прав")
   }
-  const adminId = session!.user!.id
 
   const { id } = await params
-  const body = await req.json()
+
+  let bodyRaw: unknown
+  try {
+    bodyRaw = await req.json()
+  } catch {
+    return errorJson(400, "BAD_REQUEST", "Неверный формат JSON")
+  }
+
+  if (!bodyRaw || typeof bodyRaw !== "object") {
+    return errorJson(400, "BAD_REQUEST", "Тело запроса должно быть объектом")
+  }
+
+  const body = bodyRaw as Record<string, unknown>
   const updates: Record<string, unknown> = {}
 
-  if (body.name !== undefined) updates.name = String(body.name).trim()
-  if (body.email !== undefined) updates.email = String(body.email).trim()
-  if (body.department !== undefined) updates.department = body.department ? String(body.department).trim() : null
+  if (body.name !== undefined) updates.name = String(body.name || "").trim()
+  if (body.email !== undefined) updates.email = String(body.email || "").trim().toLowerCase()
+  if (body.department !== undefined) {
+    updates.department = body.department ? String(body.department).trim() : null
+  }
   if (body.group !== undefined) updates.group = body.group ? String(body.group).trim() : null
   if (body.groupChangeCount !== undefined) updates.groupChangeCount = Number(body.groupChangeCount) || 0
   if (body.bio !== undefined) updates.bio = body.bio ? String(body.bio).trim() : null
 
   if (body.role !== undefined) {
-    const role = String(body.role).trim() as Role
-    if (!['STUDENT', 'TEACHER', 'ADMIN'].includes(role)) {
-      return NextResponse.json({ error: 'Некорректная роль' }, { status: 400 })
+    const roleRaw = String(body.role).trim()
+    if (!isRole(roleRaw)) {
+      return errorJson(400, "VALIDATION_ERROR", "Некорректная роль")
     }
-    updates.role = role
+    updates.role = roleRaw
   }
 
   if (body.password) {
     const password = String(body.password).trim()
     if (password.length < 6) {
-      return NextResponse.json({ error: 'Пароль должен быть не короче 6 символов' }, { status: 400 })
+      return errorJson(400, "VALIDATION_ERROR", "Пароль должен быть не короче 6 символов")
     }
     updates.password = await bcrypt.hash(password, 10)
   }
 
   if (body.privacyConsentAt !== undefined) {
-    updates.privacyConsentAt = body.privacyConsentAt ? new Date(body.privacyConsentAt) : null
+    updates.privacyConsentAt = body.privacyConsentAt ? new Date(String(body.privacyConsentAt)) : null
   }
-
   if (body.termsConsentAt !== undefined) {
-    updates.termsConsentAt = body.termsConsentAt ? new Date(body.termsConsentAt) : null
+    updates.termsConsentAt = body.termsConsentAt ? new Date(String(body.termsConsentAt)) : null
   }
 
   if (Object.keys(updates).length === 0) {
-    return NextResponse.json({ error: 'Нет данных для обновления' }, { status: 400 })
+    return errorJson(400, "BAD_REQUEST", "Нет данных для обновления")
   }
 
   const updated = await prisma.user.update({
@@ -104,19 +133,19 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       bio: true,
       privacyConsentAt: true,
       termsConsentAt: true,
-      updatedAt: true
-    }
+      updatedAt: true,
+    },
   })
 
   const { ip, userAgent } = buildAuditMeta(req)
   await logAuditEvent({
     actorId: adminId,
-    action: 'ADMIN_USER_UPDATE',
-    entityType: 'User',
+    action: "ADMIN_USER_UPDATE",
+    entityType: "User",
     entityId: updated.id,
     metadata: { updatedFields: Object.keys(updates) },
     ip,
-    userAgent
+    userAgent,
   })
 
   return NextResponse.json(updated)
@@ -124,29 +153,27 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
   const session = await getServerSession(authOptions)
-  if (!isAdminSession(session)) {
-    return NextResponse.json({ error: 'Недостаточно прав' }, { status: 403 })
+  const adminId = ensureAdminSession(session)
+  if (!adminId) {
+    return errorJson(403, "FORBIDDEN", "Недостаточно прав")
   }
-  const adminId = session!.user!.id
 
   const { id } = await params
   if (id === adminId) {
-    return NextResponse.json({ error: 'Нельзя удалить самого себя' }, { status: 400 })
+    return errorJson(400, "VALIDATION_ERROR", "Нельзя удалить самого себя")
   }
 
-  await prisma.user.delete({
-    where: { id }
-  })
+  await prisma.user.delete({ where: { id } })
 
   const { ip, userAgent } = buildAuditMeta(req)
   await logAuditEvent({
     actorId: adminId,
-    action: 'ADMIN_USER_DELETE',
-    entityType: 'User',
+    action: "ADMIN_USER_DELETE",
+    entityType: "User",
     entityId: id,
     metadata: null,
     ip,
-    userAgent
+    userAgent,
   })
 
   return NextResponse.json({ success: true })

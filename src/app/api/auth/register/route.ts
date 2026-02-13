@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * API endpoint for user self-registration.
+ *
+ * Main logic:
+ * - Validate registration payload and uniqueness.
+ * - Create user with secure password hash.
+ *
+ * Integrations:
+ * - Prisma User model
+ * - Auth registration page
+ */
 // src/app/api/auth/register/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";

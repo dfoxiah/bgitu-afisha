@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * App Router page module for this route.
+ *
+ * Main logic:
+ * - Compose route-level UI blocks.
+ * - Connect page state with shared context/services.
+ *
+ * Integrations:
+ * - Shared layout/providers
+ * - Feature components and hooks
+ */
 import { getServerSession } from 'next-auth'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -71,7 +83,7 @@ export default async function UserProfilePage({ params }: UserProfilePageProps) 
   const isSelf = session.user?.id === user.id
 
   return (
-    <div className="min-h-screen px-4 md:px-5% py-8">
+    <div className="min-h-screen px-4 md:px-[5%] py-8">
       <div className="container mx-auto max-w-4xl">
         <div className="mb-6 flex items-center justify-between">
           <Link

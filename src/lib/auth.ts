@@ -1,3 +1,17 @@
+﻿/**
+ * File responsibility:
+ * NextAuth configuration and callbacks for credentials/OAuth authentication.
+ *
+ * Main logic:
+ * - Configure providers, JWT/session callbacks and secure redirects
+ * - Enrich tokens/sessions with app-specific profile/notification fields
+ * - Write audit trail events for sign-in/sign-out/user creation
+ *
+ * Integrations:
+ * - src/app/api/auth/* routes
+ * - Prisma User model
+ * - src/lib/audit.ts
+ */
 import type { NextAuthOptions, User } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import YandexProvider from "next-auth/providers/yandex";
@@ -7,7 +21,7 @@ import bcrypt from "bcryptjs";
 import { EventCategory, Role } from "@prisma/client";
 import { logAuditEvent } from "@/lib/audit";
 
-const authLog = (...args: any[]) => {
+const authLog = (...args: unknown[]) => {
   if (process.env.DEBUG_AUTH === "true") {
     console.log(...args);
   }
@@ -49,7 +63,7 @@ declare module "next-auth" {
       notificationCategories?: EventCategory[];
     };
   }
-  
+
   interface User {
     role: Role;
     department?: string | null;
@@ -91,7 +105,7 @@ export const authOptions: NextAuthOptions = {
       name: "credentials",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        password: { label: "Password", type: "password" },
       },
       async authorize(credentials): Promise<User | null> {
         if (!credentials?.email || !credentials?.password) {
@@ -101,9 +115,9 @@ export const authOptions: NextAuthOptions = {
 
         try {
           authLog("Auth attempt for:", credentials.email);
-          
+
           const user = await prisma.user.findUnique({
-            where: { email: credentials.email }
+            where: { email: credentials.email },
           });
 
           if (!user) {
@@ -124,7 +138,7 @@ export const authOptions: NextAuthOptions = {
           }
 
           authLog("User authenticated successfully:", user.email);
-          
+
           return {
             id: user.id,
             email: user.email,
@@ -143,7 +157,6 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
       },
-      
     }),
     ...(yandexClientId && yandexClientSecret
       ? [
@@ -152,8 +165,8 @@ export const authOptions: NextAuthOptions = {
             clientSecret: yandexClientSecret,
             authorization: {
               params: {
-                scope: process.env.YANDEX_SCOPE || "login:email login:info"
-              }
+                scope: process.env.YANDEX_SCOPE || "login:email login:info",
+              },
             },
             profile(profile) {
               const name =
@@ -171,25 +184,25 @@ export const authOptions: NextAuthOptions = {
                 name: name || null,
                 email: profile.default_email || null,
                 image: avatar,
-                role: Role.STUDENT
+                role: Role.STUDENT,
               };
-            }
+            },
           }),
         ]
       : []),
   ],
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 дней
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   callbacks: {
     async signIn({ user }) {
       authLog("Sign in callback:", user.email);
       return true;
     },
-    
+
     async jwt({ token, user, trigger, session }) {
-      // При первом входе добавляем данные пользователя в токен
+      // При первом входе добавляем данные пользователя в токен.
       if (user) {
         token.id = user.id;
         token.email = user.email ?? "";
@@ -205,8 +218,8 @@ export const authOptions: NextAuthOptions = {
         token.notifyNews = user.notifyNews ?? false;
         token.notificationCategories = user.notificationCategories ?? [];
       }
-      
-      // При обновлении сессии
+
+      // При client-side update() синхронизируем измененные поля с токеном.
       if (trigger === "update" && session?.user) {
         token.name = session.user.name;
         token.picture = session.user.image;
@@ -219,10 +232,10 @@ export const authOptions: NextAuthOptions = {
         token.notifyNews = session.user.notifyNews ?? token.notifyNews ?? false;
         token.notificationCategories = session.user.notificationCategories ?? token.notificationCategories ?? [];
       }
-      
+
       return token;
     },
-    
+
     async session({ session, token }) {
       const tokenId = typeof token.id === "string" ? token.id : null;
       const tokenEmail = typeof token.email === "string" ? token.email : null;
@@ -230,16 +243,16 @@ export const authOptions: NextAuthOptions = {
       if (tokenId || tokenEmail) {
         const existingUser = await prisma.user.findUnique({
           where: tokenId ? { id: tokenId } : { email: tokenEmail! },
-          select: { id: true }
+          select: { id: true },
         });
 
         if (!existingUser) {
           authLog("Session invalidated: user not found", tokenId ?? tokenEmail);
-          return null as any;
+          return null as unknown as typeof session;
         }
       } else {
         authLog("Session invalidated: token missing user identity");
-        return null as any;
+        return null as unknown as typeof session;
       }
 
       if (token && session.user) {
@@ -267,24 +280,24 @@ export const authOptions: NextAuthOptions = {
           ? (token.notificationCategories as EventCategory[])
           : [];
       }
-      
+
       authLog("Session callback:", session?.user?.email);
       return session;
     },
-    
+
     async redirect({ url, baseUrl }) {
-      // Разрешаем только безопасные redirect-и внутри приложения
+      // Разрешаем только безопасные redirect внутри приложения.
       if (url.startsWith(baseUrl)) return url;
-      // Разрешаем относительные URL внутри приложения
+      // Разрешаем относительные URL внутри приложения.
       if (url.startsWith("/")) return new URL(url, baseUrl).toString();
       return baseUrl;
-    }
+    },
   },
   pages: {
     signIn: "/login",
     error: "/login",
     signOut: "/",
-    newUser: "/register"
+    newUser: "/register",
   },
   secret: nextAuthSecret || "development-secret-key-change-in-production",
   debug: process.env.NEXTAUTH_DEBUG === "true",
@@ -296,7 +309,7 @@ export const authOptions: NextAuthOptions = {
         action: "AUTH_SIGN_IN",
         entityType: "User",
         entityId: user.id,
-        metadata: { provider: account?.provider, isNewUser: !!isNewUser }
+        metadata: { provider: account?.provider, isNewUser: !!isNewUser },
       });
     },
     async signOut({ session }) {
@@ -306,7 +319,7 @@ export const authOptions: NextAuthOptions = {
           actorId: session.user.id,
           action: "AUTH_SIGN_OUT",
           entityType: "User",
-          entityId: session.user.id
+          entityId: session.user.id,
         });
       }
     },
@@ -316,9 +329,9 @@ export const authOptions: NextAuthOptions = {
         actorId: user.id,
         action: "AUTH_CREATE_USER",
         entityType: "User",
-        entityId: user.id
+        entityId: user.id,
       });
-    }
+    },
   },
   cookies: {
     sessionToken: {
@@ -331,9 +344,9 @@ export const authOptions: NextAuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: process.env.NODE_ENV === "production",
-        // Domain задаем только в проде для реального домена
+        // Domain задаем только в проде для реального домена.
         // domain: process.env.NODE_ENV === "production" ? ".your-domain.ru" : undefined,
-      }
-    }
+      },
+    },
   },
 };

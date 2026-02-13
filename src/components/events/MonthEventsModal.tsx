@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Modal with aggregated events for selected month.
+ *
+ * Main logic:
+ * - Render month-level grouped events.
+ * - Allow transition to day/detail views.
+ *
+ * Integrations:
+ * - Calendar.tsx
+ * - Event list/detail components
+ */
 // src/components/events/MonthEventsModal.tsx
 'use client'
 

@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Global toast renderer subscribing to toast helper events.
+ *
+ * Main logic:
+ * - Listen for show/hide toast events.
+ * - Render queued notifications with severity styles.
+ *
+ * Integrations:
+ * - src/lib/toast.ts
+ * - Root layout provider chain
+ */
 // src/components/ui/ToastProvider.tsx
 'use client'
 

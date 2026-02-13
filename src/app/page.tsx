@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Public entry page of the application.
+ *
+ * Main logic:
+ * - Render landing/start experience.
+ * - Provide navigation to authentication and dashboard flows.
+ *
+ * Integrations:
+ * - App Router home route
+ * - Layout and shared UI components
+ */
 'use client'
 
 import { useEffect, useRef } from 'react'

@@ -1,4 +1,16 @@
-﻿// src/components/events/CompleteEventModal.tsx
+/**
+ * File responsibility:
+ * Modal for completing an event with a structured report payload.
+ *
+ * Main logic:
+ * - Collect summary, tasks, active participants and report images
+ * - Validate required fields before submit
+ * - Convert local form state into `CompleteEventDto`
+ *
+ * Integrations:
+ * - src/components/events/page.tsx
+ * - src/contexts/AppContext.tsx completeEvent()
+ */
 'use client'
 
 import { useState } from 'react'
@@ -7,19 +19,39 @@ import Button from '@/components/ui/Button'
 import { Event, CategoryDisplayMap } from '@/types'
 import { EventCategory } from '@prisma/client'
 import { showToast } from '@/lib/toast'
+import type { CompleteEventDto } from '@/types/dto'
+
+interface ReportImagePreview {
+  url: string
+  name: string
+  size: string
+}
+
+interface ActiveParticipantState {
+  name: string
+  active: boolean
+}
+
+interface CompletionFormState {
+  title: string
+  summary: string
+  tasks: string[]
+  images: ReportImagePreview[]
+  activeParticipants: ActiveParticipantState[]
+}
 
 interface CompleteEventModalProps {
   event: Event
   onClose: () => void
-  onSubmit: (reportData: any) => void
+  onSubmit: (reportData: CompleteEventDto) => void
 }
 
 const CompleteEventModal = ({ event, onClose, onSubmit }: CompleteEventModalProps) => {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<CompletionFormState>({
     title: `Отчет: ${event?.title || 'Мероприятие'}`,
     summary: '',
     tasks: [''],
-    images: [] as Array<{ url: string; name: string; size: string }>,
+    images: [],
     activeParticipants: event?.participants?.map(p => ({ 
       name: p.name || p.email, 
       active: true 
@@ -99,7 +131,7 @@ const CompleteEventModal = ({ event, onClose, onSubmit }: CompleteEventModalProp
       return
     }
     
-    const reportData = {
+    const reportData: CompleteEventDto = {
       summary: formData.summary,
       tasks: formData.tasks.filter(task => task.trim()),
       activeParticipants: formData.activeParticipants

@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Role/permission helper functions for UI and API checks.
+ *
+ * Main logic:
+ * - Evaluate role-based access for actions and pages.
+ * - Provide reusable authorization predicates.
+ *
+ * Integrations:
+ * - next-auth session role data
+ * - UI guards and route handlers
+ */
 import { Role } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 

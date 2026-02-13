@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Login page for credentials/OAuth authentication flow.
+ *
+ * Main logic:
+ * - Collect credentials and call auth endpoint.
+ * - Handle login errors and redirect on success.
+ *
+ * Integrations:
+ * - next-auth signIn()
+ * - src/app/api/auth/[...nextauth]/route.ts
+ */
 'use client'
 
 import { useState, useEffect, useRef } from 'react'

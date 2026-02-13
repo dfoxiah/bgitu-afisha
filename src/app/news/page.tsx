@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * News page that displays completed event reports as news content.
+ *
+ * Main logic:
+ * - Filter/render news events.
+ * - Provide detail navigation and presentation.
+ *
+ * Integrations:
+ * - AppContext news collections
+ * - Event card/detail components
+ */
 'use client'
 
 import { useMemo, useState } from 'react'
@@ -123,11 +135,11 @@ export default function NewsPage() {
   }
 
   return (
-    <div className="news-page px-4 md:px-5% py-8">
+    <div className="news-page px-4 py-6 sm:py-8 md:px-[5%]">
       <div className="container mx-auto max-w-6xl space-y-6">
         <div className="liquid-section p-5 sm:p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="min-w-[220px]">
+            <div className="min-w-0">
               <h1 className="text-2xl sm:text-3xl font-bold text-primary flex items-center gap-3">
                 <i className="fas fa-newspaper text-accent"></i> Новостная лента
               </h1>
@@ -135,7 +147,7 @@ export default function NewsPage() {
                 Всего материалов: {totalCount}
               </p>
             </div>
-            <div className="w-full sm:w-[360px] sm:ml-auto">
+            <div className="w-full sm:ml-auto sm:max-w-[360px]">
               <SearchInput
                 placeholder="Поиск по новостям..."
                 onSearch={setQuery}
@@ -144,11 +156,11 @@ export default function NewsPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)}
-              className="liquid-input px-4 py-2 text-sm"
+              className="liquid-input w-full px-4 py-2 text-sm sm:w-auto"
             >
               <option value="all">Все категории</option>
               {categoryOptions.map(option => (
@@ -159,7 +171,7 @@ export default function NewsPage() {
             <select
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value as SortOrder)}
-              className="liquid-input px-4 py-2 text-sm"
+              className="liquid-input w-full px-4 py-2 text-sm sm:w-auto"
             >
               <option value="newest">Сначала новые</option>
               <option value="oldest">Сначала старые</option>
@@ -271,3 +283,4 @@ export default function NewsPage() {
     </div>
   )
 }
+

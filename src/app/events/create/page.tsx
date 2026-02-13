@@ -1,4 +1,17 @@
-﻿'use client'
+/**
+ * File responsibility:
+ * Protected page to create a new event.
+ *
+ * Main logic:
+ * - Guard access by role (TEACHER/ADMIN)
+ * - Render shared EventForm component
+ * - Submit create request via AppContext and redirect to events list
+ *
+ * Integrations:
+ * - src/components/events/EventForm.tsx
+ * - src/contexts/AppContext.tsx
+ */
+'use client'
 
 import { useEffect } from 'react'
 import { useSession } from 'next-auth/react'
@@ -6,6 +19,7 @@ import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/contexts/AppContext'
 import EventForm from '@/components/events/EventForm'
 import { showToast } from '@/lib/toast'
+import type { CreateEventDto } from '@/types/dto'
 
 export default function CreateEventPage() {
   const router = useRouter()
@@ -38,7 +52,7 @@ export default function CreateEventPage() {
     )
   }
 
-  const handleSubmit = async (formData: any) => {
+  const handleSubmit = async (formData: CreateEventDto) => {
     try {
       await createEvent(formData)
       router.replace('/events')

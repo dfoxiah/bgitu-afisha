@@ -1,0 +1,167 @@
+/**
+ * File responsibility:
+ * Client API adapter for admin panel workflows.
+ *
+ * Main logic:
+ * - Wrap fetch requests for users/events/news/import/logs endpoints
+ * - Normalize API error messages for UI feedback
+ *
+ * Integrations:
+ * - src/app/admin/page.tsx
+ */
+
+"use client"
+
+import type { EventCategory, Role } from "@prisma/client"
+import type {
+  AdminAuditLog,
+  AdminEvent,
+  AdminEventDetails,
+  AdminEventUpdateInput,
+  AdminImportMode,
+  AdminImportResult,
+  AdminNewsCreateInput,
+  AdminUser,
+  AdminUserCreateInput,
+  AdminUserUpdateInput,
+} from "@/features/admin/types"
+
+type FetchOptions = Omit<RequestInit, "body"> & {
+  body?: unknown
+}
+
+const parseErrorMessage = async (response: Response) => {
+  try {
+    const payload = (await response.json()) as {
+      error?: string
+      message?: string
+      errorPayload?: { message?: string }
+    }
+    return payload.errorPayload?.message || payload.error || payload.message || "Ошибка запроса"
+  } catch {
+    return "Ошибка запроса"
+  }
+}
+
+const request = async <T>(url: string, options: FetchOptions = {}): Promise<T> => {
+  const headers = new Headers(options.headers || {})
+  if (options.body !== undefined) {
+    headers.set("Content-Type", "application/json")
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+
+  return (await response.json()) as T
+}
+
+export type AdminUsersQuery = {
+  search?: string
+  role?: "ALL" | Role
+  limit?: number
+}
+
+export const getAdminUsers = (query: AdminUsersQuery = {}) => {
+  const params = new URLSearchParams()
+  if (query.search) params.set("search", query.search)
+  if (query.role && query.role !== "ALL") params.set("role", query.role)
+  params.set("limit", String(query.limit || 100))
+  return request<AdminUser[]>(`/api/admin/users?${params.toString()}`)
+}
+
+export const createAdminUser = (payload: AdminUserCreateInput) =>
+  request<AdminUser>("/api/admin/users", { method: "POST", body: payload })
+
+export const updateAdminUser = (id: string, payload: AdminUserUpdateInput) =>
+  request<AdminUser>(`/api/admin/users/${id}`, { method: "PUT", body: payload })
+
+export const deleteAdminUser = (id: string) =>
+  request<{ success: true }>(`/api/admin/users/${id}`, { method: "DELETE" })
+
+export type AdminEventsQuery = {
+  search?: string
+  category?: EventCategory | "ALL"
+  status?: "ALL" | "UPCOMING" | "PAST"
+  newsOnly?: boolean
+  limit?: number
+}
+
+export const getAdminEvents = (query: AdminEventsQuery = {}) => {
+  const params = new URLSearchParams()
+  if (query.search) params.set("search", query.search)
+  if (query.category && query.category !== "ALL") params.set("category", query.category)
+  if (query.status === "UPCOMING") params.set("upcoming", "true")
+  if (query.status === "PAST") params.set("past", "true")
+  if (query.newsOnly) params.set("news", "true")
+  params.set("limit", String(query.limit || 100))
+  return request<AdminEvent[]>(`/api/admin/events?${params.toString()}`)
+}
+
+export const getAdminEventDetails = (id: string) =>
+  request<AdminEventDetails>(`/api/admin/events/${id}`)
+
+export const updateAdminEvent = (id: string, payload: AdminEventUpdateInput) =>
+  request<AdminEventDetails>(`/api/admin/events/${id}`, { method: "PUT", body: payload })
+
+export const deleteAdminEvent = (id: string) =>
+  request<{ success: true }>(`/api/admin/events/${id}`, { method: "DELETE" })
+
+export const createAdminNews = (payload: AdminNewsCreateInput) =>
+  request<AdminEvent>("/api/admin/events", {
+    method: "POST",
+    body: {
+      title: payload.title,
+      content: payload.content,
+      date: payload.date,
+      images: payload.images,
+      tasks: payload.tasks || [],
+      reportComment: payload.reportComment || "",
+      createReport: payload.createReport ?? Boolean((payload.tasks || []).length || payload.reportComment),
+    },
+  })
+
+export type AdminLogsQuery = {
+  action?: string
+  entityType?: string
+  limit?: number
+}
+
+export const getAdminLogs = (query: AdminLogsQuery = {}) => {
+  const params = new URLSearchParams()
+  if (query.action) params.set("action", query.action)
+  if (query.entityType) params.set("entityType", query.entityType)
+  params.set("limit", String(query.limit || 100))
+  return request<AdminAuditLog[]>(`/api/admin/logs?${params.toString()}`)
+}
+
+export const importAdminData = async (
+  type: "users" | "events" | "news",
+  mode: AdminImportMode,
+  file: File
+) => {
+  const text = await file.text()
+  const isJson = file.name.toLowerCase().endsWith(".json")
+  const response = await fetch(`/api/admin/import?type=${type}&mode=${mode}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": isJson ? "application/json" : "text/csv; charset=utf-8",
+    },
+    body: text,
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+
+  return (await response.json()) as AdminImportResult
+}
+

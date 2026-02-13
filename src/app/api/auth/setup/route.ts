@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Bootstrap endpoint for local auth seed/setup tasks.
+ *
+ * Main logic:
+ * - Create/update baseline accounts for development.
+ * - Return setup status and diagnostics.
+ *
+ * Integrations:
+ * - Prisma User model
+ * - Local test/smoke initialization
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";

@@ -1,102 +1,92 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { ParticipantStatus } from "@prisma/client";
-import { buildAuditMeta, logAuditEvent } from "@/lib/audit";
+﻿/**
+ * File responsibility:
+ * Event completion API endpoint.
+ *
+ * Main logic:
+ * - Finalize event by creating report and setting `isPast`
+ * - Validate moderation rights and emit audit logs
+ *
+ * Integrations:
+ * - Complete event modal
+ * - src/server/shared/session.ts
+ */
 
-const splitParticipants = (eventParticipants: Array<{ status: ParticipantStatus; user: any }> = []) => {
-  const confirmed = eventParticipants
-    .filter(p => p.status === ParticipantStatus.CONFIRMED)
-    .map(p => p.user);
-  const pending = eventParticipants
-    .filter(p => p.status === ParticipantStatus.PENDING)
-    .map(p => p.user);
+import { NextRequest, NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
+import { prisma } from "@/lib/prisma"
+import { revalidateEventsCache } from "@/server/events/event-cache"
+import { flattenModerators, serializeReport, splitEventParticipants } from "@/server/events/event-serializer"
+import { canModerateEventByRole } from "@/server/shared/session"
+import { errorJson } from "@/server/shared/http-response"
 
-  return { confirmed, pending };
-};
+type RouteParams = {
+  params: Promise<{ id: string }>
+}
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: NextRequest, { params }: RouteParams) {
   try {
     const { id: eventId } = await params
-    const session = await getServerSession(authOptions);
+    const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Не авторизован" },
-        { status: 401 }
-      );
+      return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
     if (session.user.role !== "TEACHER" && session.user.role !== "ADMIN") {
-      return NextResponse.json(
-        { error: "Недостаточно прав" },
-        { status: 403 }
-      );
+      return errorJson(403, "FORBIDDEN", "Недостаточно прав")
     }
 
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       include: {
         report: true,
-        moderators: {
-          select: { userId: true }
-        }
-      }
-    });
+        moderators: { select: { userId: true } },
+      },
+    })
 
     if (!event) {
-      return NextResponse.json(
-        { error: "Мероприятие не найдено" },
-        { status: 404 }
-      );
+      return errorJson(404, "NOT_FOUND", "Мероприятие не найдено")
     }
 
-    const isOwner = event.creatorId === session.user.id;
-    const isModerator = event.moderators.some(m => m.userId === session.user.id);
-    const canModerate =
-      session.user.role === "ADMIN" ||
-      (session.user.role === "TEACHER" && (isOwner || isModerator));
+    const canModerate = canModerateEventByRole({
+      role: session.user.role,
+      userId: session.user.id,
+      creatorId: event.creatorId,
+      moderatorIds: event.moderators.map((moderator) => moderator.userId),
+    })
 
     if (!canModerate) {
-      return NextResponse.json(
-        { error: "Недостаточно прав для завершения мероприятия" },
-        { status: 403 }
-      );
+      return errorJson(403, "FORBIDDEN", "Недостаточно прав для завершения мероприятия")
     }
 
     if (event.report) {
-      return NextResponse.json(
-        { error: "Мероприятие уже завершено" },
-        { status: 400 }
-      );
+      return errorJson(400, "CONFLICT", "Мероприятие уже завершено")
     }
 
-    const body = await req.json();
-    const summary = typeof body.summary === "string" ? body.summary.trim() : "";
+    const bodyRaw: unknown = await req.json()
+    if (!bodyRaw || typeof bodyRaw !== "object") {
+      return errorJson(400, "BAD_REQUEST", "Некорректное тело запроса")
+    }
+
+    const body = bodyRaw as Record<string, unknown>
+    const summary = typeof body.summary === "string" ? body.summary.trim() : ""
     if (!summary) {
-      return NextResponse.json(
-        { error: "Заполните описание мероприятия" },
-        { status: 400 }
-      );
+      return errorJson(400, "VALIDATION_ERROR", "Заполните описание мероприятия")
     }
 
     const tasks = Array.isArray(body.tasks)
-      ? body.tasks.map((task: string) => task.trim()).filter(Boolean)
-      : [];
-
+      ? body.tasks.map((task) => String(task).trim()).filter(Boolean)
+      : []
     const activeParticipants = Array.isArray(body.activeParticipants)
-      ? body.activeParticipants.map((p: string) => String(p)).filter(Boolean)
-      : [];
-
+      ? body.activeParticipants.map((item) => String(item)).filter(Boolean)
+      : []
     const images = Array.isArray(body.images)
-      ? body.images.map((img: string) => String(img)).filter(Boolean)
-      : [];
+      ? body.images.map((item) => String(item)).filter(Boolean)
+      : []
 
-    const reportDate = body.reportDate ? new Date(body.reportDate) : new Date();
+    const reportDate = body.reportDate ? new Date(String(body.reportDate)) : new Date()
 
     const updated = await prisma.event.update({
       where: { id: eventId },
@@ -108,9 +98,9 @@ export async function POST(
             tasks,
             activeParticipants,
             images,
-            reportDate
-          }
-        }
+            reportDate,
+          },
+        },
       },
       include: {
         report: true,
@@ -126,10 +116,10 @@ export async function POST(
                 department: true,
                 group: true,
                 image: true,
-                createdAt: true
-              }
-            }
-          }
+                createdAt: true,
+              },
+            },
+          },
         },
         creator: true,
         moderators: {
@@ -142,50 +132,46 @@ export async function POST(
                 role: true,
                 department: true,
                 group: true,
-                image: true
-              }
-            }
-          }
-        }
-      }
-    });
+                image: true,
+              },
+            },
+          },
+        },
+      },
+    })
 
-    const { confirmed, pending } = splitParticipants(updated.eventParticipants);
+    const { confirmed, pending } = splitEventParticipants(updated.eventParticipants)
 
-    const { ip, userAgent } = buildAuditMeta(req);
+    const { ip, userAgent } = buildAuditMeta(req)
     await logAuditEvent({
       actorId: session.user.id,
       action: "EVENT_COMPLETE",
       entityType: "Event",
       entityId: updated.id,
-      metadata: { summaryLength: summary.length },
+      metadata: {
+        summaryLength: summary.length,
+        tasksCount: tasks.length,
+        imagesCount: images.length,
+      },
       ip,
-      userAgent
-    });
+      userAgent,
+    })
+
+    revalidateEventsCache()
 
     return NextResponse.json({
       ...updated,
       currentParticipants: confirmed.length,
       participants: confirmed,
       pendingParticipants: pending,
-      moderators: updated.moderators?.map(m => m.user) || [],
+      moderators: flattenModerators(updated.moderators),
       date: updated.date.toISOString(),
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),
-      report: updated.report
-        ? {
-            ...updated.report,
-            reportDate: updated.report.reportDate.toISOString(),
-            createdAt: updated.report.createdAt.toISOString(),
-            updatedAt: updated.report.updatedAt.toISOString()
-          }
-        : null
-    });
+      report: serializeReport(updated.report),
+    })
   } catch (error) {
-    console.error("Complete event error:", error);
-    return NextResponse.json(
-      { error: "Ошибка сервера" },
-      { status: 500 }
-    );
+    console.error("POST /api/events/[id]/complete error", error)
+    return errorJson(500, "SERVER_ERROR", "Ошибка сервера")
   }
 }

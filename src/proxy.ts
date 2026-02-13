@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Middleware entry for route protection and session-aware redirects.
+ *
+ * Main logic:
+ * - Apply access rules for public/private/admin routes.
+ * - Forward authorized traffic and redirect unauthorized requests.
+ *
+ * Integrations:
+ * - Next.js proxy/middleware runtime
+ * - next-auth session cookies
+ */
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'

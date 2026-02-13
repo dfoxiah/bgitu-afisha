@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Client-side toast event helper for lightweight notifications.
+ *
+ * Main logic:
+ * - Emit typed toast events with message/severity.
+ * - Provide shared utility used by UI actions and forms.
+ *
+ * Integrations:
+ * - src/components/ui/ToastProvider.tsx
+ * - Client pages/components
+ */
 export type ToastType = 'success' | 'error' | 'info'
 
 export interface ToastPayload {

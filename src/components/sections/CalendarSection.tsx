@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Dashboard section embedding the event calendar module.
+ *
+ * Main logic:
+ * - Render calendar in dashboard composition.
+ * - Pass normalized event collections to calendar.
+ *
+ * Integrations:
+ * - Dashboard page
+ * - src/components/events/Calendar.tsx
+ */
 'use client'
 
 import { useState, useMemo } from 'react'
@@ -65,7 +77,7 @@ const CalendarSection = ({ events }: CalendarSectionProps) => {
   }
 
   return (
-    <section className="calendar-section liquid-section p-3 sm:p-6 lg:p-8 mx-4 sm:mx-5% my-4">
+    <section className="calendar-section liquid-section p-3 sm:p-6 lg:p-8 mx-4 sm:mx-[5%] my-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
         <h2 className="section-title text-lg sm:text-2xl text-primary flex items-center gap-3">
           <i className="fas fa-calendar-alt"></i> Календарь мероприятий
@@ -109,3 +121,4 @@ const CalendarSection = ({ events }: CalendarSectionProps) => {
 }
 
 export default CalendarSection
+

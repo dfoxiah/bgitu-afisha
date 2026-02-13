@@ -1,4 +1,16 @@
-﻿'use client'
+/**
+ * File responsibility:
+ * Image gallery modal for browsing event/report media.
+ *
+ * Main logic:
+ * - Display selected image and navigation controls.
+ * - Support fullscreen-like preview experience.
+ *
+ * Integrations:
+ * - Event detail/report components
+ * - Modal UI layer
+ */
+'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom'
@@ -72,14 +84,14 @@ export default function ImageGalleryModal({
 
   return ReactDOM.createPortal(
     <div
-      className="fixed inset-0 z-[500] bg-black/80 backdrop-blur-sm flex items-center justify-center"
+      className="fixed inset-0 z-[500] flex items-center justify-center bg-black/80 p-2 backdrop-blur-sm sm:p-4"
       onClick={onClose}
     >
       <div
-        className="relative w-[92%] max-w-6xl max-h-[92vh] bg-black/90 rounded-2xl border border-white/10 overflow-hidden"
+        className="relative w-full max-w-6xl max-h-[92vh] overflow-hidden rounded-2xl border border-white/10 bg-black/90 sm:w-[92%]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 text-white">
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 text-white sm:px-5 sm:py-4">
           <div className="font-semibold">
             {title || 'Просмотр фото'}
           </div>
@@ -113,7 +125,7 @@ export default function ImageGalleryModal({
               <button
                 type="button"
                 onClick={handlePrev}
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-black/60 text-white hover:bg-black/80 z-10"
+                className="absolute left-2 top-1/2 z-10 h-10 w-10 -translate-y-1/2 rounded-full bg-black/60 text-white hover:bg-black/80 sm:left-3 sm:h-12 sm:w-12"
                 aria-label="Предыдущее фото"
               >
                 <i className="fas fa-chevron-left"></i>
@@ -121,7 +133,7 @@ export default function ImageGalleryModal({
               <button
                 type="button"
                 onClick={handleNext}
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-black/60 text-white hover:bg-black/80 z-10"
+                className="absolute right-2 top-1/2 z-10 h-10 w-10 -translate-y-1/2 rounded-full bg-black/60 text-white hover:bg-black/80 sm:right-3 sm:h-12 sm:w-12"
                 aria-label="Следующее фото"
               >
                 <i className="fas fa-chevron-right"></i>
@@ -137,13 +149,13 @@ export default function ImageGalleryModal({
         </div>
 
         {hasImages && totalImages > 1 && (
-          <div className="flex gap-3 px-5 py-4 overflow-x-auto bg-black/70 border-t border-white/10">
+          <div className="flex gap-3 overflow-x-auto border-t border-white/10 bg-black/70 px-4 py-3 sm:px-5 sm:py-4">
             {normalizedImages.map((image, index) => (
               <button
                 key={index}
                 type="button"
                 onClick={() => setCurrentIndex(index)}
-                className={`w-20 h-14 rounded-lg overflow-hidden border ${
+                className={`h-12 w-16 overflow-hidden rounded-lg border sm:h-14 sm:w-20 ${
                   index === currentIndex ? 'border-accent' : 'border-white/20'
                 }`}
                 aria-label={`Открыть фото ${index + 1}`}

@@ -1,9 +1,22 @@
-﻿// src/app/profile/page.tsx
+/**
+ * File responsibility:
+ * Profile page for viewing/updating personal data and notification preferences.
+ *
+ * Main logic:
+ * - Load and normalize profile fields from session
+ * - Validate editable fields before update
+ * - Sync successful changes with NextAuth session and AppContext
+ *
+ * Integrations:
+ * - src/app/api/auth/profile/route.ts
+ * - src/contexts/AppContext.tsx updateProfile()
+ */
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSession, signOut, getSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { useAppContext } from '@/contexts/AppContext'
 import Button from '@/components/ui/Button'
 import { useDebugger } from '@/lib/debugger'
@@ -536,7 +549,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="profile-page px-4 md:px-5% py-8 bg-light-gray min-h-screen">
+    <div className="profile-page px-4 md:px-[5%] py-8 bg-light-gray min-h-screen">
       <div className="container mx-auto max-w-4xl">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6 sm:mb-8">
           <h2 className="section-title text-2xl sm:text-3xl font-bold text-primary flex items-center gap-3">
@@ -601,14 +614,16 @@ export default function ProfilePage() {
               <div className="flex flex-col items-center text-center mb-5 sm:mb-6">
                 <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-white/70 overflow-hidden bg-gradient-to-br from-primary to-secondary mb-4 flex items-center justify-center shadow-xl profile-avatar-ring">
                   {session.user.image ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img 
-                        src={session.user.image} 
+                    <div className="relative w-full h-full">
+                      <Image
+                        src={session.user.image}
                         alt={session.user.name || 'Аватар'}
-                        className="w-full h-full object-cover"
+                        fill
+                        sizes="128px"
+                        className="object-cover"
+                        unoptimized
                       />
-                    </>
+                    </div>
                   ) : (
                     <i className="fas fa-user text-5xl sm:text-6xl text-white"></i>
                   )}
@@ -909,7 +924,7 @@ export default function ProfilePage() {
                   Отладочная информация
                 </h4>
                 <div className="space-y-3 text-sm font-mono">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <span className="text-gray-400">User ID:</span>
                       <div className="truncate">{session.user.id}</div>
@@ -946,6 +961,7 @@ export default function ProfilePage() {
     </div>
   )
 }
+
 
 
 

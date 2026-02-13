@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Registration page for new local user accounts.
+ *
+ * Main logic:
+ * - Collect registration form payload.
+ * - Call register API and route to login/dashboard.
+ *
+ * Integrations:
+ * - src/app/api/auth/register/route.ts
+ * - next/navigation redirects
+ */
 'use client'
 
 import { useState, useEffect, useRef } from 'react'

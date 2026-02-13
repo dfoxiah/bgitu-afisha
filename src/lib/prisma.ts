@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Prisma client singleton bootstrap for server-side database access.
+ *
+ * Main logic:
+ * - Create a single PrismaClient instance for dev/prod.
+ * - Prevent duplicate connections during hot reload.
+ *
+ * Integrations:
+ * - Prisma ORM
+ * - All server services and API route handlers
+ */
 // bgitu-afisha/src/lib/prisma.ts
 
 import { PrismaClient } from '@prisma/client'

@@ -1,4 +1,16 @@
-﻿// src/components/events/EventForm.tsx
+/**
+ * File responsibility:
+ * Create/edit event form with participant/moderator and image management.
+ *
+ * Main logic:
+ * - Keep local editable form state
+ * - Validate required event fields and date-time constraints
+ * - Convert view-state into `CreateEventDto` for submit handlers
+ *
+ * Integrations:
+ * - src/components/events/page.tsx
+ * - src/app/events/create/page.tsx
+ */
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -8,17 +20,38 @@ import Button from '@/components/ui/Button'
 import { Event } from '@/types'
 import { EventCategory, CategoryReverseMap } from '@/types'
 import { showToast } from '@/lib/toast'
+import type { CreateEventDto } from '@/types/dto'
+
+interface EventImagePreview {
+  url: string
+  name: string
+  size: string
+}
+
+interface EventFormState {
+  title: string
+  category: EventCategory
+  date: string
+  time: string
+  duration: string
+  location: string
+  description: string
+  maxParticipants: number
+  participants: string[]
+  moderators: string[]
+  images: EventImagePreview[]
+}
 
 interface EventFormProps {
   event?: Event | null
   onClose: () => void
-  onSubmit: (formData: any) => void
+  onSubmit: (formData: CreateEventDto) => void
 }
 
 const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
   const [activeTab, setActiveTab] = useState<'basic' | 'participants'>('basic')
   const { data: session } = useSession()
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<EventFormState>({
     title: '',
     category: 'PUBLIC_EVENT' as EventCategory,
     date: '',
@@ -29,7 +62,7 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
     maxParticipants: 0,
     participants: [] as string[],
     moderators: [] as string[],
-    images: [] as Array<{ url: string; name: string; size: string }>
+    images: []
   })
   
   const [newParticipant, setNewParticipant] = useState('')
@@ -234,7 +267,7 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
     }
     
     // Форматируем данные для отправки
-    const submitData = {
+    const submitData: CreateEventDto = {
       ...formData,
       date: formData.date,
       category: formData.category,

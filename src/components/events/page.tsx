@@ -1,4 +1,17 @@
-﻿// src/components/events/page.tsx
+/**
+ * File responsibility:
+ * Events workspace page for teachers/admins to create, edit and complete events.
+ *
+ * Main logic:
+ * - Display upcoming/past tabs
+ * - Control event form and completion modal
+ * - Delegate all data mutations to AppContext actions
+ *
+ * Integrations:
+ * - src/components/events/EventForm.tsx
+ * - src/components/events/CompleteEventModal.tsx
+ * - src/contexts/AppContext.tsx
+ */
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -10,6 +23,7 @@ import CompleteEventModal from '@/components/events/CompleteEventModal'
 import Button from '@/components/ui/Button'
 import { Event } from '@/types'
 import { showToast } from '@/lib/toast'
+import type { CompleteEventDto, CreateEventDto } from '@/types/dto'
 
 export default function EventsPage() {
   const { data: session } = useSession()
@@ -44,7 +58,7 @@ export default function EventsPage() {
     }
     completionTimeoutRef.current = setTimeout(() => setCompletionEffect(false), 1800)
   }
-  const handleFormSubmit = async (formData: any) => {
+  const handleFormSubmit = async (formData: CreateEventDto) => {
     try {
       if (editingEvent) {
         await updateEvent(editingEvent.id, formData)
@@ -59,7 +73,7 @@ export default function EventsPage() {
     }
   }
 
-  const handleComplete = async (reportData: any) => {
+  const handleComplete = async (reportData: CompleteEventDto) => {
     if (completingEvent) {
       try {
         await completeEvent(completingEvent.id, reportData)
@@ -109,7 +123,7 @@ export default function EventsPage() {
   const isTeacher = session?.user?.role === 'TEACHER' || session?.user?.role === 'ADMIN'
 
   return (
-    <div className="events-page px-4 md:px-5% py-8">
+    <div className="events-page px-4 md:px-[5%] py-8">
       {completionEffect && (
         <div className="completion-celebration" aria-hidden="true"></div>
       )}
@@ -216,6 +230,7 @@ export default function EventsPage() {
     </div>
   )
 }
+
 
 
 

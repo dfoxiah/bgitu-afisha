@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Calendar route page for monthly/day event navigation.
+ *
+ * Main logic:
+ * - Render calendar module with selected dates.
+ * - Display events grouped by date.
+ *
+ * Integrations:
+ * - src/components/events/Calendar.tsx
+ * - AppContext events data
+ */
 'use client'
 
 import { useSession } from 'next-auth/react'
@@ -30,10 +42,11 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="calendar-page px-4 md:px-5% py-8">
+    <div className="calendar-page px-4 md:px-[5%] py-8">
       <div className="container mx-auto">
         <CalendarSection events={events} />
       </div>
     </div>
   )
 }
+

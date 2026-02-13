@@ -1,4 +1,16 @@
-﻿'use client'
+/**
+ * File responsibility:
+ * Category filter control for event collections.
+ *
+ * Main logic:
+ * - Render category chips/selectors.
+ * - Update selected category in shared context state.
+ *
+ * Integrations:
+ * - AppContext setSelectedCategory()
+ * - Dashboard/events pages
+ */
+'use client'
 
 import { useAppContext } from '@/contexts/AppContext'
 
@@ -6,7 +18,7 @@ export default function CategoryFilter() {
   const { categories, selectedCategory, setSelectedCategory } = useAppContext()
 
   return (
-    <section className="categories liquid-section px-4 sm:px-6 lg:px-5% py-4 sm:py-5 animate-fadeIn">
+    <section className="categories liquid-section px-4 sm:px-6 lg:px-[5%] py-4 sm:py-5 animate-fadeIn">
       <h2 className="section-title text-lg sm:text-2xl font-semibold text-primary mb-4 flex items-center gap-3">
         <i className="fas fa-tags text-accent"></i> Категории мероприятий
       </h2>
@@ -28,4 +40,5 @@ export default function CategoryFilter() {
     </section>
   )
 }
+
 

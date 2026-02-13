@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Common page shell combining header/footer and main content slot.
+ *
+ * Main logic:
+ * - Compose consistent app layout wrapper.
+ * - Provide shared structure for route pages.
+ *
+ * Integrations:
+ * - Header/Footer components
+ * - Root layout composition
+ */
 'use client'
 
 import { usePathname } from 'next/navigation'

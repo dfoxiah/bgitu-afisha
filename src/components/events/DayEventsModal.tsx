@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Modal with events for a specific selected day.
+ *
+ * Main logic:
+ * - Render day-level event list.
+ * - Provide quick navigation to event details.
+ *
+ * Integrations:
+ * - Calendar.tsx
+ * - Event card/detail routes
+ */
 // bgitu-afisha/src/components/events/DayEventsModal.tsx
 
 'use client'

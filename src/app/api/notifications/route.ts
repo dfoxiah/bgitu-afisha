@@ -1,169 +1,173 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { NotificationType } from '@prisma/client'
-import { buildAuditMeta, logAuditEvent } from '@/lib/audit'
+﻿/**
+ * File responsibility:
+ * Notifications collection endpoint for current user.
+ *
+ * Main logic:
+ * - GET list, PATCH mark-all-read, DELETE clear-all
+ * - POST event notification broadcast for moderators
+ *
+ * Integrations:
+ * - src/contexts/AppContext.tsx
+ * - src/components/ui/NotificationModal.tsx
+ */
 
-export const dynamic = 'force-dynamic'
+import { NextRequest, NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { NotificationType } from "@prisma/client"
+import { authOptions } from "@/lib/auth"
+import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
+import { prisma } from "@/lib/prisma"
+import { canModerateEventByRole } from "@/server/shared/session"
+import { errorJson } from "@/server/shared/http-response"
+
+export const dynamic = "force-dynamic"
 
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: '\u041d\u0435 \u0430\u0432\u0442\u043e\u0440\u0438\u0437\u043e\u0432\u0430\u043d' }, { status: 401 })
+      return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
     const notifications = await prisma.notification.findMany({
       where: { userId: session.user.id },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: "desc" },
     })
 
     return NextResponse.json(notifications)
   } catch (error) {
-    console.error('Notifications GET error:', error)
-    return NextResponse.json(
-      { error: '\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0430' },
-      { status: 500 }
-    )
+    console.error("GET /api/notifications error", error)
+    return errorJson(500, "SERVER_ERROR", "Ошибка сервера")
   }
 }
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: '\u041d\u0435 \u0430\u0432\u0442\u043e\u0440\u0438\u0437\u043e\u0432\u0430\u043d' }, { status: 401 })
+      return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
-    const body = await req.json()
-    const eventId = String(body.eventId || '').trim()
-    const content = String(body.content || '').trim()
-    const recipients = String(body.recipients || 'all')
-    const type = (body.type as NotificationType) || 'EVENT'
+    const bodyRaw: unknown = await req.json()
+    if (!bodyRaw || typeof bodyRaw !== "object") {
+      return errorJson(400, "BAD_REQUEST", "Некорректное тело запроса")
+    }
+
+    const body = bodyRaw as Record<string, unknown>
+    const eventId = String(body.eventId || "").trim()
+    const content = String(body.content || "").trim()
+    const recipients = String(body.recipients || "all")
+    const type = (body.type as NotificationType) || "EVENT"
 
     if (!eventId || !content) {
-      return NextResponse.json({ error: '\u041d\u0435\u043a\u043e\u0440\u0440\u0435\u043a\u0442\u043d\u044b\u0435 \u0434\u0430\u043d\u043d\u044b\u0435' }, { status: 400 })
+      return errorJson(400, "VALIDATION_ERROR", "Некорректные данные")
     }
 
-    if (session.user.role !== 'TEACHER' && session.user.role !== 'ADMIN') {
-      return NextResponse.json({ error: '\u041d\u0435\u0434\u043e\u0441\u0442\u0430\u0442\u043e\u0447\u043d\u043e \u043f\u0440\u0430\u0432' }, { status: 403 })
+    if (session.user.role !== "TEACHER" && session.user.role !== "ADMIN") {
+      return errorJson(403, "FORBIDDEN", "Недостаточно прав")
     }
 
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       include: {
-        moderators: {
-          select: { userId: true }
-        },
-        eventParticipants: {
-          select: {
-            status: true,
-            userId: true
-          }
-        }
-      }
+        moderators: { select: { userId: true } },
+        eventParticipants: { select: { status: true, userId: true } },
+      },
     })
 
     if (!event) {
-      return NextResponse.json({ error: '\u041c\u0435\u0440\u043e\u043f\u0440\u0438\u044f\u0442\u0438\u0435 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e' }, { status: 404 })
+      return errorJson(404, "NOT_FOUND", "Мероприятие не найдено")
     }
 
-    const isOwner = event.creatorId === session.user.id
-    const isModerator = event.moderators.some(m => m.userId === session.user.id)
-    const canModerate =
-      session.user.role === 'ADMIN' ||
-      (session.user.role === 'TEACHER' && (isOwner || isModerator))
+    const canModerate = canModerateEventByRole({
+      role: session.user.role,
+      userId: session.user.id,
+      creatorId: event.creatorId,
+      moderatorIds: event.moderators.map((moderator) => moderator.userId),
+    })
 
     if (!canModerate) {
-      return NextResponse.json({ error: '\u041d\u0435\u0434\u043e\u0441\u0442\u0430\u0442\u043e\u0447\u043d\u043e \u043f\u0440\u0430\u0432 \u0434\u043b\u044f \u0440\u0430\u0441\u0441\u044b\u043b\u043a\u0438 \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0439' }, { status: 403 })
+      return errorJson(403, "FORBIDDEN", "Недостаточно прав для рассылки уведомлений")
     }
 
     const confirmedIds = event.eventParticipants
-      .filter(p => p.status === 'CONFIRMED')
-      .map(p => p.userId)
+      .filter((participant) => participant.status === "CONFIRMED")
+      .map((participant) => participant.userId)
     const pendingIds = event.eventParticipants
-      .filter(p => p.status === 'PENDING')
-      .map(p => p.userId)
+      .filter((participant) => participant.status === "PENDING")
+      .map((participant) => participant.userId)
 
     const baseIds =
-      recipients === 'confirmed'
+      recipients === "confirmed"
         ? confirmedIds
-        : recipients === 'pending'
+        : recipients === "pending"
           ? pendingIds
           : [...confirmedIds, ...pendingIds]
 
     const targetIds = new Set<string>([...baseIds, event.creatorId])
-
-    const notificationsData = Array.from(targetIds).map(userId => ({
+    const notificationsData = Array.from(targetIds).map((userId) => ({
       userId,
-      title: '\u0423\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0435 \u043e \u043c\u0435\u0440\u043e\u043f\u0440\u0438\u044f\u0442\u0438\u0438',
+      title: "Уведомление о мероприятии",
       content,
       type,
       read: false,
       metadata: {
         eventId,
         recipients,
-        sentBy: session.user.name || session.user.email || '\u0421\u0438\u0441\u0442\u0435\u043c\u0430'
-      }
+        sentBy: session.user.name || session.user.email || "Система",
+      },
     }))
 
     if (notificationsData.length === 0) {
       return NextResponse.json({ created: 0 })
     }
 
-    const result = await prisma.notification.createMany({
-      data: notificationsData
-    })
+    const result = await prisma.notification.createMany({ data: notificationsData })
 
     const { ip, userAgent } = buildAuditMeta(req)
     await logAuditEvent({
       actorId: session.user.id,
-      action: 'EVENT_NOTIFY',
-      entityType: 'Event',
+      action: "EVENT_NOTIFY",
+      entityType: "Event",
       entityId: eventId,
       metadata: { recipients, count: result.count },
       ip,
-      userAgent
+      userAgent,
     })
 
     return NextResponse.json({ created: result.count })
   } catch (error) {
-    console.error('Notifications POST error:', error)
-    return NextResponse.json(
-      { error: '\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0430' },
-      { status: 500 }
-    )
+    console.error("POST /api/notifications error", error)
+    return errorJson(500, "SERVER_ERROR", "Ошибка сервера")
   }
 }
+
 export async function DELETE(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: '\u041d\u0435 \u0430\u0432\u0442\u043e\u0440\u0438\u0437\u043e\u0432\u0430\u043d' }, { status: 401 })
+      return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
     await prisma.notification.deleteMany({
-      where: { userId: session.user.id }
+      where: { userId: session.user.id },
     })
 
     const { ip, userAgent } = buildAuditMeta(req)
     await logAuditEvent({
       actorId: session.user.id,
-      action: 'NOTIFICATIONS_CLEAR',
-      entityType: 'Notification',
+      action: "NOTIFICATIONS_CLEAR",
+      entityType: "Notification",
       entityId: session.user.id,
-      metadata: { scope: 'self' },
+      metadata: { scope: "self" },
       ip,
-      userAgent
+      userAgent,
     })
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Notifications DELETE error:', error)
-    return NextResponse.json(
-      { error: '\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0430' },
-      { status: 500 }
-    )
+    console.error("DELETE /api/notifications error", error)
+    return errorJson(500, "SERVER_ERROR", "Ошибка сервера")
   }
 }
 
@@ -171,31 +175,28 @@ export async function PATCH(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
+      return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
     const result = await prisma.notification.updateMany({
       where: { userId: session.user.id, read: false },
-      data: { read: true }
+      data: { read: true },
     })
 
     const { ip, userAgent } = buildAuditMeta(req)
     await logAuditEvent({
       actorId: session.user.id,
-      action: 'NOTIFICATIONS_MARK_READ',
-      entityType: 'Notification',
+      action: "NOTIFICATIONS_MARK_READ",
+      entityType: "Notification",
       entityId: session.user.id,
       metadata: { updated: result.count },
       ip,
-      userAgent
+      userAgent,
     })
 
     return NextResponse.json({ success: true, updated: result.count })
   } catch (error) {
-    console.error('Notifications PATCH error:', error)
-    return NextResponse.json(
-      { error: 'Ошибка сервера' },
-      { status: 500 }
-    )
+    console.error("PATCH /api/notifications error", error)
+    return errorJson(500, "SERVER_ERROR", "Ошибка сервера")
   }
 }

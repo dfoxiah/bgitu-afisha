@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Calendar component for visual event distribution by dates.
+ *
+ * Main logic:
+ * - Build month grid and date cells.
+ * - Highlight dates with events and open detail modals.
+ *
+ * Integrations:
+ * - AppContext events data
+ * - Day/Month events modal components
+ */
 'use client'
 
 import { useState, useEffect } from 'react'

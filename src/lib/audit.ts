@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Audit logging helpers shared by API and domain services.
+ *
+ * Main logic:
+ * - Build normalized audit payloads.
+ * - Persist action metadata in audit log storage.
+ *
+ * Integrations:
+ * - Prisma AuditLog model
+ * - src/server/* and src/app/api/* routes
+ */
 import { NextRequest } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'

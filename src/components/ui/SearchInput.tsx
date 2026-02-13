@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Shared search input control for list filtering.
+ *
+ * Main logic:
+ * - Handle controlled search value updates.
+ * - Emit normalized query changes to parent modules.
+ *
+ * Integrations:
+ * - Dashboard/events/news filters
+ * - AppContext search state
+ */
 'use client'
 
 import { useState, useEffect, useRef } from 'react'

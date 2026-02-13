@@ -1,4 +1,18 @@
-// src/app/dashboard/page.tsx
+/**
+ * File responsibility:
+ * Main dashboard page with global search and event sections.
+ *
+ * Main logic:
+ * - Handle session fallback when NextAuth is stuck in loading state
+ * - Build filtered/sorted search results on top of AppContext collections
+ * - Render key dashboard sections (banner, upcoming, calendar, news)
+ *
+ * Integrations:
+ * - src/contexts/AppContext.tsx
+ * - src/components/events/CategoryFilter.tsx
+ * - src/components/events/EventCard.tsx
+ * - src/components/sections/*
+ */
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -12,15 +26,24 @@ import CalendarSection from '@/components/sections/CalendarSection'
 import NewsSection from '@/components/sections/NewsSection'
 import Banner from '@/components/sections/Banner'
 
+type SortBy = 'date_desc' | 'date_asc' | 'title_asc' | 'title_desc'
+type StatusFilter = 'all' | 'active' | 'past'
+
+const SORT_OPTIONS: ReadonlyArray<SortBy> = ['date_desc', 'date_asc', 'title_asc', 'title_desc']
+const STATUS_OPTIONS: ReadonlyArray<StatusFilter> = ['all', 'active', 'past']
+
+const isSortBy = (value: string): value is SortBy => SORT_OPTIONS.includes(value as SortBy)
+const isStatusFilter = (value: string): value is StatusFilter => STATUS_OPTIONS.includes(value as StatusFilter)
+
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const { 
-    events, 
-    upcomingEvents, 
-    pastEvents, 
+  const {
+    events,
+    upcomingEvents,
+    pastEvents,
     filteredEvents,
-    searchQuery 
+    searchQuery,
   } = useAppContext()
 
   const loadingTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -44,20 +67,22 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (status !== 'loading') return
+
     const timer = setTimeout(async () => {
       const freshSession = await getSession()
       if (freshSession) {
         router.refresh()
         return
       }
+
       router.replace('/login?fallback=1')
     }, 6000)
 
     return () => clearTimeout(timer)
   }, [status, router])
 
-  const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'title_asc' | 'title_desc'>('date_desc')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'past'>('all')
+  const [sortBy, setSortBy] = useState<SortBy>('date_desc')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return []
@@ -66,7 +91,7 @@ export default function DashboardPage() {
     let results = [...filteredEvents]
 
     if (statusFilter !== 'all') {
-      results = results.filter(event => {
+      results = results.filter((event) => {
         const eventDate = event.date instanceof Date ? event.date : new Date(event.date)
         const isPast = event.isPast || eventDate < now
         return statusFilter === 'past' ? isPast : !isPast
@@ -114,7 +139,7 @@ export default function DashboardPage() {
 
   return (
     <div className="dashboard-page pb-8">
-      <div className="search-section px-4 sm:px-6 lg:px-5% py-5 sm:py-6">
+      <div className="search-section px-4 sm:px-6 lg:px-[5%] py-5 sm:py-6">
         <div className="container mx-auto">
           <div className="liquid-section p-4 sm:p-6">
             <h1 className="text-2xl sm:text-3xl font-bold text-primary mb-2">
@@ -130,7 +155,7 @@ export default function DashboardPage() {
       <CategoryFilter />
 
       {searchQuery.trim() && (
-        <section className="search-results liquid-section p-4 sm:p-6 mx-4 sm:mx-5% my-4">
+        <section className="search-results liquid-section p-4 sm:p-6 mx-4 sm:mx-[5%] my-4">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
             <div>
               <h2 className="text-xl sm:text-2xl font-semibold text-primary">
@@ -143,7 +168,12 @@ export default function DashboardPage() {
             <div className="flex flex-col sm:flex-row gap-3">
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
+                onChange={(event) => {
+                  const nextSort = event.target.value
+                  if (isSortBy(nextSort)) {
+                    setSortBy(nextSort)
+                  }
+                }}
                 className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg bg-white text-sm"
               >
                 <option value="date_desc">Сначала новые</option>
@@ -153,7 +183,12 @@ export default function DashboardPage() {
               </select>
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
+                onChange={(event) => {
+                  const nextStatus = event.target.value
+                  if (isStatusFilter(nextStatus)) {
+                    setStatusFilter(nextStatus)
+                  }
+                }}
                 className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg bg-white text-sm"
               >
                 <option value="all">Все мероприятия</option>
@@ -169,14 +204,14 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="events-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-              {searchResults.map(event => (
+              {searchResults.map((event) => (
                 <EventCard key={event.id} event={event} />
               ))}
             </div>
           )}
         </section>
       )}
-      
+
       {events.length > 0 && (
         <>
           <Banner events={upcomingEvents.slice(0, 3)} />
@@ -185,10 +220,10 @@ export default function DashboardPage() {
           <NewsSection events={pastEvents} />
         </>
       )}
-      
+
       {events.length === 0 && (
         <div className="text-center py-12">
-          <div className="bg-white rounded-lg shadow-md p-6 sm:p-8 mx-4 sm:mx-5%">
+          <div className="bg-white rounded-lg shadow-md p-6 sm:p-8 mx-4 sm:mx-[5%]">
             <i className="fas fa-calendar-plus text-4xl sm:text-5xl text-gray-300 mb-3 sm:mb-4"></i>
             <h3 className="text-base sm:text-xl font-semibold text-gray-700 mb-2">
               Нет мероприятий

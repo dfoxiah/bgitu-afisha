@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Root app layout with global providers and baseline styles.
+ *
+ * Main logic:
+ * - Wrap all pages with common shell/providers.
+ * - Attach global metadata and fonts/styles.
+ *
+ * Integrations:
+ * - Next.js App Router root layout
+ * - Session/theme/toast providers
+ */
 import type { Metadata } from 'next'
 import { Manrope, Unbounded } from 'next/font/google'
 import { getServerSession } from 'next-auth'

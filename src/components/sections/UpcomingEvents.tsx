@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Dashboard section listing near-future events.
+ *
+ * Main logic:
+ * - Render upcoming events subset.
+ * - Provide navigation actions for registration/details.
+ *
+ * Integrations:
+ * - Dashboard page
+ * - EventCard/UI components
+ */
 'use client'
 
 import { useRouter } from 'next/navigation'
@@ -25,7 +37,7 @@ const UpcomingEvents = ({ events }: UpcomingEventsProps) => {
 
   if (weekEvents.length === 0) {
     return (
-      <section className="upcoming-events liquid-section p-5 sm:p-6 lg:p-8 mx-4 sm:mx-5% my-4">
+      <section className="upcoming-events liquid-section p-5 sm:p-6 lg:p-8 mx-4 sm:mx-[5%] my-4">
         <h2 className="section-title text-lg sm:text-2xl text-primary mb-5 sm:mb-6 flex items-center gap-3">
           <i className="fas fa-clock"></i> Ближайшие мероприятия
         </h2>
@@ -38,7 +50,7 @@ const UpcomingEvents = ({ events }: UpcomingEventsProps) => {
   }
 
   return (
-    <section className="upcoming-events liquid-section p-5 sm:p-6 lg:p-8 mx-4 sm:mx-5% my-4">
+    <section className="upcoming-events liquid-section p-5 sm:p-6 lg:p-8 mx-4 sm:mx-[5%] my-4">
       <h2 className="section-title text-lg sm:text-2xl text-primary mb-5 sm:mb-6 flex items-center gap-3">
         <i className="fas fa-clock"></i> Ближайшие мероприятия
       </h2>
@@ -83,3 +95,4 @@ const UpcomingEvents = ({ events }: UpcomingEventsProps) => {
 }
 
 export default UpcomingEvents
+

@@ -1,4 +1,16 @@
-﻿import { EventCategory } from '@prisma/client'
+/**
+ * File responsibility:
+ * Static mapping between event categories and icon classes.
+ *
+ * Main logic:
+ * - Expose icon lookup for calendar/cards.
+ * - Keep visual category mapping centralized.
+ *
+ * Integrations:
+ * - Event UI components
+ * - Category rendering helpers
+ */
+import { EventCategory } from '@prisma/client'
 
 const categoryIconMap: Record<EventCategory, string> = {
   [EventCategory.CONCERT]: 'fa-music',

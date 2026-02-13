@@ -1,8 +1,21 @@
+﻿/**
+ * File responsibility:
+ * Teacher/admin-only endpoint for listing users with role/search filters.
+ *
+ * Main logic:
+ * - Validate session and role access
+ * - Build typed Prisma `where` filter from query params
+ * - Return minimal user projection for admin UI usage
+ *
+ * Integrations:
+ * - src/app/admin/page.tsx (legacy users block)
+ * - Prisma User model
+ */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { Role } from '@prisma/client'
+import { Role, type Prisma } from '@prisma/client'
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -18,14 +31,16 @@ export async function GET(req: NextRequest) {
   const role = (searchParams.get('role') || 'TEACHER').toUpperCase() as Role
   const search = searchParams.get('search')?.trim()
 
-  const where: any = {}
+  const where: Prisma.UserWhereInput = {}
+
   if (['TEACHER', 'ADMIN', 'STUDENT'].includes(role)) {
     where.role = role
   }
+
   if (search) {
     where.OR = [
       { email: { contains: search, mode: 'insensitive' } },
-      { name: { contains: search, mode: 'insensitive' } }
+      { name: { contains: search, mode: 'insensitive' } },
     ]
   }
 
@@ -39,8 +54,8 @@ export async function GET(req: NextRequest) {
       role: true,
       department: true,
       group: true,
-      image: true
-    }
+      image: true,
+    },
   })
 
   return NextResponse.json(users)

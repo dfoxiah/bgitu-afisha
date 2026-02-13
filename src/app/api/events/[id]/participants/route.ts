@@ -1,31 +1,54 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { NotificationType, ParticipantStatus } from '@prisma/client'
-import { buildAuditMeta, logAuditEvent } from '@/lib/audit'
+﻿/**
+ * File responsibility:
+ * Participant moderation API for an event.
+ *
+ * Main logic:
+ * - Confirm/reject participant requests by teacher/admin moderators
+ * - Keep participant counters, notifications and audit logs consistent
+ *
+ * Integrations:
+ * - Event card moderation UI
+ * - src/server/shared/session.ts
+ */
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+import { NextRequest, NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { NotificationType, ParticipantStatus } from "@prisma/client"
+import { authOptions } from "@/lib/auth"
+import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
+import { prisma } from "@/lib/prisma"
+import { revalidateEventsCache } from "@/server/events/event-cache"
+import { canModerateEventByRole } from "@/server/shared/session"
+import { errorJson } from "@/server/shared/http-response"
+
+type RouteParams = {
+  params: Promise<{ id: string }>
+}
+
+export async function POST(req: NextRequest, { params }: RouteParams) {
   try {
     const { id: eventId } = await params
     const session = await getServerSession(authOptions)
+
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
+      return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
-    if (session.user.role !== 'TEACHER' && session.user.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Недостаточно прав' }, { status: 403 })
+    if (session.user.role !== "TEACHER" && session.user.role !== "ADMIN") {
+      return errorJson(403, "FORBIDDEN", "Недостаточно прав")
     }
 
-    const body = await req.json()
-    const userId = String(body.userId || '').trim()
-    const action = String(body.action || '').trim()
+    const bodyRaw: unknown = await req.json()
+    if (!bodyRaw || typeof bodyRaw !== "object") {
+      return errorJson(400, "BAD_REQUEST", "Некорректное тело запроса")
+    }
 
-    if (!userId || (action !== 'confirm' && action !== 'reject')) {
-      return NextResponse.json({ error: 'Некорректные данные' }, { status: 400 })
+    const body = bodyRaw as Record<string, unknown>
+    const userId = String(body.userId || "").trim()
+    const action = String(body.action || "").trim()
+
+    if (!userId || (action !== "confirm" && action !== "reject")) {
+      return errorJson(400, "VALIDATION_ERROR", "Некорректные данные")
     }
 
     const event = await prisma.event.findUnique({
@@ -38,89 +61,89 @@ export async function POST(
         maxParticipants: true,
         currentParticipants: true,
         creatorId: true,
-        moderators: { select: { userId: true } }
-      }
+        moderators: { select: { userId: true } },
+      },
     })
 
     if (!event) {
-      return NextResponse.json({ error: 'Мероприятие не найдено' }, { status: 404 })
+      return errorJson(404, "NOT_FOUND", "Мероприятие не найдено")
     }
 
-    const isOwner = event.creatorId === session.user.id
-    const isModerator = event.moderators.some(m => m.userId === session.user.id)
-    const canModerate =
-      session.user.role === 'ADMIN' ||
-      (session.user.role === 'TEACHER' && (isOwner || isModerator))
+    const canModerate = canModerateEventByRole({
+      role: session.user.role,
+      userId: session.user.id,
+      creatorId: event.creatorId,
+      moderatorIds: event.moderators.map((moderator) => moderator.userId),
+    })
 
     if (!canModerate) {
-      return NextResponse.json({ error: 'Недостаточно прав для модерации' }, { status: 403 })
+      return errorJson(403, "FORBIDDEN", "Недостаточно прав для модерации")
     }
 
     const participant = await prisma.eventParticipant.findUnique({
-      where: { eventId_userId: { eventId, userId } }
+      where: { eventId_userId: { eventId, userId } },
     })
 
     if (!participant) {
-      return NextResponse.json({ error: 'Участник не найден' }, { status: 404 })
+      return errorJson(404, "NOT_FOUND", "Участник не найден")
     }
 
     const notifyTarget = await prisma.user.findUnique({
       where: { id: userId },
-      select: { notifyChanges: true }
+      select: { notifyChanges: true },
     })
     const shouldNotify = notifyTarget?.notifyChanges ?? true
 
     const prevStatus = participant.status
-    let nextStatus: ParticipantStatus | 'REMOVED' = prevStatus
+    let nextStatus: ParticipantStatus | "REMOVED" = prevStatus
     let delta = 0
 
-    if (action === 'confirm') {
+    if (action === "confirm") {
       if (prevStatus !== ParticipantStatus.CONFIRMED) {
         if (event.maxParticipants > 0 && event.currentParticipants >= event.maxParticipants) {
-          return NextResponse.json({ error: 'Достигнут лимит участников' }, { status: 400 })
+          return errorJson(400, "VALIDATION_ERROR", "Достигнут лимит участников")
         }
+
         nextStatus = ParticipantStatus.CONFIRMED
         delta = 1
       }
     } else {
-      // reject
-      nextStatus = 'REMOVED'
+      nextStatus = "REMOVED"
       if (prevStatus === ParticipantStatus.CONFIRMED) {
         delta = -1
       }
     }
 
     await prisma.$transaction(async (tx) => {
-      if (action === 'confirm' && prevStatus !== ParticipantStatus.CONFIRMED) {
+      if (action === "confirm" && prevStatus !== ParticipantStatus.CONFIRMED) {
         await tx.eventParticipant.update({
           where: { eventId_userId: { eventId, userId } },
-          data: { status: ParticipantStatus.CONFIRMED }
+          data: { status: ParticipantStatus.CONFIRMED },
         })
       }
 
-      if (action === 'reject') {
+      if (action === "reject") {
         await tx.eventParticipant.delete({
-          where: { eventId_userId: { eventId, userId } }
+          where: { eventId_userId: { eventId, userId } },
         })
       }
 
       if (delta !== 0) {
         await tx.event.update({
           where: { id: eventId },
-          data: { currentParticipants: { increment: delta } }
+          data: { currentParticipants: { increment: delta } },
         })
       }
 
-      const title =
-        action === 'confirm'
-          ? 'Участие подтверждено'
-          : 'Заявка отклонена'
-      const content =
-        action === 'confirm'
-          ? `Ваше участие в мероприятии «${event.title}» подтверждено. Дата: ${new Date(event.date).toLocaleDateString('ru-RU')} ${event.time || ''}`
-          : `Ваша заявка на участие в мероприятии «${event.title}» отклонена.`
-
       if (shouldNotify) {
+        const title = action === "confirm" ? "Участие подтверждено" : "Заявка отклонена"
+        const content =
+          action === "confirm"
+            ? `Ваше участие в мероприятии «${event.title}» подтверждено. Дата: ${new Date(
+                event.date
+              ).toLocaleDateString("ru-RU")} ${event.time || ""}`
+            : `Ваша заявка на участие в мероприятии «${event.title}» отклонена.`
+
         await tx.notification.create({
           data: {
             userId,
@@ -131,9 +154,9 @@ export async function POST(
             metadata: {
               eventId,
               action,
-              approvedBy: session.user.email || session.user.name
-            }
-          }
+              approvedBy: session.user.email || session.user.name,
+            },
+          },
         })
       }
     })
@@ -141,13 +164,15 @@ export async function POST(
     const { ip, userAgent } = buildAuditMeta(req)
     await logAuditEvent({
       actorId: session.user.id,
-      action: action === 'confirm' ? 'EVENT_PARTICIPANT_CONFIRM' : 'EVENT_PARTICIPANT_REJECT',
-      entityType: 'EventParticipant',
+      action: action === "confirm" ? "EVENT_PARTICIPANT_CONFIRM" : "EVENT_PARTICIPANT_REJECT",
+      entityType: "EventParticipant",
       entityId: `${eventId}:${userId}`,
-      metadata: { eventId, participantId: userId },
+      metadata: { eventId, participantId: userId, prevStatus, nextStatus },
       ip,
-      userAgent
+      userAgent,
     })
+
+    revalidateEventsCache()
 
     return NextResponse.json({
       success: true,
@@ -155,10 +180,10 @@ export async function POST(
       eventId,
       prevStatus,
       nextStatus,
-      currentParticipants: event.currentParticipants + delta
+      currentParticipants: event.currentParticipants + delta,
     })
   } catch (error) {
-    console.error('Participant status update error:', error)
-    return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 })
+    console.error("POST /api/events/[id]/participants error", error)
+    return errorJson(500, "SERVER_ERROR", "Ошибка сервера")
   }
 }

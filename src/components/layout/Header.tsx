@@ -1,4 +1,16 @@
-﻿// src/components/layout/Header.tsx
+/**
+ * File responsibility:
+ * Top navigation header with user actions and route links.
+ *
+ * Main logic:
+ * - Render responsive navigation controls.
+ * - Display auth-aware controls and quick actions.
+ *
+ * Integrations:
+ * - next-auth session state
+ * - Layout shell and app pages
+ */
+// src/components/layout/Header.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'

@@ -1,10 +1,22 @@
-﻿// src/components/events/[id]/page.tsx
+/**
+ * File responsibility:
+ * Event details page for participants and moderators.
+ *
+ * Main logic:
+ * - Render event content, gallery and report
+ * - Handle registration and gallery interactions
+ *
+ * Integrations:
+ * - src/contexts/AppContext.tsx
+ * - src/components/ui/ImageGalleryModal.tsx
+ */
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
+import Image from 'next/image'
 import { useAppContext } from '@/contexts/AppContext'
 import Button from '@/components/ui/Button'
 import ImageGalleryModal from '@/components/ui/ImageGalleryModal'
@@ -132,7 +144,7 @@ export default function EventDetailsPage() {
   }
 
   return (
-    <div className="event-details-page px-4 md:px-5% py-8">
+    <div className="event-details-page px-4 md:px-[5%] py-8">
       <div className="container mx-auto max-w-6xl">
         <Button 
           variant="secondary" 
@@ -258,12 +270,16 @@ export default function EventDetailsPage() {
                     onClick={() => openGallery(event.images, index)}
                     title="Просмотр фото"
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img 
-                      src={image}
-                      alt={`${event.title} - фото ${index + 1}`}
-                      className="w-full h-full object-cover"
-                    />
+                    <div className="relative w-full h-full">
+                      <Image
+                        src={image}
+                        alt={`${event.title} - фото ${index + 1}`}
+                        fill
+                        sizes="(max-width: 1024px) 50vw, 25vw"
+                        className="object-cover"
+                        unoptimized
+                      />
+                    </div>
                   </button>
                 ))}
               </div>
@@ -370,12 +386,16 @@ export default function EventDetailsPage() {
                           onClick={() => openGallery(event.report?.images || [], index)}
                           title="Просмотр фото"
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={image}
-                            alt={`${event.title} - фото ${index + 1}`}
-                            className="w-full h-full object-cover"
-                          />
+                          <div className="relative w-full h-full">
+                            <Image
+                              src={image}
+                              alt={`${event.title} - фото ${index + 1}`}
+                              fill
+                              sizes="(max-width: 1024px) 50vw, 25vw"
+                              className="object-cover"
+                              unoptimized
+                            />
+                          </div>
                         </button>
                       ))}
                     </div>
@@ -396,6 +416,8 @@ export default function EventDetailsPage() {
     </div>
   )
 }
+
+
 
 
 

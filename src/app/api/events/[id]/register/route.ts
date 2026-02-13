@@ -1,27 +1,37 @@
-﻿// src/app/api/events/[id]/register/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { ParticipantStatus } from "@prisma/client";
-import { buildAuditMeta, logAuditEvent } from "@/lib/audit";
+﻿/**
+ * File responsibility:
+ * Event registration API endpoint.
+ *
+ * Main logic:
+ * - Register current user in event as confirmed/pending by role
+ * - Enforce event availability and participant limits
+ *
+ * Integrations:
+ * - Event details page registration button
+ */
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+import { NextRequest, NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { ParticipantStatus } from "@prisma/client"
+import { authOptions } from "@/lib/auth"
+import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
+import { prisma } from "@/lib/prisma"
+import { revalidateEventsCache } from "@/server/events/event-cache"
+import { errorJson } from "@/server/shared/http-response"
+
+type RouteParams = {
+  params: Promise<{ id: string }>
+}
+
+export async function POST(req: NextRequest, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Не авторизован" },
-        { status: 401 }
-      );
+      return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
-    const { id: eventId } = await params;
-
+    const { id: eventId } = await params
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       select: {
@@ -29,68 +39,56 @@ export async function POST(
         isPast: true,
         date: true,
         maxParticipants: true,
-        currentParticipants: true
-      }
-    });
+        currentParticipants: true,
+      },
+    })
 
     if (!event) {
-      return NextResponse.json(
-        { error: "Мероприятие не найдено" },
-        { status: 404 }
-      );
+      return errorJson(404, "NOT_FOUND", "Мероприятие не найдено")
     }
 
     if (event.isPast || new Date(event.date) < new Date()) {
-      return NextResponse.json(
-        { error: "Мероприятие уже завершено" },
-        { status: 400 }
-      );
+      return errorJson(400, "CONFLICT", "Мероприятие уже завершено")
     }
 
     if (event.maxParticipants > 0 && event.currentParticipants >= event.maxParticipants) {
-      return NextResponse.json(
-        { error: "Достигнуто максимальное количество участников" },
-        { status: 400 }
-      );
+      return errorJson(400, "CONFLICT", "Достигнуто максимальное количество участников")
     }
 
     const existing = await prisma.eventParticipant.findUnique({
       where: {
         eventId_userId: {
           eventId,
-          userId: session.user.id
-        }
-      }
-    });
+          userId: session.user.id,
+        },
+      },
+    })
 
     if (existing) {
-      return NextResponse.json(
-        { error: "Вы уже зарегистрированы на это мероприятие" },
-        { status: 400 }
-      );
+      return errorJson(400, "CONFLICT", "Вы уже зарегистрированы на это мероприятие")
     }
 
-    const isPrivileged = session.user.role === "TEACHER" || session.user.role === "ADMIN";
-    const status = isPrivileged ? ParticipantStatus.CONFIRMED : ParticipantStatus.PENDING;
+    const isPrivileged = session.user.role === "TEACHER" || session.user.role === "ADMIN"
+    const status = isPrivileged ? ParticipantStatus.CONFIRMED : ParticipantStatus.PENDING
 
     await prisma.$transaction(async (tx) => {
       await tx.eventParticipant.create({
         data: {
           eventId,
           userId: session.user.id,
-          status
-        }
-      });
+          status,
+        },
+      })
 
       if (status === ParticipantStatus.CONFIRMED) {
         await tx.event.update({
           where: { id: eventId },
-          data: { currentParticipants: { increment: 1 } }
-        });
+          data: { currentParticipants: { increment: 1 } },
+        })
       }
-    });
+    })
 
-    const { ip, userAgent } = buildAuditMeta(req);
+    const { ip, userAgent } = buildAuditMeta(req)
     await logAuditEvent({
       actorId: session.user.id,
       action: "EVENT_REGISTER",
@@ -98,21 +96,21 @@ export async function POST(
       entityId: eventId,
       metadata: { status },
       ip,
-      userAgent
-    });
+      userAgent,
+    })
+
+    revalidateEventsCache()
 
     return NextResponse.json({
       success: true,
       status,
-      message: status === ParticipantStatus.CONFIRMED
-        ? "Вы успешно зарегистрированы на мероприятие"
-        : "Заявка отправлена, ожидайте подтверждения"
-    });
+      message:
+        status === ParticipantStatus.CONFIRMED
+          ? "Вы успешно зарегистрированы на мероприятие"
+          : "Заявка отправлена, ожидайте подтверждения",
+    })
   } catch (error) {
-    console.error("Registration error:", error);
-    return NextResponse.json(
-      { error: "Ошибка сервера" },
-      { status: 500 }
-    );
+    console.error("POST /api/events/[id]/register error", error)
+    return errorJson(500, "SERVER_ERROR", "Ошибка сервера")
   }
 }

@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Client session provider wrapper for NextAuth in App Router.
+ *
+ * Main logic:
+ * - Expose authenticated session context to client tree.
+ * - Centralize provider instantiation.
+ *
+ * Integrations:
+ * - next-auth/react SessionProvider
+ * - src/app/layout.tsx
+ */
 // src/components/providers/SessionProvider.tsx
 'use client'
 

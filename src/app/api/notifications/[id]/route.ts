@@ -1,12 +1,25 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { buildAuditMeta, logAuditEvent } from '@/lib/audit'
+﻿/**
+ * File responsibility:
+ * Notification details endpoint for current user.
+ *
+ * Main logic:
+ * - Mark one notification as read with ownership check
+ *
+ * Integrations:
+ * - src/components/ui/NotificationBell.tsx
+ * - src/app/notifications/page.tsx
+ */
 
-export const dynamic = 'force-dynamic'
+import { NextRequest, NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
+import { prisma } from "@/lib/prisma"
+import { errorJson } from "@/server/shared/http-response"
 
-interface RouteParams {
+export const dynamic = "force-dynamic"
+
+type RouteParams = {
   params: Promise<{ id: string }>
 }
 
@@ -14,40 +27,37 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: '\u041d\u0435 \u0430\u0432\u0442\u043e\u0440\u0438\u0437\u043e\u0432\u0430\u043d' }, { status: 401 })
+      return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
     const { id } = await params
     const notification = await prisma.notification.findFirst({
-      where: { id, userId: session.user.id }
+      where: { id, userId: session.user.id },
     })
 
     if (!notification) {
-      return NextResponse.json({ error: '\u0423\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0435 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e' }, { status: 404 })
+      return errorJson(404, "NOT_FOUND", "Уведомление не найдено")
     }
 
     const updated = await prisma.notification.update({
       where: { id },
-      data: { read: true }
+      data: { read: true },
     })
 
     const { ip, userAgent } = buildAuditMeta(req)
     await logAuditEvent({
       actorId: session.user.id,
-      action: 'NOTIFICATION_READ',
-      entityType: 'Notification',
+      action: "NOTIFICATION_READ",
+      entityType: "Notification",
       entityId: id,
       metadata: { read: true },
       ip,
-      userAgent
+      userAgent,
     })
 
     return NextResponse.json(updated)
   } catch (error) {
-    console.error('Notifications PATCH error:', error)
-    return NextResponse.json(
-      { error: '\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0430' },
-      { status: 500 }
-    )
+    console.error("PATCH /api/notifications/[id] error", error)
+    return errorJson(500, "SERVER_ERROR", "Ошибка сервера")
   }
 }

@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Debug endpoint to inspect current session payload.
+ *
+ * Main logic:
+ * - Return session diagnostic data.
+ * - Help validate authentication wiring in local environment.
+ *
+ * Integrations:
+ * - next-auth getServerSession()
+ * - Local smoke/debug flows
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";

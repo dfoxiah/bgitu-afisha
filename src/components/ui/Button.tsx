@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Reusable styled button component with variants and icon support.
+ *
+ * Main logic:
+ * - Normalize button props and styles.
+ * - Provide consistent interactive behavior across app.
+ *
+ * Integrations:
+ * - Most page/form components
+ * - Tailwind utility styles
+ */
 // src/components/ui/Button.tsx (обновленный)
 import { ButtonHTMLAttributes, ReactNode } from 'react'
 import classNames from 'classnames'

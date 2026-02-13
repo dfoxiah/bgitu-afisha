@@ -1,49 +1,75 @@
-// src/components/dev/DebuggerInitializer.tsx
+﻿/**
+ * File responsibility:
+ * Development-only bootstrap for debugger instrumentation and global controls.
+ *
+ * Main logic:
+ * - Register global error handlers and pipe them to debugger
+ * - Expose `window.__DEBUGGER` helper API in development
+ * - Mount visual debug panel only in development mode
+ *
+ * Integrations:
+ * - src/lib/debugger.ts
+ * - src/components/dev/DebuggerPanel.tsx
+ */
 'use client'
 
 import { useEffect } from 'react'
-import { debuggerInstance } from '@/lib/debugger'
+import { debuggerInstance, type DebugConfig } from '@/lib/debugger'
 import DebuggerPanel from './DebuggerPanel'
+
+type DebuggerGlobalApi = {
+  toggle: () => void
+  enable: () => void
+  disable: () => void
+  logs: () => ReturnType<typeof debuggerInstance.getLogs>
+  config: () => ReturnType<typeof debuggerInstance.getConfig>
+  setConfig: (config: Partial<DebugConfig>) => void
+}
+
+declare global {
+  interface Window {
+    __DEBUGGER?: DebuggerGlobalApi
+  }
+}
 
 export default function DebuggerInitializer() {
   useEffect(() => {
-    // Только в development режиме
     if (process.env.NODE_ENV === 'development') {
-      // Включаем дебаггер с ограниченными категориями
       debuggerInstance.setConfig({
         enabled: false,
         logLevel: 'error',
-        categories: ['all'], // Исправлено
+        categories: ['all'],
         showTimestamps: true,
         showComponentName: true,
-        showStackTraces: false
+        showStackTraces: false,
       })
-      
-      // Глобальные обработчики ошибок
+
       const originalError = console.error
-      console.error = (...args) => {
-        debuggerInstance.error('global', 'Console', 'Global error', args) // Исправлено: 'global'
+      console.error = (...args: unknown[]) => {
+        debuggerInstance.error('global', 'Console', 'Global error', args)
         originalError.apply(console, args)
       }
 
-      window.addEventListener('error', (event) => {
-        debuggerInstance.error('global', 'Window', 'Uncaught error', { // Исправлено: 'global'
+      const errorHandler = (event: ErrorEvent) => {
+        debuggerInstance.error('global', 'Window', 'Uncaught error', {
           message: event.message,
           filename: event.filename,
           lineno: event.lineno,
           colno: event.colno,
-          error: event.error
+          error: event.error,
         })
-      })
+      }
 
-      window.addEventListener('unhandledrejection', (event) => {
-        debuggerInstance.error('global', 'Window', 'Unhandled promise rejection', { // Исправлено: 'global'
-          reason: event.reason
+      const rejectionHandler = (event: PromiseRejectionEvent) => {
+        debuggerInstance.error('global', 'Window', 'Unhandled promise rejection', {
+          reason: event.reason,
         })
-      })
+      }
 
-      // Глобальная функция для управления дебаггером
-      ;(window as any).__DEBUGGER = {
+      window.addEventListener('error', errorHandler)
+      window.addEventListener('unhandledrejection', rejectionHandler)
+
+      window.__DEBUGGER = {
         toggle: () => debuggerInstance.toggle(),
         enable: () => {
           debuggerInstance.enable()
@@ -52,24 +78,29 @@ export default function DebuggerInitializer() {
         disable: () => debuggerInstance.disable(),
         logs: () => debuggerInstance.getLogs(),
         config: () => debuggerInstance.getConfig(),
-        setConfig: (config: any) => debuggerInstance.setConfig(config)
+        setConfig: (config: Partial<DebugConfig>) => debuggerInstance.setConfig(config),
       }
 
-      console.log('%c⚠️ Developer Debugger Available (disabled by default)', 
-        'color: #FF9800; font-weight: bold; font-size: 14px;')
-      console.log('%cEnable with: window.__DEBUGGER.enable()', 
-        'color: #2196F3; font-style: italic;')
-    }
+      console.log(
+        '%cDeveloper Debugger Available (disabled by default)',
+        'color: #FF9800; font-weight: bold; font-size: 14px;'
+      )
+      console.log('%cEnable with: window.__DEBUGGER?.enable()', 'color: #2196F3; font-style: italic;')
 
-    return () => {
-      // Cleanup
-      if ((window as any).__DEBUGGER) {
-        delete (window as any).__DEBUGGER
+      return () => {
+        console.error = originalError
+        window.removeEventListener('error', errorHandler)
+        window.removeEventListener('unhandledrejection', rejectionHandler)
+
+        if (window.__DEBUGGER) {
+          delete window.__DEBUGGER
+        }
       }
     }
+
+    return undefined
   }, [])
 
-  // Показываем панель только в development
   if (process.env.NODE_ENV !== 'development') {
     return null
   }

@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Dashboard section for latest news/report cards.
+ *
+ * Main logic:
+ * - Display news subset and sorting.
+ * - Provide links to full news/event details.
+ *
+ * Integrations:
+ * - Dashboard/news routes
+ * - Event news collections
+ */
 'use client'
 
 import { useMemo, useState } from 'react'
@@ -28,7 +40,7 @@ const NewsSection = ({ events = [] }: NewsSectionProps) => {
 
   if (newsEvents.length === 0) {
     return (
-      <section className="news-section liquid-section p-5 sm:p-6 lg:p-8 mx-4 sm:mx-5% my-4">
+      <section className="news-section liquid-section p-5 sm:p-6 lg:p-8 mx-4 sm:mx-[5%] my-4">
         <h2 className="section-title text-lg sm:text-2xl text-primary mb-5 sm:mb-6 flex items-center gap-3">
           <i className="fas fa-newspaper"></i> Новостная лента
         </h2>
@@ -53,7 +65,7 @@ const NewsSection = ({ events = [] }: NewsSectionProps) => {
   }
 
   return (
-    <section className="news-section liquid-section p-5 sm:p-6 lg:p-8 mx-4 sm:mx-5% my-4">
+    <section className="news-section liquid-section p-5 sm:p-6 lg:p-8 mx-4 sm:mx-[5%] my-4">
       <h2 className="section-title text-lg sm:text-2xl text-primary mb-5 sm:mb-6 flex items-center gap-3">
         <i className="fas fa-newspaper"></i> Новостная лента
       </h2>
@@ -141,3 +153,4 @@ const NewsSection = ({ events = [] }: NewsSectionProps) => {
 }
 
 export default NewsSection
+

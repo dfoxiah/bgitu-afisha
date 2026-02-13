@@ -1,3 +1,15 @@
+/**
+ * File responsibility:
+ * Dashboard banner section with highlighted upcoming events.
+ *
+ * Main logic:
+ * - Render hero-like highlighted event cards.
+ * - Provide quick CTA/navigation to details.
+ *
+ * Integrations:
+ * - Dashboard page
+ * - Event card data from AppContext
+ */
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -26,7 +38,7 @@ const Banner = ({ events }: BannerProps) => {
   if (events.length === 0) return null
 
   return (
-    <section className="banner relative h-64 sm:h-72 lg:h-96 overflow-hidden rounded-2xl mx-4 sm:mx-5% my-4 border border-white/60 shadow-2xl">
+    <section className="banner relative h-64 sm:h-72 lg:h-96 overflow-hidden rounded-2xl mx-4 sm:mx-[5%] my-4 border border-white/60 shadow-2xl">
       {events.map((event, index) => {
         const hasImage = event.images && event.images.length > 0
         const imageUrl = hasImage ? event.images[0] : null
@@ -108,3 +120,4 @@ const Banner = ({ events }: BannerProps) => {
 }
 
 export default Banner
+

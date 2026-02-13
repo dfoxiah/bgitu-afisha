@@ -1,41 +1,57 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import bcrypt from 'bcryptjs'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { Role } from '@prisma/client'
-import { buildAuditMeta, logAuditEvent } from '@/lib/audit'
+﻿/**
+ * File responsibility:
+ * Admin users collection endpoint (list + create).
+ *
+ * Main logic:
+ * - GET: search/filter users for admin panel
+ * - POST: create user account with role and optional profile fields
+ *
+ * Integrations:
+ * - src/app/admin/page.tsx
+ * - src/server/admin/admin-session.ts
+ */
 
-const isAdminSession = (session: any) => session?.user?.id && session.user.role === 'ADMIN'
+import { NextRequest, NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import bcrypt from "bcryptjs"
+import { Role } from "@prisma/client"
+import { authOptions } from "@/lib/auth"
+import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
+import { prisma } from "@/lib/prisma"
+import { ensureAdminSession } from "@/server/admin/admin-session"
+import { errorJson } from "@/server/shared/http-response"
+
+const isRole = (value: string): value is Role =>
+  value === "STUDENT" || value === "TEACHER" || value === "ADMIN"
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!isAdminSession(session)) {
-    return NextResponse.json({ error: 'Недостаточно прав' }, { status: 403 })
+  const adminId = ensureAdminSession(session)
+  if (!adminId) {
+    return errorJson(403, "FORBIDDEN", "Недостаточно прав")
   }
 
   const { searchParams } = new URL(req.url)
-  const search = searchParams.get('search')?.trim()
-  const role = searchParams.get('role')?.trim() as Role | null
-  const limit = Number(searchParams.get('limit') || 50)
-  const offset = Number(searchParams.get('offset') || 0)
+  const search = searchParams.get("search")?.trim()
+  const roleParam = searchParams.get("role")?.trim() || ""
+  const role = isRole(roleParam) ? roleParam : null
+  const limit = Number(searchParams.get("limit") || 50)
+  const offset = Number(searchParams.get("offset") || 0)
 
-  const where: any = {}
-  if (role && ['STUDENT', 'TEACHER', 'ADMIN'].includes(role)) {
-    where.role = role
-  }
+  const where: Record<string, unknown> = {}
+  if (role) where.role = role
   if (search) {
     where.OR = [
-      { email: { contains: search, mode: 'insensitive' } },
-      { name: { contains: search, mode: 'insensitive' } },
-      { department: { contains: search, mode: 'insensitive' } },
-      { group: { contains: search, mode: 'insensitive' } }
+      { email: { contains: search, mode: "insensitive" } },
+      { name: { contains: search, mode: "insensitive" } },
+      { department: { contains: search, mode: "insensitive" } },
+      { group: { contains: search, mode: "insensitive" } },
     ]
   }
 
   const users = await prisma.user.findMany({
     where,
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: "desc" },
     take: Math.min(limit, 200),
     skip: Math.max(offset, 0),
     select: {
@@ -50,8 +66,8 @@ export async function GET(req: NextRequest) {
       privacyConsentAt: true,
       termsConsentAt: true,
       createdAt: true,
-      updatedAt: true
-    }
+      updatedAt: true,
+    },
   })
 
   return NextResponse.json(users)
@@ -59,28 +75,43 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!isAdminSession(session)) {
-    return NextResponse.json({ error: 'Недостаточно прав' }, { status: 403 })
+  const adminId = ensureAdminSession(session)
+  if (!adminId) {
+    return errorJson(403, "FORBIDDEN", "Недостаточно прав")
   }
-  const adminId = session!.user!.id
 
-  const body = await req.json()
-  const email = String(body.email || '').trim()
-  const name = String(body.name || '').trim()
-  const password = String(body.password || '').trim()
-  const role = String(body.role || 'STUDENT').trim() as Role
+  let bodyRaw: unknown
+  try {
+    bodyRaw = await req.json()
+  } catch {
+    return errorJson(400, "BAD_REQUEST", "Неверный формат JSON")
+  }
+
+  if (!bodyRaw || typeof bodyRaw !== "object") {
+    return errorJson(400, "BAD_REQUEST", "Тело запроса должно быть объектом")
+  }
+
+  const body = bodyRaw as Record<string, unknown>
+  const email = String(body.email || "").trim().toLowerCase()
+  const name = String(body.name || "").trim()
+  const password = String(body.password || "").trim()
+  const roleRaw = String(body.role || "STUDENT").trim()
 
   if (!email || !name || !password) {
-    return NextResponse.json({ error: 'Заполните email, имя и пароль' }, { status: 400 })
+    return errorJson(400, "VALIDATION_ERROR", "Заполните email, имя и пароль")
   }
 
-  if (!['STUDENT', 'TEACHER', 'ADMIN'].includes(role)) {
-    return NextResponse.json({ error: 'Некорректная роль' }, { status: 400 })
+  if (!isRole(roleRaw)) {
+    return errorJson(400, "VALIDATION_ERROR", "Некорректная роль")
+  }
+
+  if (password.length < 6) {
+    return errorJson(400, "VALIDATION_ERROR", "Пароль должен быть не короче 6 символов")
   }
 
   const existing = await prisma.user.findUnique({ where: { email } })
   if (existing) {
-    return NextResponse.json({ error: 'Пользователь с таким email уже существует' }, { status: 400 })
+    return errorJson(409, "CONFLICT", "Пользователь с таким email уже существует")
   }
 
   const hashedPassword = await bcrypt.hash(password, 10)
@@ -91,12 +122,12 @@ export async function POST(req: NextRequest) {
       email,
       name,
       password: hashedPassword,
-      role,
-      department: body.department || null,
-      group: body.group || null,
-      bio: body.bio || null,
+      role: roleRaw,
+      department: body.department ? String(body.department).trim() : null,
+      group: body.group ? String(body.group).trim() : null,
+      bio: body.bio ? String(body.bio).trim() : null,
       privacyConsentAt: consentAt,
-      termsConsentAt: consentAt
+      termsConsentAt: consentAt,
     },
     select: {
       id: true,
@@ -107,19 +138,19 @@ export async function POST(req: NextRequest) {
       group: true,
       groupChangeCount: true,
       bio: true,
-      createdAt: true
-    }
+      createdAt: true,
+    },
   })
 
   const { ip, userAgent } = buildAuditMeta(req)
   await logAuditEvent({
     actorId: adminId,
-    action: 'ADMIN_USER_CREATE',
-    entityType: 'User',
+    action: "ADMIN_USER_CREATE",
+    entityType: "User",
     entityId: user.id,
     metadata: { email: user.email, role: user.role },
     ip,
-    userAgent
+    userAgent,
   })
 
   return NextResponse.json(user, { status: 201 })
