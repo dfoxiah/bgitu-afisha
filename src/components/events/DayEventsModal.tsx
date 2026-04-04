@@ -1,4 +1,4 @@
-/**
+﻿/**
  * File responsibility:
  * Modal with events for a specific selected day.
  *
@@ -10,7 +10,6 @@
  * - Calendar.tsx
  * - Event card/detail routes
  */
-// bgitu-afisha/src/components/events/DayEventsModal.tsx
 
 'use client'
 
@@ -29,54 +28,58 @@ interface DayEventsModalProps {
 
 const DayEventsModal = ({ isOpen, onClose, events, date }: DayEventsModalProps) => {
   const router = useRouter()
-  
+
   if (!isOpen) return null
 
+  const dayLabel = date ? date.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }) : 'выбранную дату'
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="sm">
-      <h3 className="text-xl font-semibold text-primary mb-5 flex items-center gap-3">
-        <i className="fas fa-calendar-day"></i> События на {date?.toLocaleDateString('ru-RU')}
-      </h3>
-      
+    <Modal isOpen={isOpen} onClose={onClose} size="md" title={`События на ${dayLabel}`}>
       {events.length === 0 ? (
-        <div className="text-center py-10 text-gray-500">
-          <i className="fas fa-calendar-times text-3xl mb-3"></i>
+        <div className="liquid-card py-10 text-center text-gray-500">
+          <i className="fas fa-calendar-times mb-3 text-3xl" />
           <p>На этот день нет мероприятий</p>
         </div>
       ) : (
-        <div className="events-list space-y-3 max-h-80 overflow-y-auto">
-          {events.map(event => (
-            <div 
-              key={event.id}
-              className="event-item liquid-card liquid-card-hover p-4 cursor-pointer"
-              onClick={() => {
-                router.push(`/events/${event.id}`)
-                onClose()
-              }}
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div>
-                  <h4 className="font-semibold text-primary mb-2">{event.title}</h4>
-                  <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-4 text-sm text-gray-500">
-                    <span><i className="fas fa-clock"></i> {event.time}</span>
-                    <span><i className="fas fa-map-marker-alt"></i> {event.location}</span>
+        <>
+          <div className="mb-4 rounded-xl border border-primary/14 bg-white/80 px-3 py-2.5 text-sm text-primary/68">
+            Найдено событий: <span className="font-semibold text-primary">{events.length}</span>
+          </div>
+
+          <div className="events-list max-h-[54vh] space-y-3 overflow-y-auto pr-1">
+            {events.map((event) => (
+              <article
+                key={event.id}
+                className="event-item liquid-card liquid-card-hover cursor-pointer p-4"
+                onClick={() => {
+                  router.push(`/events/${event.id}`)
+                  onClose()
+                }}
+              >
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <h4 className="line-clamp-1 text-base font-semibold text-primary">{event.title}</h4>
+                    <div className="mt-1.5 flex flex-col gap-1.5 text-sm text-primary/65 sm:flex-row sm:gap-4">
+                      <span>
+                        <i className="fas fa-clock mr-1" /> {event.time}
+                      </span>
+                      <span className="line-clamp-1">
+                        <i className="fas fa-map-marker-alt mr-1" /> {event.location}
+                      </span>
+                    </div>
                   </div>
+
+                  <span className="liquid-chip self-start px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-primary sm:self-auto">
+                    {CategoryDisplayMap[event.category as EventCategory] || event.category}
+                  </span>
                 </div>
-                <span className="liquid-chip px-3 py-1 text-xs text-primary self-start sm:self-auto">
-                  {CategoryDisplayMap[event.category as EventCategory] || event.category}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+              </article>
+            ))}
+          </div>
+        </>
       )}
-      
-      <Button
-        onClick={onClose}
-        variant="secondary"
-        fullWidth
-        className="mt-6"
-      >
+
+      <Button onClick={onClose} variant="secondary" fullWidth className="mt-6">
         Закрыть
       </Button>
     </Modal>

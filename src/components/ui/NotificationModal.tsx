@@ -1,4 +1,4 @@
-/**
+﻿/**
  * File responsibility:
  * Modal to send event notifications to selected participant groups.
  *
@@ -29,27 +29,28 @@ const isNotificationTemplate = (value: string): value is NotificationTemplate =>
 
 const NotificationModal = ({ onClose }: NotificationModalProps) => {
   const { events, sendEventNotification } = useAppContext()
+
   const templates: Record<NotificationTemplate, string> = {
-    change: 'Изменение времени: Мероприятие "[Название]" перенесено на [Дата] [Время]',
+    change: 'Изменение: мероприятие "[Название]" перенесено на [Дата] [Время].',
     custom: '',
-    reminder: 'Напоминание: Завтра в [Время] состоится мероприятие "[Название]"'
+    reminder: 'Напоминание: завтра в [Время] состоится мероприятие "[Название]".',
   }
 
   const templateTypeMap = {
     change: 'CHANGE',
     custom: 'EVENT',
-    reminder: 'EVENT'
+    reminder: 'EVENT',
   } as const
 
   const [formData, setFormData] = useState({
     eventId: '',
     template: 'change' as NotificationTemplate,
     content: templates.change,
-    recipients: 'all' as 'all' | 'confirmed' | 'pending'
+    recipients: 'all' as 'all' | 'confirmed' | 'pending',
   })
 
-  const futureEvents = events.filter(event => !event.isPast)
-  const selectedEvent = futureEvents.find(event => event.id === formData.eventId)
+  const futureEvents = events.filter((event) => !event.isPast)
+  const selectedEvent = futureEvents.find((event) => event.id === formData.eventId)
 
   const previewContent = useMemo(() => {
     if (!formData.content) return ''
@@ -65,123 +66,101 @@ const NotificationModal = ({ onClose }: NotificationModalProps) => {
       .replace(/\[Время\]/gi, eventTime)
   }, [formData.content, selectedEvent])
 
-  const handleChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    
+  const handleChange = (event: React.ChangeEvent<HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = event.target
+
     if (name === 'template' && isNotificationTemplate(value)) {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         template: value,
-        content: templates[value]
+        content: templates[value],
       }))
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value
-      }))
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!formData.eventId || !formData.content) {
-      showToast("Пожалуйста, заполните все обязательные поля", 'error')
       return
     }
-    
+
+    setFormData((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+
+    if (!formData.eventId || !formData.content.trim()) {
+      showToast('Заполните обязательные поля', 'error')
+      return
+    }
+
     try {
-      // Исправлено: передаем eventId как string, а не number
       await sendEventNotification(
-        formData.eventId, // string, а не число
+        formData.eventId,
         formData.content,
         formData.recipients,
         templateTypeMap[formData.template]
       )
-      showToast("Уведомление успешно отправлено!", 'success')
+
+      showToast('Уведомление отправлено', 'success')
       onClose()
     } catch (error) {
-      console.error("Ошибка при отправке уведомления:", error)
-      showToast("Произошла ошибка при отправке уведомления", 'error')
+      console.error('Notification send error:', error)
+      showToast('Не удалось отправить уведомление', 'error')
     }
   }
 
   return (
-    <Modal isOpen={true} onClose={onClose} title="Создать уведомление">
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="form-group">
-          <label className="form-label">Выберите мероприятие</label>
-          <select
-            name="eventId"
-            value={formData.eventId}
-            onChange={handleChange}
-            className="liquid-input w-full px-4 py-3"
-            required
-          >
-            <option value="">Выберите мероприятие</option>
-            {futureEvents.map(event => (
-              <option key={event.id} value={event.id}>
-                {event.title}
-              </option>
-            ))}
+    <Modal isOpen={true} onClose={onClose} title="Создать уведомление" size="md">
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="form-label">Мероприятие *</label>
+            <select name="eventId" value={formData.eventId} onChange={handleChange} className="liquid-input w-full px-4 py-3" required>
+              <option value="">Выберите мероприятие</option>
+              {futureEvents.map((event) => (
+                <option key={event.id} value={event.id}>
+                  {event.title}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="form-label">Шаблон</label>
+            <select name="template" value={formData.template} onChange={handleChange} className="liquid-input w-full px-4 py-3">
+              <option value="change">Изменение деталей</option>
+              <option value="reminder">Напоминание</option>
+              <option value="custom">Свой шаблон</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="form-label">Получатели</label>
+          <select name="recipients" value={formData.recipients} onChange={handleChange} className="liquid-input w-full px-4 py-3">
+            <option value="all">Все участники</option>
+            <option value="confirmed">Только подтвержденные</option>
+            <option value="pending">Только ожидающие подтверждения</option>
           </select>
         </div>
 
-        <div className="form-group">
-          <label className="form-label">Шаблон уведомления</label>
-          <select
-            name="template"
-            value={formData.template}
-            onChange={handleChange}
-            className="liquid-input w-full px-4 py-3"
-          >
-            <option value="change">Изменение деталей</option>
-            <option value="custom">Свой шаблон</option>
-            <option value="reminder">Напоминание</option>
-          </select>
-        </div>
-
-        <div className="form-group">
+        <div>
           <label className="form-label">Текст уведомления *</label>
           <textarea
             name="content"
             value={formData.content}
             onChange={handleChange}
             className="liquid-input w-full px-4 py-3"
-            rows={4}
+            rows={5}
             required
           />
         </div>
 
         {formData.content && (
           <div className="liquid-card p-4">
-            <div className="text-xs uppercase text-gray-500 mb-2">Превью</div>
-            <div className="text-sm text-gray-700 whitespace-pre-wrap">
-              {previewContent}
-            </div>
-            {!selectedEvent && (
-              <div className="text-xs text-amber-600 mt-2">
-                Выберите мероприятие, чтобы подставить дату и время.
-              </div>
-            )}
+            <p className="text-xs font-semibold uppercase tracking-[0.1em] text-primary/55">Превью</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-primary/76">{previewContent}</p>
+            {!selectedEvent && <p className="mt-2 text-xs text-amber-700">Выберите мероприятие, чтобы подставить дату и время.</p>}
           </div>
         )}
 
-        <div className="form-group">
-          <label className="form-label">Получатели</label>
-          <select
-            name="recipients"
-            value={formData.recipients}
-            onChange={handleChange}
-            className="liquid-input w-full px-4 py-3"
-          >
-            <option value="all">Все участники</option>
-            <option value="confirmed">Только подтвердившие</option>
-            <option value="pending">Только ожидающие подтверждения</option>
-          </select>
-        </div>
-
-        <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-end sm:gap-4">
+        <div className="flex flex-col-reverse gap-3 border-t border-primary/12 pt-4 sm:flex-row sm:justify-end">
           <Button type="button" variant="secondary" onClick={onClose} className="w-full sm:w-auto">
             Отмена
           </Button>
@@ -195,5 +174,3 @@ const NotificationModal = ({ onClose }: NotificationModalProps) => {
 }
 
 export default NotificationModal
-
-

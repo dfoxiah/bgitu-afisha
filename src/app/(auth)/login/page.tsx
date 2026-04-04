@@ -1,4 +1,4 @@
-/**
+﻿/**
  * File responsibility:
  * Login page for credentials/OAuth authentication flow.
  *
@@ -12,7 +12,7 @@
  */
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { signIn, useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -25,11 +25,7 @@ const sanitizeCallbackUrl = (value: string | null) => {
     if (!decoded.startsWith('/')) return '/dashboard'
     if (decoded.startsWith('//')) return '/dashboard'
     if (decoded === '/') return '/dashboard'
-    if (
-      decoded.startsWith('/login') ||
-      decoded.startsWith('/register') ||
-      decoded.startsWith('/api/')
-    ) {
+    if (decoded.startsWith('/login') || decoded.startsWith('/register') || decoded.startsWith('/api/')) {
       return '/dashboard'
     }
     return decoded
@@ -44,11 +40,8 @@ export default function LoginPage() {
   const callbackUrl = sanitizeCallbackUrl(searchParams.get('callbackUrl'))
   const showDemo = process.env.NEXT_PUBLIC_ENABLE_DEMO === 'true'
   const { data: session, status } = useSession()
-  
-  const [credentials, setCredentials] = useState({
-    email: '',
-    password: ''
-  })
+
+  const [credentials, setCredentials] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
@@ -78,31 +71,28 @@ export default function LoginPage() {
   }, [status])
 
   const validateForm = () => {
-    const errors: Record<string, string> = {}
-    
+    const nextErrors: Record<string, string> = {}
+
     if (!credentials.email) {
-      errors.email = 'Email обязателен'
+      nextErrors.email = 'Укажите email'
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(credentials.email)) {
-      errors.email = 'Неверный формат email'
+      nextErrors.email = 'Некорректный формат email'
     }
-    
+
     if (!credentials.password) {
-      errors.password = 'Пароль обязателен'
+      nextErrors.password = 'Укажите пароль'
     } else if (credentials.password.length < 3) {
-      errors.password = 'Пароль должен быть не менее 3 символов'
+      nextErrors.password = 'Минимум 3 символа'
     }
-    
-    setFormErrors(errors)
-    return Object.keys(errors).length === 0
+
+    setFormErrors(nextErrors)
+    return Object.keys(nextErrors).length === 0
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!validateForm()) {
-      return
-    }
-    
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!validateForm()) return
+
     setLoading(true)
     setError('')
 
@@ -111,23 +101,20 @@ export default function LoginPage() {
         email: credentials.email,
         password: credentials.password,
         redirect: false,
-        callbackUrl: callbackUrl
+        callbackUrl,
       })
 
       if (result?.error) {
-        console.error('Login error:', result.error)
-        
         if (result.error.includes('CredentialsSignin')) {
           setError('Неверный email или пароль')
         } else {
-          setError('Произошла ошибка при входе: ' + result.error)
+          setError(`Ошибка входа: ${result.error}`)
         }
       } else if (result?.ok) {
-        // Принудительно обновляем страницу для обновления сессии
         window.location.href = callbackUrl
       }
-    } catch (error) {
-      console.error('Unexpected error:', error)
+    } catch (submitError) {
+      console.error('Unexpected login error:', submitError)
       setError('Произошла ошибка при входе')
     } finally {
       setLoading(false)
@@ -136,87 +123,81 @@ export default function LoginPage() {
 
   const handleSocialLogin = async (provider: string) => {
     try {
-      await signIn(provider, { 
-        callbackUrl: callbackUrl,
-        redirect: true 
+      await signIn(provider, {
+        callbackUrl,
+        redirect: true,
       })
-    } catch (error) {
-      console.error(`Social login error for ${provider}:`, error)
+    } catch (loginError) {
+      console.error(`Social login error for ${provider}:`, loginError)
       setError(`Ошибка входа через ${provider}`)
     }
   }
 
-  const handleInputChange = (field: string, value: string) => {
-    setCredentials(prev => ({...prev, [field]: value}))
-    
+  const handleInputChange = (field: 'email' | 'password', value: string) => {
+    setCredentials((prev) => ({ ...prev, [field]: value }))
+
     if (formErrors[field]) {
-      setFormErrors(prev => {
-        const newErrors = { ...prev }
-        delete newErrors[field]
-        return newErrors
+      setFormErrors((prev) => {
+        const next = { ...prev }
+        delete next[field]
+        return next
       })
     }
   }
 
   const handleDemoLogin = async (type: 'teacher' | 'student') => {
     if (!showDemo) return
-    const demoCredentials = type === 'teacher' 
-      ? { email: 'MainTeacher2026@bgitu.ru', password: 'T9mW2pK7sL8xQ4cN' }
-      : { email: 'student@bgitu.ru', password: 'student' }
-    
+
+    const demoCredentials =
+      type === 'teacher'
+        ? { email: 'MainTeacher2026@bgitu.ru', password: 'T9mW2pK7sL8xQ4cN' }
+        : { email: 'student@bgitu.ru', password: 'student' }
+
     setCredentials(demoCredentials)
     setError('')
     setFormErrors({})
-    
-    // Автоматический вход с демо-данными
     setLoading(true)
-    
+
     try {
       const result = await signIn('credentials', {
         email: demoCredentials.email,
         password: demoCredentials.password,
         redirect: false,
-        callbackUrl
+        callbackUrl,
       })
 
       if (result?.error) {
-        setError('Демо-вход не удался. Проверьте данные seed.')
+        setError('Демо-вход не удался. Проверьте seed-данные.')
       } else if (result?.ok) {
         window.location.href = callbackUrl
       }
-    } catch (error) {
-      console.error('Demo login error:', error)
+    } catch (demoError) {
+      console.error('Demo login error:', demoError)
       setError('Ошибка демо-входа')
     } finally {
       setLoading(false)
     }
   }
 
-  // Показываем загрузку при проверке сессии
   if (status === 'loading' && !sessionStuck) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary to-secondary">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-accent mx-auto mb-4"></div>
+      <div className="status-screen">
+        <div className="status-card space-y-4">
+          <div className="status-spinner" />
           <p className="text-gray-600">Проверка авторизации...</p>
         </div>
       </div>
     )
   }
 
-  // Если уже авторизован, показываем редирект
   if (status === 'authenticated') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary to-secondary">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-accent mx-auto mb-4"></div>
+      <div className="status-screen">
+        <div className="status-card space-y-4">
+          <div className="status-spinner" />
           <p className="text-gray-600">Вы уже авторизованы</p>
-          <p className="text-sm text-gray-500 mt-2">Перенаправление на главную...</p>
-          <button 
-            onClick={() => router.push('/')}
-            className="mt-4 bg-primary text-white px-4 py-2 rounded-lg hover:bg-secondary transition-colors"
-          >
-            Перейти сейчас
+          <button onClick={() => router.push('/dashboard')} className="btn btn-secondary mt-2">
+            Перейти в dashboard
           </button>
         </div>
       </div>
@@ -224,153 +205,130 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary to-secondary p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md animate-fadeInUp">
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center text-white font-bold text-xl">
-              БГ
-            </div>
-            <h1 className="text-2xl font-bold text-primary">
-              БГИТУ <span className="text-accent">Афиша</span>
-            </h1>
-          </div>
-          <h2 className="text-2xl font-semibold text-gray-800">Вход в систему</h2>
-          <p className="text-gray-600 mt-2">Используйте учетные данные БГИТУ</p>
-        </div>
+    <div className="page-shell min-h-screen px-4 py-10">
+      <div className="mx-auto grid w-full max-w-7xl items-start gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+        <section className="liquid-section hidden p-5 lg:block">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary/58">Welcome Desk</p>
+          <h1 className="page-title mt-3 text-4xl font-semibold">Вход в рабочее пространство афиши</h1>
+          <p className="page-subtitle mt-4 text-base">
+            Здесь собраны события, новости, календарь и уведомления университета. После входа вы сразу попадаете в обновлённый dashboard.
+          </p>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              Email *
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={credentials.email}
-              onChange={(e) => handleInputChange('email', e.target.value)}
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-accent focus:border-accent transition-colors ${
-                formErrors.email ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="user@bgitu.ru"
-              disabled={loading}
-              autoComplete="email"
-            />
-            {formErrors.email && (
-              <p className="mt-1 text-sm text-red-600">
-                {formErrors.email}
-              </p>
+          <div className="mt-7 grid gap-3">
+            <div className="liquid-card p-4">
+              <p className="text-sm font-semibold text-primary">Единый контур кампуса</p>
+              <p className="mt-1 text-sm text-primary/66">События, медиа и расписание в одном интерфейсе.</p>
+            </div>
+            <div className="liquid-card p-4">
+              <p className="text-sm font-semibold text-primary">Быстрый поиск</p>
+              <p className="mt-1 text-sm text-primary/66">По аудиториям, темам, участникам и названиям мероприятий.</p>
+            </div>
+            <div className="liquid-card p-4">
+              <p className="text-sm font-semibold text-primary">Ролевой доступ</p>
+              <p className="mt-1 text-sm text-primary/66">Разные сценарии для студентов, преподавателей и администраторов.</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="liquid-section p-5 sm:p-6">
+          <div className="mb-6 flex items-center gap-3">
+            <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent text-sm font-bold text-white">БГ</div>
+            <div>
+              <p className="text-sm font-semibold text-primary">БГИТУ Афиша</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/58">Авторизация</p>
+            </div>
+          </div>
+
+          <h2 className="text-2xl font-semibold text-primary">Войти в систему</h2>
+          <p className="mt-2 text-sm text-primary/66">Используйте корпоративный аккаунт или локальные учетные данные.</p>
+
+          <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+            <div>
+              <label htmlFor="email" className="form-label">Email</label>
+              <input
+                id="email"
+                type="email"
+                required
+                value={credentials.email}
+                onChange={(event) => handleInputChange('email', event.target.value)}
+                className={`form-control ${formErrors.email ? 'border-red-500' : ''}`}
+                placeholder="user@bgitu.ru"
+                disabled={loading}
+                autoComplete="email"
+              />
+              {formErrors.email && <p className="form-error">{formErrors.email}</p>}
+            </div>
+
+            <div>
+              <label htmlFor="password" className="form-label">Пароль</label>
+              <input
+                id="password"
+                type="password"
+                required
+                value={credentials.password}
+                onChange={(event) => handleInputChange('password', event.target.value)}
+                className={`form-control ${formErrors.password ? 'border-red-500' : ''}`}
+                disabled={loading}
+                autoComplete="current-password"
+              />
+              {formErrors.password && <p className="form-error">{formErrors.password}</p>}
+            </div>
+
+            {error && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+                <div className="flex items-center gap-2">
+                  <i className="fas fa-circle-exclamation" />
+                  <span>{error}</span>
+                </div>
+              </div>
             )}
-          </div>
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-              Пароль *
-            </label>
-            <input
-              id="password"
-              type="password"
-              required
-              value={credentials.password}
-              onChange={(e) => handleInputChange('password', e.target.value)}
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-accent focus:border-accent transition-colors ${
-                formErrors.password ? 'border-red-500' : 'border-gray-300'
-              }`}
-              disabled={loading}
-              autoComplete="current-password"
-            />
-            {formErrors.password && (
-              <p className="mt-1 text-sm text-red-600">
-                {formErrors.password}
-              </p>
-            )}
-          </div>
+            <button type="submit" disabled={loading} className="btn btn-primary w-full py-3">
+              {loading ? (
+                <span className="inline-flex items-center justify-center gap-2">
+                  <i className="fas fa-spinner fa-spin" />
+                  Вход...
+                </span>
+              ) : (
+                'Войти'
+              )}
+            </button>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-              <div className="flex items-center">
-                <i className="fas fa-exclamation-circle mr-2"></i>
-                <span>{error}</span>
-              </div>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-primary to-secondary text-white py-3 px-4 rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center">
-                <i className="fas fa-spinner fa-spin mr-2"></i>
-                Вход...
-              </span>
-            ) : 'Войти'}
-          </button>
-
-          <div className="text-center space-y-4">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Или войдите через</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4">
+            <div className="rounded-xl border border-primary/14 bg-white/78 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-primary/55">Вход через провайдера</p>
               <button
                 type="button"
                 onClick={() => handleSocialLogin('yandex')}
-                className="flex items-center justify-center gap-2 border border-gray-300 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-50 transition-colors hover:border-accent"
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-primary/18 bg-white px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/5"
                 disabled={loading}
               >
-                <span className="text-lg font-bold text-red-600">Я</span>
+                <span className="text-base font-bold text-red-600">Я</span>
                 Яндекс
               </button>
             </div>
-          </div>
 
-          <div className="mt-6 border-t border-gray-200 pt-6 text-center text-sm text-gray-600">
             {showDemo && (
-              <>
-                <p className="mb-3 font-medium">Демо-доступ:</p>
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => handleDemoLogin('teacher')}
-                    className="w-full bg-gradient-to-r from-purple-500 to-purple-600 text-white py-2 px-4 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-                    disabled={loading}
-                  >
+              <div className="rounded-xl border border-primary/14 bg-primary/5 p-4 text-sm text-primary/72">
+                <p className="mb-3 font-semibold text-primary">Демо-доступ</p>
+                <div className="grid gap-2">
+                  <button type="button" onClick={() => handleDemoLogin('teacher')} className="btn btn-primary w-full py-2.5 text-sm" disabled={loading}>
                     Войти как преподаватель
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDemoLogin('student')}
-                    className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-2 px-4 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-                    disabled={loading}
-                  >
+                  <button type="button" onClick={() => handleDemoLogin('student')} className="btn btn-secondary w-full py-2.5 text-sm" disabled={loading}>
                     Войти как студент
                   </button>
                 </div>
-                <div className="mt-4 space-y-1 text-xs">
-                  <p className="font-medium">Преподаватель: MainTeacher2026@bgitu.ru / T9mW2pK7sL8xQ4cN</p>
-                  <p className="font-medium">Студент: student@bgitu.ru / student</p>
-                </div>
-              </>
+              </div>
             )}
 
-            <div className={showDemo ? 'mt-4 pt-4 border-t border-gray-200' : ''}>
-              <p className="text-gray-500">
-                Нет аккаунта?{' '}
-                <Link href="/register" className="text-accent hover:text-primary font-medium">
-                  Зарегистрироваться
-                </Link>
-              </p>
-            </div>
-          </div>
-        </form>
+            <p className="text-center text-sm text-primary/65">
+              Нет аккаунта?{' '}
+              <Link href="/register" className="font-medium text-primary hover:underline">
+                Зарегистрироваться
+              </Link>
+            </p>
+          </form>
+        </section>
       </div>
     </div>
   )

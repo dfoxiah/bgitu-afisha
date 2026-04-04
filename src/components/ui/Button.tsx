@@ -1,4 +1,4 @@
-/**
+﻿/**
  * File responsibility:
  * Reusable styled button component with variants and icon support.
  *
@@ -10,7 +10,6 @@
  * - Most page/form components
  * - Tailwind utility styles
  */
-// src/components/ui/Button.tsx (обновленный)
 import { ButtonHTMLAttributes, ReactNode } from 'react'
 import classNames from 'classnames'
 import { debuggerInstance } from '@/lib/debugger'
@@ -22,7 +21,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   badge?: number
   fullWidth?: boolean
   loading?: boolean
-  debugContext?: string // Новое свойство для контекста дебаггинга
+  debugContext?: string
 }
 
 export default function Button({
@@ -38,13 +37,14 @@ export default function Button({
   debugContext = 'Button',
   ...props
 }: ButtonProps) {
-  const baseClasses = 'btn px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-300 inline-flex items-center justify-center gap-2'
-  
+  const baseClasses =
+    'btn inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all duration-300'
+
   const variantClasses = {
-    primary: 'bg-gradient-to-r from-primary to-secondary text-white shadow-custom hover:shadow-custom-hover hover:-translate-y-0.5',
-    secondary: 'bg-light border border-border text-primary hover:bg-blue-50 hover:border-accent',
-    success: 'bg-success text-white hover:bg-success/90',
-    danger: 'bg-danger text-white hover:bg-danger/90'
+    primary: 'btn-primary',
+    secondary: 'btn-secondary',
+    success: 'btn-success',
+    danger: 'btn-danger',
   }
 
   const classes = classNames(
@@ -52,37 +52,33 @@ export default function Button({
     variantClasses[variant],
     {
       'w-full': fullWidth,
-      'opacity-50 cursor-not-allowed': disabled || loading,
-      'btn-icon': icon && !children
+      'cursor-not-allowed opacity-50': disabled || loading,
+      'btn-icon': icon && !children,
     },
     className
   )
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     if (process.env.NODE_ENV === 'development') {
-      debuggerInstance.trackClick(
-        debugContext,
-        typeof children === 'string' ? children : 'Button',
-        e
-      )
-      
+      debuggerInstance.trackClick(debugContext, typeof children === 'string' ? children : 'Button', e)
+
       debuggerInstance.debug('ui', debugContext, 'Button clicked', {
         variant,
         disabled,
         loading,
         badge,
-        coordinates: { x: e.clientX, y: e.clientY }
+        coordinates: { x: e.clientX, y: e.clientY },
       })
     }
-    
+
     if (onClick) {
       onClick(e)
     }
   }
 
   return (
-    <button 
-      className={classes} 
+    <button
+      className={classes}
       disabled={disabled || loading}
       onClick={handleClick}
       onMouseEnter={() => {
@@ -106,11 +102,7 @@ export default function Button({
         <>
           {icon && <i className={`fas fa-${icon}`}></i>}
           {children && <span>{children}</span>}
-          {badge && badge > 0 && (
-            <span className="btn-badge bg-danger text-white text-xs px-2 py-0.5 rounded-full">
-              {badge > 9 ? '9+' : badge}
-            </span>
-          )}
+          {badge && badge > 0 && <span className="btn-badge rounded-full bg-danger px-2 py-0.5 text-xs text-white">{badge > 9 ? '9+' : badge}</span>}
         </>
       )}
     </button>

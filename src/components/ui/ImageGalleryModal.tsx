@@ -1,4 +1,4 @@
-/**
+﻿/**
  * File responsibility:
  * Image gallery modal for browsing event/report media.
  *
@@ -23,33 +23,24 @@ interface ImageGalleryModalProps {
   onClose: () => void
 }
 
-export default function ImageGalleryModal({
-  isOpen,
-  images,
-  startIndex = 0,
-  title,
-  onClose
-}: ImageGalleryModalProps) {
-  const normalizedImages = useMemo(
-    () => images.filter((image) => Boolean(image)),
-    [images]
-  )
+export default function ImageGalleryModal({ isOpen, images, startIndex = 0, title, onClose }: ImageGalleryModalProps) {
+  const normalizedImages = useMemo(() => images.filter((image) => Boolean(image)), [images])
   const totalImages = normalizedImages.length
   const hasImages = totalImages > 0
+
   const [currentIndex, setCurrentIndex] = useState(() => {
     if (!hasImages) return 0
-    const safeIndex = Math.max(0, Math.min(startIndex, totalImages - 1))
-    return safeIndex
+    return Math.max(0, Math.min(startIndex, totalImages - 1))
   })
 
   const handlePrev = useCallback(() => {
     if (!hasImages) return
-    setCurrentIndex(prev => (prev - 1 + totalImages) % totalImages)
+    setCurrentIndex((prev) => (prev - 1 + totalImages) % totalImages)
   }, [hasImages, totalImages])
 
   const handleNext = useCallback(() => {
     if (!hasImages) return
-    setCurrentIndex(prev => (prev + 1) % totalImages)
+    setCurrentIndex((prev) => (prev + 1) % totalImages)
   }, [hasImages, totalImages])
 
   useEffect(() => {
@@ -58,6 +49,7 @@ export default function ImageGalleryModal({
       setCurrentIndex(0)
       return
     }
+
     const safeIndex = Math.max(0, Math.min(startIndex, totalImages - 1))
     setCurrentIndex(safeIndex)
   }, [isOpen, startIndex, hasImages, totalImages])
@@ -65,10 +57,10 @@ export default function ImageGalleryModal({
   useEffect(() => {
     if (!isOpen) return
 
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-      if (e.key === 'ArrowRight') handleNext()
-      if (e.key === 'ArrowLeft') handlePrev()
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+      if (event.key === 'ArrowRight') handleNext()
+      if (event.key === 'ArrowLeft') handlePrev()
     }
 
     document.body.style.overflow = 'hidden'
@@ -83,89 +75,75 @@ export default function ImageGalleryModal({
   if (!isOpen) return null
 
   return ReactDOM.createPortal(
-    <div
-      className="fixed inset-0 z-[500] flex items-center justify-center bg-black/80 p-2 backdrop-blur-sm sm:p-4"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-[980] flex items-center justify-center bg-slate-950/82 p-2 backdrop-blur-md sm:p-4" onClick={onClose}>
       <div
-        className="relative w-full max-w-6xl max-h-[92vh] overflow-hidden rounded-2xl border border-white/10 bg-black/90 sm:w-[92%]"
-        onClick={(e) => e.stopPropagation()}
+        className="relative flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#020712]/94 shadow-[0_30px_90px_rgba(0,0,0,0.55)]"
+        onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 text-white sm:px-5 sm:py-4">
-          <div className="font-semibold">
-            {title || 'Просмотр фото'}
+        <header className="flex items-center justify-between border-b border-white/10 bg-black/35 px-4 py-3 text-white sm:px-5 sm:py-4">
+          <div>
+            <p className="text-sm font-semibold">{title || 'Галерея'}</p>
+            <p className="text-xs text-white/65">{hasImages ? `${currentIndex + 1} из ${totalImages}` : 'Нет изображений'}</p>
           </div>
+
           <button
-            className="text-2xl leading-none hover:text-white/70"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-xl leading-none transition-colors hover:bg-white/20"
             onClick={onClose}
             aria-label="Закрыть"
           >
             &times;
           </button>
-        </div>
+        </header>
 
-        <div className="relative bg-black">
+        <div className="relative flex min-h-[260px] flex-1 items-center justify-center bg-black/65">
           {hasImages ? (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={normalizedImages[currentIndex]}
-                alt={`Фото ${currentIndex + 1}`}
-                className="w-full max-h-[70vh] object-contain mx-auto"
+                alt={`Изображение ${currentIndex + 1}`}
+                className="max-h-[72vh] w-full object-contain"
               />
+
+              {totalImages > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePrev}
+                    className="absolute left-3 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/55 text-white transition-colors hover:bg-black/80"
+                    aria-label="Предыдущее изображение"
+                  >
+                    <i className="fas fa-chevron-left" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    className="absolute right-3 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/55 text-white transition-colors hover:bg-black/80"
+                    aria-label="Следующее изображение"
+                  >
+                    <i className="fas fa-chevron-right" />
+                  </button>
+                </>
+              )}
             </>
           ) : (
-            <div className="text-center text-white/70 py-20">
-              Нет изображений
-            </div>
-          )}
-
-          {hasImages && totalImages > 1 && (
-            <>
-              <button
-                type="button"
-                onClick={handlePrev}
-                className="absolute left-2 top-1/2 z-10 h-10 w-10 -translate-y-1/2 rounded-full bg-black/60 text-white hover:bg-black/80 sm:left-3 sm:h-12 sm:w-12"
-                aria-label="Предыдущее фото"
-              >
-                <i className="fas fa-chevron-left"></i>
-              </button>
-              <button
-                type="button"
-                onClick={handleNext}
-                className="absolute right-2 top-1/2 z-10 h-10 w-10 -translate-y-1/2 rounded-full bg-black/60 text-white hover:bg-black/80 sm:right-3 sm:h-12 sm:w-12"
-                aria-label="Следующее фото"
-              >
-                <i className="fas fa-chevron-right"></i>
-              </button>
-            </>
-          )}
-
-          {hasImages && (
-            <div className="absolute bottom-3 right-4 text-xs text-white/70 bg-black/50 px-2 py-1 rounded">
-              {currentIndex + 1} / {totalImages}
-            </div>
+            <div className="py-20 text-center text-white/70">Нет изображений</div>
           )}
         </div>
 
         {hasImages && totalImages > 1 && (
-          <div className="flex gap-3 overflow-x-auto border-t border-white/10 bg-black/70 px-4 py-3 sm:px-5 sm:py-4">
+          <div className="flex gap-2 overflow-x-auto border-t border-white/10 bg-black/45 px-4 py-3 sm:px-5">
             {normalizedImages.map((image, index) => (
               <button
                 key={index}
                 type="button"
                 onClick={() => setCurrentIndex(index)}
-                className={`h-12 w-16 overflow-hidden rounded-lg border sm:h-14 sm:w-20 ${
-                  index === currentIndex ? 'border-accent' : 'border-white/20'
-                }`}
-                aria-label={`Открыть фото ${index + 1}`}
+                className={`h-14 w-20 overflow-hidden rounded-lg border ${index === currentIndex ? 'border-accent shadow-[0_0_0_2px_rgba(15,143,140,0.35)]' : 'border-white/20'}`}
+                aria-label={`Открыть изображение ${index + 1}`}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={image}
-                  alt={`Миниатюра ${index + 1}`}
-                  className="w-full h-full object-cover"
-                />
+                <img src={image} alt={`Миниатюра ${index + 1}`} className="h-full w-full object-cover" />
               </button>
             ))}
           </div>
@@ -175,4 +153,3 @@ export default function ImageGalleryModal({
     document.body
   )
 }
-

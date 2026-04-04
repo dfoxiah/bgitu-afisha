@@ -1,8 +1,9 @@
 /**
  * File responsibility:
- * Admin dashboard page for users, events/news, imports and audit logs.
+ * Admin dashboard page for metrics, users, events/news, imports and audit logs.
  *
  * Main logic:
+ * - Show KPI analytics and Excel export entrypoint
  * - Manage users (search/create/update/delete)
  * - Manage events and news (search/update/delete + create news)
  * - Run bulk imports and inspect audit logs
@@ -26,16 +27,20 @@ import {
   createAdminUser,
   deleteAdminEvent,
   deleteAdminUser,
+  downloadAdminEventExcel,
   getAdminEventDetails,
   getAdminEvents,
   getAdminLogs,
+  getAdminMetrics,
   getAdminUsers,
   importAdminData,
   updateAdminEvent,
   updateAdminUser,
 } from "@/features/admin/client/admin-api"
+import AdminMetricsDashboard from "@/features/admin/components/AdminMetricsDashboard"
 import type {
   AdminAuditLog,
+  AdminDashboardMetrics,
   AdminEvent,
   AdminEventDetails,
   AdminImportMode,
@@ -43,7 +48,8 @@ import type {
   AdminUser,
 } from "@/features/admin/types"
 
-type AdminTab = "users" | "events" | "import" | "logs"
+type AdminTab = "metrics" | "users" | "events" | "import" | "logs"
+const LIVE_UPDATE_INTERVAL_MS = 15000
 
 type EditableEvent = {
   id: string
@@ -74,6 +80,19 @@ const parseList = (value: string) =>
     .filter(Boolean)
 
 const normalizeDateValue = (value: string) => (value.includes("T") ? value.slice(0, 10) : value)
+
+const downloadJsonFile = (fileName: string, payload: unknown) => {
+  const json = `${JSON.stringify(payload, null, 2)}\n`
+  const blob = new Blob([json], { type: "application/json;charset=utf-8" })
+  const objectUrl = window.URL.createObjectURL(blob)
+  const anchor = document.createElement("a")
+  anchor.href = objectUrl
+  anchor.download = fileName
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.URL.revokeObjectURL(objectUrl)
+}
 
 const toEditableEvent = (event: AdminEventDetails): EditableEvent => ({
   id: event.id,
@@ -126,7 +145,11 @@ export default function AdminPage() {
   const { data: session, status } = useSession()
   const canAccess = session?.user?.role === "ADMIN"
 
-  const [activeTab, setActiveTab] = useState<AdminTab>("users")
+  const [activeTab, setActiveTab] = useState<AdminTab>("metrics")
+  const [metrics, setMetrics] = useState<AdminDashboardMetrics | null>(null)
+  const [metricsLoading, setMetricsLoading] = useState(false)
+  const [metricsEvents, setMetricsEvents] = useState<AdminEvent[]>([])
+  const [exportingEventId, setExportingEventId] = useState<string | null>(null)
 
   const [users, setUsers] = useState<AdminUser[]>([])
   const [userSearch, setUserSearch] = useState("")
@@ -171,6 +194,9 @@ export default function AdminPage() {
   const [importUsersResult, setImportUsersResult] = useState<AdminImportResult | null>(null)
   const [importEventsResult, setImportEventsResult] = useState<AdminImportResult | null>(null)
   const [importNewsResult, setImportNewsResult] = useState<AdminImportResult | null>(null)
+  const [exportingDataset, setExportingDataset] = useState<
+    "users" | "events" | "news" | "logs" | null
+  >(null)
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -209,13 +235,66 @@ export default function AdminPage() {
       showToast(error instanceof Error ? error.message : "Ошибка загрузки логов", "error")
     }
   }, [logAction, logEntityType])
+  const loadMetrics = useCallback(async () => {
+    try {
+      setMetricsLoading(true)
+      const [nextMetrics, eventsForExport] = await Promise.all([
+        getAdminMetrics(),
+        getAdminEvents({ limit: 200 }),
+      ])
+      setMetrics(nextMetrics)
+      setMetricsEvents(eventsForExport)
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Не удалось загрузить метрики", "error")
+    } finally {
+      setMetricsLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (!canAccess) return
+    if (activeTab === "metrics") void loadMetrics()
     if (activeTab === "users") void loadUsers()
     if (activeTab === "events") void loadEvents()
     if (activeTab === "logs") void loadLogs()
-  }, [activeTab, canAccess, loadUsers, loadEvents, loadLogs])
+  }, [activeTab, canAccess, loadMetrics, loadUsers, loadEvents, loadLogs])
+
+  useEffect(() => {
+    if (!canAccess) return
+    if (activeTab !== "metrics" && activeTab !== "events") return
+
+    let refreshInFlight = false
+
+    const refreshActiveData = async () => {
+      if (document.visibilityState === "hidden" || refreshInFlight) return
+      refreshInFlight = true
+      try {
+        if (activeTab === "metrics") {
+          await loadMetrics()
+        } else {
+          await loadEvents()
+        }
+      } finally {
+        refreshInFlight = false
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshActiveData()
+    }, LIVE_UPDATE_INTERVAL_MS)
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshActiveData()
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange)
+
+    return () => {
+      window.clearInterval(intervalId)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
+  }, [activeTab, canAccess, loadMetrics, loadEvents])
 
   const handleCreateUser = async () => {
     if (!newUser.name.trim() || !newUser.email.trim() || !newUser.password.trim()) {
@@ -367,13 +446,54 @@ export default function AdminPage() {
       showToast(error instanceof Error ? error.message : "Ошибка импорта", "error")
     }
   }
+  const handleExportDataset = async (dataset: "users" | "events" | "news" | "logs") => {
+    try {
+      setExportingDataset(dataset)
+      const dateToken = new Date().toISOString().slice(0, 10)
 
+      if (dataset === "users") {
+        const result = await getAdminUsers({ role: "ALL", limit: 1000 })
+        downloadJsonFile(`admin_users_${dateToken}.json`, result)
+      }
+      if (dataset === "events") {
+        const result = await getAdminEvents({ limit: 1000 })
+        downloadJsonFile(`admin_events_${dateToken}.json`, result)
+      }
+      if (dataset === "news") {
+        const result = await getAdminEvents({ newsOnly: true, limit: 1000 })
+        downloadJsonFile(`admin_news_${dateToken}.json`, result)
+      }
+      if (dataset === "logs") {
+        const result = await getAdminLogs({ limit: 1000 })
+        downloadJsonFile(`admin_logs_${dateToken}.json`, result)
+      }
+
+      showToast("Экспорт успешно завершен", "success")
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Ошибка экспорта", "error")
+    } finally {
+      setExportingDataset(null)
+    }
+  }
+
+  const handleExportEventExcel = async (eventId: string) => {
+    try {
+      setExportingEventId(eventId)
+      await downloadAdminEventExcel(eventId)
+      showToast("Excel файл успешно выгружен", "success")
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Не удалось выгрузить Excel", "error")
+    } finally {
+      setExportingEventId(null)
+    }
+  }
   const tabs = useMemo(
     () =>
       [
+        { id: "metrics", label: "Метрики" },
         { id: "users", label: "Пользователи" },
         { id: "events", label: "Мероприятия/Новости" },
-        { id: "import", label: "Импорт" },
+        { id: "import", label: "Импорт/Экспорт" },
         { id: "logs", label: "Логи" },
       ] as Array<{ id: AdminTab; label: string }>,
     []
@@ -386,7 +506,7 @@ export default function AdminPage() {
   if (!canAccess) {
     return (
       <div className="container py-10">
-        <div className="liquid-card p-8 text-center space-y-4">
+        <div className="admin-panel p-5 text-center space-y-3">
           <h1 className="text-2xl font-semibold">Нет доступа к админ-панели</h1>
           <Button variant="secondary" onClick={() => router.push("/")}>
             На главную
@@ -397,13 +517,23 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="container px-4 py-6 space-y-6 sm:px-6 sm:py-8 lg:px-8">
-      <div className="liquid-card p-6">
-        <h1 className="text-2xl font-bold text-gray-900">Админ-панель</h1>
-        <p className="text-sm text-gray-500">Управление пользователями, мероприятиями, новостями и аудитом</p>
+    <div className="admin-rework container px-4 py-4 space-y-4 sm:px-6 sm:py-6 lg:px-8">
+      <div className="admin-panel admin-hero p-4 sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Админ-панель</h1>
+            <p className="text-sm text-gray-500">Управление пользователями, мероприятиями, новостями и аудитом</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="admin-pill admin-pill-live">
+              Live events/applications: {LIVE_UPDATE_INTERVAL_MS / 1000}s
+            </span>
+            <span className="admin-pill admin-pill-live">Live notifications: 15s</span>
+          </div>
+        </div>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar sm:flex-wrap">
+      <div className="admin-tabs flex gap-2 overflow-x-auto pb-1 no-scrollbar sm:flex-wrap">
         {tabs.map((tab) => (
           <Button key={tab.id} variant={activeTab === tab.id ? "primary" : "secondary"} onClick={() => setActiveTab(tab.id)}>
             {tab.label}
@@ -411,10 +541,20 @@ export default function AdminPage() {
         ))}
       </div>
 
+      {activeTab === "metrics" && (
+        <AdminMetricsDashboard
+          metrics={metrics}
+          isLoading={metricsLoading}
+          exportEvents={metricsEvents}
+          exportingEventId={exportingEventId}
+          onRefresh={() => void loadMetrics()}
+          onExportEvent={(eventId) => void handleExportEventExcel(eventId)}
+        />
+      )}
       {activeTab === "users" && (
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-4">
-            <div className="liquid-card p-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="admin-panel p-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <input className="w-full px-3 py-2 border rounded sm:flex-1 sm:min-w-[220px]" placeholder="Поиск пользователей" value={userSearch} onChange={(event) => setUserSearch(event.target.value)} />
               <select className="w-full px-3 py-2 border rounded sm:w-auto" value={userRole} onChange={(event) => setUserRole(event.target.value as "ALL" | Role)}>
                 {roleOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
@@ -465,7 +605,7 @@ export default function AdminPage() {
       {activeTab === "events" && (
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-4">
-            <div className="liquid-card p-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="admin-panel p-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <input className="w-full px-3 py-2 border rounded sm:flex-1 sm:min-w-[220px]" placeholder="Поиск мероприятий/новостей" value={eventSearch} onChange={(event) => setEventSearch(event.target.value)} />
               <select className="w-full px-3 py-2 border rounded sm:w-auto" value={eventCategory} onChange={(event) => setEventCategory(event.target.value as EventCategory | "ALL")}>
                 <option value="ALL">Все категории</option>
@@ -477,14 +617,42 @@ export default function AdminPage() {
               <label className="text-xs text-gray-600 inline-flex items-center gap-2 sm:ml-auto"><input type="checkbox" checked={newsOnly} onChange={(event) => setNewsOnly(event.target.checked)} /> Только новости</label>
               <Button className="w-full sm:w-auto" variant="secondary" onClick={() => void loadEvents()}>Найти</Button>
             </div>
+            <div className="text-xs text-emerald-700">
+              Live: обновление мероприятий и заявок каждые {LIVE_UPDATE_INTERVAL_MS / 1000} сек.
+            </div>
             <div className="bg-white rounded-2xl shadow p-4 overflow-x-auto">
-              <table className="min-w-[640px] w-full text-sm">
-                <thead><tr className="text-left text-gray-500"><th className="py-2">Название</th><th>Категория</th><th>Дата</th><th /></tr></thead>
+              <table className="min-w-[760px] w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500">
+                    <th className="py-2">Название</th>
+                    <th>Категория</th>
+                    <th>Дата</th>
+                    <th>Участники / заявки</th>
+                    <th />
+                  </tr>
+                </thead>
                 <tbody>
                   {events.map((event) => (
                     <tr key={event.id} className="border-t">
-                      <td className="py-2">{event.title}</td><td>{CategoryDisplayMap[event.category] || event.category}</td><td>{new Date(event.date).toLocaleDateString("ru-RU")}</td>
-                      <td className="text-right space-x-2 whitespace-nowrap"><button className="text-accent" onClick={() => void handleEditEvent(event)}>Редактировать</button><button className="text-red-600" onClick={() => void handleDeleteEvent(event.id)}>Удалить</button></td>
+                      <td className="py-2">{event.title}</td>
+                      <td>{CategoryDisplayMap[event.category] || event.category}</td>
+                      <td>{new Date(event.date).toLocaleDateString("ru-RU")}</td>
+                      <td className="whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                          OK: {event.confirmedParticipants ?? event.currentParticipants ?? 0}
+                        </span>
+                        <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                          Pending: {event.pendingParticipants ?? 0}
+                        </span>
+                      </td>
+                      <td className="text-right space-x-2 whitespace-nowrap">
+                        <button className="text-accent" onClick={() => void handleEditEvent(event)}>
+                          Редактировать
+                        </button>
+                        <button className="text-red-600" onClick={() => void handleDeleteEvent(event.id)}>
+                          Удалить
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -542,9 +710,48 @@ export default function AdminPage() {
         </div>
       )}
 
+      {activeTab === "import" && (
+        <div className="admin-panel p-4 space-y-3">
+          <h3 className="text-base font-semibold text-gray-900">Экспорт данных (JSON)</h3>
+          <p className="text-sm text-gray-500">
+            Быстрая выгрузка для архивов, отчётности и дополнительной аналитики.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <Button
+              variant="secondary"
+              loading={exportingDataset === "users"}
+              onClick={() => void handleExportDataset("users")}
+            >
+              Пользователи
+            </Button>
+            <Button
+              variant="secondary"
+              loading={exportingDataset === "events"}
+              onClick={() => void handleExportDataset("events")}
+            >
+              Мероприятия
+            </Button>
+            <Button
+              variant="secondary"
+              loading={exportingDataset === "news"}
+              onClick={() => void handleExportDataset("news")}
+            >
+              Новости
+            </Button>
+            <Button
+              variant="secondary"
+              loading={exportingDataset === "logs"}
+              onClick={() => void handleExportDataset("logs")}
+            >
+              Логи
+            </Button>
+          </div>
+        </div>
+      )}
+
       {activeTab === "logs" && (
         <div className="space-y-4">
-          <div className="liquid-card p-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="admin-panel p-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <input className="w-full px-3 py-2 border rounded sm:w-auto" placeholder="Action" value={logAction} onChange={(event) => setLogAction(event.target.value)} />
             <input className="w-full px-3 py-2 border rounded sm:w-auto" placeholder="EntityType" value={logEntityType} onChange={(event) => setLogEntityType(event.target.value)} />
             <Button className="w-full sm:w-auto" variant="secondary" onClick={() => void loadLogs()}>Найти</Button>
@@ -565,3 +772,4 @@ export default function AdminPage() {
     </div>
   )
 }
+

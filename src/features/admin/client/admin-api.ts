@@ -14,6 +14,7 @@
 
 import type { EventCategory, Role } from "@prisma/client"
 import type {
+  AdminDashboardMetrics,
   AdminAuditLog,
   AdminEvent,
   AdminEventDetails,
@@ -142,6 +143,44 @@ export const getAdminLogs = (query: AdminLogsQuery = {}) => {
   return request<AdminAuditLog[]>(`/api/admin/logs?${params.toString()}`)
 }
 
+export const getAdminMetrics = () =>
+  request<AdminDashboardMetrics>("/api/admin/metrics")
+
+const extractFileName = (response: Response, fallback: string) => {
+  const contentDisposition = response.headers.get("content-disposition") || ""
+  const match =
+    contentDisposition.match(/filename\*=UTF-8''([^;]+)/i) ||
+    contentDisposition.match(/filename=\"?([^\";]+)\"?/i)
+  if (!match?.[1]) return fallback
+  try {
+    return decodeURIComponent(match[1])
+  } catch {
+    return match[1]
+  }
+}
+
+export const downloadAdminEventExcel = async (eventId: string) => {
+  const response = await fetch(`/api/admin/events/${eventId}/export`, {
+    method: "GET",
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+
+  const fileName = extractFileName(response, `event_attendance_${eventId}.xlsx`)
+  const blob = await response.blob()
+  const objectUrl = window.URL.createObjectURL(blob)
+  const anchor = document.createElement("a")
+  anchor.href = objectUrl
+  anchor.download = fileName
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.URL.revokeObjectURL(objectUrl)
+}
+
 export const importAdminData = async (
   type: "users" | "events" | "news",
   mode: AdminImportMode,
@@ -164,4 +203,3 @@ export const importAdminData = async (
 
   return (await response.json()) as AdminImportResult
 }
-

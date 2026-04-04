@@ -289,17 +289,17 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
       size="lg"
     >
       <form onSubmit={handleSubmit}>
-        <div className="editor-tabs flex flex-wrap sm:flex-nowrap gap-2 sm:gap-0 border-b border-gray-200 mb-6 overflow-x-auto">
+        <div className="editor-tabs mb-6 flex flex-wrap gap-2 overflow-x-auto border-b border-primary/12 sm:flex-nowrap sm:gap-0">
           <button 
             type="button"
-            className={`editor-tab px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors ${activeTab === 'basic' ? 'text-primary border-b-2 border-accent' : 'text-gray-500'}`}
+            className={`editor-tab rounded-t-xl px-4 py-2.5 text-sm font-medium transition-colors sm:px-6 sm:py-3 sm:text-base ${activeTab === 'basic' ? 'border-b-2 border-accent bg-white/70 text-primary' : 'text-gray-500'}`}
             onClick={() => setActiveTab('basic')}
           >
             Основное
           </button>
           <button 
             type="button"
-            className={`editor-tab px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors ${activeTab === 'participants' ? 'text-primary border-b-2 border-accent' : 'text-gray-500'}`}
+            className={`editor-tab rounded-t-xl px-4 py-2.5 text-sm font-medium transition-colors sm:px-6 sm:py-3 sm:text-base ${activeTab === 'participants' ? 'border-b-2 border-accent bg-white/70 text-primary' : 'text-gray-500'}`}
             onClick={() => setActiveTab('participants')}
           >
             Участники
@@ -307,7 +307,7 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
         </div>
         
         {activeTab === 'basic' && (
-          <div className="editor-section space-y-6">
+          <div className="editor-section space-y-4">
             <div className="form-group">
               <label className="form-label">Название мероприятия *</label>
               <input
@@ -408,7 +408,7 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
 
             <div className="form-group">
               <label className="form-label">Модераторы (преподаватели)</label>
-              <p className="text-xs text-gray-500 mb-2">
+              <p className="mb-2 text-xs text-gray-500">
                 Добавьте преподавателей, которые получат права модерации мероприятия.
               </p>
               {canManageModerators ? (
@@ -434,7 +434,7 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
                   {formData.moderators.length > 0 && (
                     <div className="liquid-card max-h-40 overflow-y-auto mt-3">
                       {formData.moderators.map((moderator, index) => (
-                        <div key={index} className="flex justify-between items-center p-3 border-b border-gray-200 last:border-b-0">
+                        <div key={index} className="flex items-center justify-between border-b border-primary/12 p-3 last:border-b-0">
                           <span className="font-medium">{moderator}</span>
                           <button
                             type="button"
@@ -487,7 +487,7 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
               {formData.images.length > 0 && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                   {formData.images.map((img, index) => (
-                    <div key={index} className="relative rounded-2xl overflow-hidden border border-white/70 bg-white/70 shadow aspect-[4/3]">
+                    <div key={index} className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/70 bg-white/70 shadow">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={img.url}
@@ -497,12 +497,12 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
                       <button
                         type="button"
                         onClick={() => handleRemoveImage(index)}
-                        className="absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-sm"
+                        className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-sm text-white"
                         title="Удалить"
                       >
                         ×
                       </button>
-                      <div className="p-2 bg-black/70 text-white text-xs truncate">
+                      <div className="truncate bg-black/70 p-2 text-xs text-white">
                         {img.name}
                       </div>
                     </div>
@@ -514,7 +514,7 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
         )}
         
         {activeTab === 'participants' && (
-          <div className="editor-section space-y-6">
+          <div className="editor-section space-y-4">
             <div className="form-group">
               <label className="form-label">Добавить участника по email</label>
               <div className="flex flex-col sm:flex-row gap-3">
@@ -547,7 +547,7 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
                   </div>
                 ) : (
                   formData.participants.map((participant, index) => (
-                    <div key={index} className="flex justify-between items-center p-4 border-b border-gray-200 last:border-b-0">
+                    <div key={index} className="flex items-center justify-between border-b border-primary/12 p-4 last:border-b-0">
                       <div className="participant-info">
                         <span className="font-medium">{participant}</span>
                       </div>
@@ -569,7 +569,7 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
                 <label className="form-label">Ожидают подтверждения ({pendingEmails.length})</label>
                 <div className="liquid-card max-h-60 overflow-y-auto bg-white/70">
                   {pendingEmails.map((email, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 border-b border-gray-200 last:border-b-0">
+                    <div key={index} className="flex items-center justify-between border-b border-primary/12 p-4 last:border-b-0">
                       <span className="font-medium text-gray-700">{email}</span>
                       <span className="text-xs uppercase text-amber-600">pending</span>
                     </div>
@@ -580,7 +580,7 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
           </div>
         )}
         
-        <div className="editor-actions flex flex-col sm:flex-row sm:justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
+        <div className="editor-actions mt-8 flex flex-col gap-3 border-t border-primary/12 pt-6 sm:flex-row sm:justify-end">
           <Button 
             type="button" 
             variant="secondary" 

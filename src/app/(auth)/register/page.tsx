@@ -1,4 +1,4 @@
-/**
+﻿/**
  * File responsibility:
  * Registration page for new local user accounts.
  *
@@ -12,7 +12,7 @@
  */
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
@@ -20,6 +20,7 @@ import Link from 'next/link'
 export default function RegisterPage() {
   const router = useRouter()
   const { status } = useSession()
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -35,21 +36,22 @@ export default function RegisterPage() {
     department: '',
     group: '',
     acceptPrivacy: false,
-    acceptTerms: false
+    acceptTerms: false,
   })
+
   const highlights = [
     {
-      title: 'Единый календарь',
-      description: 'Все университетские мероприятия, дедлайны и новости в одном месте.'
+      title: 'Календарь кампуса',
+      description: 'Все университетские события и важные дедлайны в одном месте.',
     },
     {
-      title: 'Умные уведомления',
-      description: 'Автоматические напоминания о событиях и изменениях расписания.'
+      title: 'Уведомления',
+      description: 'Изменения времени и статуса мероприятий приходят автоматически.',
     },
     {
-      title: 'Прозрачная история',
-      description: 'Ваши регистрации и участие сохраняются в профиле.'
-    }
+      title: 'Профиль участника',
+      description: 'История регистраций и активность по мероприятиям сохраняются в аккаунте.',
+    },
   ]
 
   useEffect(() => {
@@ -59,48 +61,54 @@ export default function RegisterPage() {
       }
       return
     }
+
     if (loadingTimerRef.current) {
       clearTimeout(loadingTimerRef.current)
       loadingTimerRef.current = null
     }
   }, [status])
 
-  const handleChange = (field: string, value: string | boolean) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+  const handleChange = (field: keyof typeof formData, value: string | boolean) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
   const validateForm = () => {
-    const errors: Record<string, string> = {}
+    const nextErrors: Record<string, string> = {}
 
     if (!formData.name.trim()) {
-      errors.name = 'Имя обязательно'
-    }
-    if (!formData.email.trim()) {
-      errors.email = 'Email обязателен'
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      errors.email = 'Неверный формат email'
-    }
-    if (!formData.password) {
-      errors.password = 'Пароль обязателен'
-    } else if (formData.password.length < 6) {
-      errors.password = 'Пароль должен быть не менее 6 символов'
-    }
-    if (formData.passwordConfirm !== formData.password) {
-      errors.passwordConfirm = 'Пароли не совпадают'
-    }
-    if (!formData.group.trim()) {
-      errors.group = '\u0413\u0440\u0443\u043f\u043f\u0430 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u0430'
-    }
-    if (!formData.acceptPrivacy || !formData.acceptTerms) {
-      errors.consent = 'Необходимо принять соглашения'
+      nextErrors.name = 'Укажите имя'
     }
 
-    setFormErrors(errors)
-    return Object.keys(errors).length === 0
+    if (!formData.email.trim()) {
+      nextErrors.email = 'Укажите email'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      nextErrors.email = 'Некорректный формат email'
+    }
+
+    if (!formData.password) {
+      nextErrors.password = 'Укажите пароль'
+    } else if (formData.password.length < 6) {
+      nextErrors.password = 'Минимум 6 символов'
+    }
+
+    if (formData.passwordConfirm !== formData.password) {
+      nextErrors.passwordConfirm = 'Пароли не совпадают'
+    }
+
+    if (!formData.group.trim()) {
+      nextErrors.group = 'Укажите группу'
+    }
+
+    if (!formData.acceptPrivacy || !formData.acceptTerms) {
+      nextErrors.consent = 'Необходимо принять условия и политику'
+    }
+
+    setFormErrors(nextErrors)
+    return Object.keys(nextErrors).length === 0
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
     if (!validateForm()) return
 
     setLoading(true)
@@ -118,17 +126,18 @@ export default function RegisterPage() {
           department: formData.department,
           group: formData.group,
           acceptPrivacy: formData.acceptPrivacy,
-          acceptTerms: formData.acceptTerms
-        })
+          acceptTerms: formData.acceptTerms,
+        }),
       })
 
       const data = await response.json()
+
       if (!response.ok) {
         setError(data.error || 'Ошибка регистрации')
         return
       }
 
-      setSuccess('Аккаунт создан. Теперь можно войти.')
+      setSuccess('Аккаунт создан. Перенаправляем на страницу входа...')
       setTimeout(() => router.push('/login'), 1200)
     } catch {
       setError('Ошибка регистрации')
@@ -139,14 +148,11 @@ export default function RegisterPage() {
 
   if (status === 'authenticated' && !sessionStuck) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-light-gray px-4 py-10">
-        <div className="liquid-card max-w-md w-full p-8 text-center">
+      <div className="status-screen">
+        <div className="status-card space-y-4 text-center">
           <p className="text-gray-700">Вы уже авторизованы</p>
-          <button
-            onClick={() => router.push('/')}
-            className="mt-4 btn btn-primary"
-          >
-            Перейти на главную
+          <button onClick={() => router.push('/dashboard')} className="btn btn-primary">
+            Перейти в dashboard
           </button>
         </div>
       </div>
@@ -154,29 +160,28 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-light-gray px-4 py-10">
-      <div className="container mx-auto max-w-5xl">
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] items-start">
-          <div className="liquid-card p-8 md:p-10 animate-fadeInUp">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-md">
-                БГ
-              </div>
+    <div className="page-shell min-h-screen px-4 py-10">
+      <div className="mx-auto max-w-7xl">
+        <div className="grid items-start gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+          <section className="liquid-section p-5 sm:p-6">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent text-sm font-bold text-white">БГ</div>
               <div>
-                <h1 className="text-2xl font-bold text-primary">
-                  БГИТУ <span className="text-accent">Афиша</span>
-                </h1>
-                <p className="text-sm text-gray-600">Регистрация студента</p>
+                <p className="text-sm font-semibold text-primary">БГИТУ Афиша</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/58">Регистрация</p>
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <h1 className="page-title text-2xl font-semibold sm:text-3xl">Создать аккаунт студента</h1>
+            <p className="mt-2 text-sm text-primary/66">После регистрации можно записываться на события, получать уведомления и работать с лентой кампуса.</p>
+
+            <form onSubmit={handleSubmit} className="mt-6 space-y-5">
               <div>
                 <label className="form-label">Имя *</label>
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => handleChange('name', e.target.value)}
+                  onChange={(event) => handleChange('name', event.target.value)}
                   className={`form-control ${formErrors.name ? 'border-red-500' : ''}`}
                   placeholder="Фамилия Имя"
                   disabled={loading}
@@ -189,20 +194,21 @@ export default function RegisterPage() {
                 <input
                   type="email"
                   value={formData.email}
-                  onChange={(e) => handleChange('email', e.target.value)}
+                  onChange={(event) => handleChange('email', event.target.value)}
                   className={`form-control ${formErrors.email ? 'border-red-500' : ''}`}
                   placeholder="student@bgitu.ru"
                   disabled={loading}
                 />
                 {formErrors.email && <p className="form-error">{formErrors.email}</p>}
               </div>
+
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="form-label">{'\u041f\u0430\u0440\u043e\u043b\u044c *'}</label>
+                  <label className="form-label">Пароль *</label>
                   <input
                     type="password"
                     value={formData.password}
-                    onChange={(e) => handleChange('password', e.target.value)}
+                    onChange={(event) => handleChange('password', event.target.value)}
                     className={`form-control ${formErrors.password ? 'border-red-500' : ''}`}
                     disabled={loading}
                     autoComplete="new-password"
@@ -210,95 +216,83 @@ export default function RegisterPage() {
                   {formErrors.password && <p className="form-error">{formErrors.password}</p>}
                 </div>
                 <div>
-                  <label className="form-label">{'\u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c *'}</label>
+                  <label className="form-label">Повторите пароль *</label>
                   <input
                     type="password"
                     value={formData.passwordConfirm}
-                    onChange={(e) => handleChange('passwordConfirm', e.target.value)}
+                    onChange={(event) => handleChange('passwordConfirm', event.target.value)}
                     className={`form-control ${formErrors.passwordConfirm ? 'border-red-500' : ''}`}
                     disabled={loading}
                     autoComplete="new-password"
                   />
-                  {formErrors.passwordConfirm && (
-                    <p className="form-error">{formErrors.passwordConfirm}</p>
-                  )}
+                  {formErrors.passwordConfirm && <p className="form-error">{formErrors.passwordConfirm}</p>}
                 </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="form-label">{'\u041a\u0430\u0444\u0435\u0434\u0440\u0430 / \u0424\u0430\u043a\u0443\u043b\u044c\u0442\u0435\u0442'}</label>
+                  <label className="form-label">Кафедра / факультет</label>
                   <input
                     type="text"
                     value={formData.department}
-                    onChange={(e) => handleChange('department', e.target.value)}
+                    onChange={(event) => handleChange('department', event.target.value)}
                     className="form-control"
-                    placeholder={'\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u041a\u0430\u0444\u0435\u0434\u0440\u0430 \u0418\u0422'}
+                    placeholder="Например: кафедра ИТ"
                     disabled={loading}
                   />
                 </div>
                 <div>
-                  <label className="form-label">{'\u0413\u0440\u0443\u043f\u043f\u0430 *'}</label>
+                  <label className="form-label">Группа *</label>
                   <input
                     type="text"
                     value={formData.group}
-                    onChange={(e) => handleChange('group', e.target.value)}
+                    onChange={(event) => handleChange('group', event.target.value)}
                     className={`form-control ${formErrors.group ? 'border-red-500' : ''}`}
-                    placeholder={'\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u0418\u0421-21'}
-                    required
+                    placeholder="Например: ИС-21"
                     disabled={loading}
                   />
                   {formErrors.group && <p className="form-error">{formErrors.group}</p>}
-                  <p className="text-xs text-gray-500 mt-1">{'\u0413\u0440\u0443\u043f\u043f\u0443 \u043c\u043e\u0436\u043d\u043e \u0438\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u0442\u043e\u043b\u044c\u043a\u043e \u043e\u0434\u0438\u043d \u0440\u0430\u0437.'}</p>
                 </div>
               </div>
-              <div className="space-y-2 text-sm text-gray-600">
+
+              <div className="space-y-2 text-sm text-primary/72">
                 <label className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.acceptTerms}
-                    onChange={(e) => handleChange('acceptTerms', e.target.checked)}
-                    className="mt-1"
-                  />
+                  <input type="checkbox" checked={formData.acceptTerms} onChange={(event) => handleChange('acceptTerms', event.target.checked)} className="mt-1" />
                   <span>
                     Я принимаю{' '}
-                    <Link href="/legal/terms" className="text-accent hover:text-primary font-medium">
+                    <Link href="/legal/terms" className="font-medium text-primary hover:underline">
                       пользовательское соглашение
                     </Link>
                   </span>
                 </label>
+
                 <label className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.acceptPrivacy}
-                    onChange={(e) => handleChange('acceptPrivacy', e.target.checked)}
-                    className="mt-1"
-                  />
+                  <input type="checkbox" checked={formData.acceptPrivacy} onChange={(event) => handleChange('acceptPrivacy', event.target.checked)} className="mt-1" />
                   <span>
                     Я согласен с{' '}
-                    <Link href="/legal/privacy" className="text-accent hover:text-primary font-medium">
+                    <Link href="/legal/privacy" className="font-medium text-primary hover:underline">
                       политикой конфиденциальности
                     </Link>
                   </span>
                 </label>
+
                 {formErrors.consent && <p className="form-error">{formErrors.consent}</p>}
               </div>
 
               {(error || success) && (
                 <div role="status" aria-live="polite">
                   {error && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-                      <div className="flex items-center">
-                        <i className="fas fa-exclamation-circle mr-2"></i>
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+                      <div className="flex items-center gap-2">
+                        <i className="fas fa-circle-exclamation" />
                         <span>{error}</span>
                       </div>
                     </div>
                   )}
-
                   {success && (
-                    <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg">
-                      <div className="flex items-center">
-                        <i className="fas fa-check-circle mr-2"></i>
+                    <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-green-700">
+                      <div className="flex items-center gap-2">
+                        <i className="fas fa-circle-check" />
                         <span>{success}</span>
                       </div>
                     </div>
@@ -306,63 +300,51 @@ export default function RegisterPage() {
                 </div>
               )}
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn btn-primary w-full"
-              >
+              <button type="submit" disabled={loading} className="btn btn-primary w-full py-3">
                 {loading ? (
-                  <span className="flex items-center justify-center">
-                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <i className="fas fa-spinner fa-spin" />
                     Создание...
                   </span>
-                ) : 'Создать аккаунт'}
+                ) : (
+                  'Создать аккаунт'
+                )}
               </button>
 
-              <div className="text-center text-sm text-gray-600">
+              <p className="text-center text-sm text-primary/65">
                 Уже есть аккаунт?{' '}
-                <Link href="/login" className="text-accent hover:text-primary font-medium">
+                <Link href="/login" className="font-medium text-primary hover:underline">
                   Войти
                 </Link>
-              </div>
+              </p>
             </form>
-          </div>
+          </section>
 
-          <div className="space-y-4">
-            <div className="liquid-card p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-3">Почему стоит зарегистрироваться</h2>
-              <div className="space-y-3">
+          <aside className="space-y-4">
+            <section className="liquid-section p-5">
+              <h2 className="text-lg font-semibold text-primary">Что вы получите после регистрации</h2>
+              <div className="mt-4 space-y-3">
                 {highlights.map((item) => (
-                  <div key={item.title} className="flex gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-white/80 border border-white/70 flex items-center justify-center text-primary shadow-sm">
-                      <i className="fas fa-star"></i>
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-800">{item.title}</p>
-                      <p className="text-sm text-gray-600">{item.description}</p>
-                    </div>
+                  <div key={item.title} className="liquid-card p-4">
+                    <p className="text-sm font-semibold text-primary">{item.title}</p>
+                    <p className="mt-1 text-sm text-primary/65">{item.description}</p>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
 
-            <div className="liquid-card p-6">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Данные и безопасность</h3>
-              <p className="text-sm text-gray-600 mt-2">
-                Мы обрабатываем персональные данные только для работы сервиса. Все действия фиксируются в аудит‑логе.
+            <section className="liquid-section p-5">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-primary/60">Данные и безопасность</h3>
+              <p className="mt-3 text-sm leading-7 text-primary/68">
+                Мы используем персональные данные только для работы сервиса. Детали описаны в документах и доступны по ссылкам ниже.
               </p>
-              <div className="mt-3 text-sm text-gray-600">
-                Ознакомьтесь с{' '}
-                <Link href="/legal/terms" className="text-accent hover:text-primary font-medium">
-                  соглашением
-                </Link>{' '}
-                и{' '}
-                <Link href="/legal/privacy" className="text-accent hover:text-primary font-medium">
-                  политикой
-                </Link>.
+              <div className="mt-3 text-sm text-primary/68">
+                <Link href="/legal/terms" className="font-medium text-primary hover:underline">Соглашение</Link>
+                {' · '}
+                <Link href="/legal/privacy" className="font-medium text-primary hover:underline">Политика</Link>
               </div>
-            </div>
-          </div>
+            </section>
+          </aside>
         </div>
       </div>
     </div>

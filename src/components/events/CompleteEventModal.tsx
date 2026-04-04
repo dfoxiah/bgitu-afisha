@@ -150,7 +150,7 @@ const CompleteEventModal = ({ event, onClose, onSubmit }: CompleteEventModalProp
   return (
     <Modal isOpen={true} onClose={onClose} title="Завершение мероприятия" size="lg">
       <form onSubmit={handleSubmit}>
-        <div className="liquid-card p-4 border-l-4 border-accent mb-6">
+        <div className="liquid-card mb-4 border-l-4 border-accent p-3.5">
           <p className="font-semibold text-primary">Завершаем: {event?.title}</p>
           <p className="text-sm text-gray-600 mt-1">
             Категория: {categoryDisplayName} | 
@@ -159,7 +159,7 @@ const CompleteEventModal = ({ event, onClose, onSubmit }: CompleteEventModalProp
           </p>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           <div className="form-group">
             <label className="form-label">Заголовок отчета (опционально)</label>
             <input
@@ -170,7 +170,7 @@ const CompleteEventModal = ({ event, onClose, onSubmit }: CompleteEventModalProp
               className="w-full px-4 py-3 liquid-input"
               placeholder="Если оставить пустым, отчет не будет опубликован как новость"
             />
-            <p className="text-sm text-gray-500 mt-2">
+            <p className="mt-2 text-sm text-gray-500">
               Оставьте пустым, если не хотите публиковать отчет как новость
             </p>
           </div>
@@ -244,7 +244,7 @@ const CompleteEventModal = ({ event, onClose, onSubmit }: CompleteEventModalProp
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                   {formData.images.map((img, index) => (
-                    <div key={index} className="relative rounded-2xl overflow-hidden border border-white/70 bg-white/70 shadow aspect-[4/3]">
+                    <div key={index} className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/70 bg-white/70 shadow">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img 
                         src={img.url} 
@@ -307,8 +307,8 @@ const CompleteEventModal = ({ event, onClose, onSubmit }: CompleteEventModalProp
                     </label>
                     <span className={`text-xs px-3 py-1 rounded-full ${
                       participant.active 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-500'
+                        ? 'bg-emerald-100 text-emerald-800' 
+                        : 'bg-slate-100 text-slate-500'
                     }`}>
                       {participant.active ? 'Активен' : 'Не активен'}
                     </span>
@@ -319,7 +319,7 @@ const CompleteEventModal = ({ event, onClose, onSubmit }: CompleteEventModalProp
           </div>
         </div>
 
-        <div className="editor-actions flex justify-end gap-4 mt-8 pt-6 border-t border-gray-200">
+        <div className="editor-actions mt-8 flex justify-end gap-4 border-t border-primary/12 pt-6">
           <Button 
             type="button" 
             variant="secondary" 

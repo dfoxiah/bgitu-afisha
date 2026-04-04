@@ -80,6 +80,8 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
 
+const NOTIFICATIONS_LIVE_INTERVAL_MS = 15000
+
 let notificationsGlobalCooldownUntil = 0
 let notificationsGlobalInFlight = false
 
@@ -232,13 +234,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const now = Date.now()
       if (!force) {
         if (now < notificationsGlobalCooldownUntil) return
-        if (now - lastNotificationsFetchRef.current < 15000) return
+        if (now - lastNotificationsFetchRef.current < NOTIFICATIONS_LIVE_INTERVAL_MS) return
       }
 
       if (notificationsGlobalInFlight || notificationsFetchingRef.current) return
 
       notificationsGlobalInFlight = true
-      notificationsGlobalCooldownUntil = now + 30000
+      notificationsGlobalCooldownUntil = now + NOTIFICATIONS_LIVE_INTERVAL_MS
       notificationsFetchingRef.current = true
 
       try {
@@ -280,6 +282,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       lastNotificationsFetchRef.current = 0
     }
   }, [status])
+
+  useEffect(() => {
+    if (status !== "authenticated" || !session?.user?.id) return
+
+    const refreshLive = async (force = false) => {
+      if (document.visibilityState === "hidden") return
+      await fetchNotifications(force)
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshLive()
+    }, NOTIFICATIONS_LIVE_INTERVAL_MS)
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshLive(true)
+      }
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    void refreshLive(true)
+
+    return () => {
+      window.clearInterval(intervalId)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
+  }, [fetchNotifications, session?.user?.id, status])
 
   const setSelectedCategoryWithDebug = useCallback(
     (category: string) => {

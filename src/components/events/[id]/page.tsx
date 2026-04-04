@@ -20,8 +20,7 @@ import Image from 'next/image'
 import { useAppContext } from '@/contexts/AppContext'
 import Button from '@/components/ui/Button'
 import ImageGalleryModal from '@/components/ui/ImageGalleryModal'
-import { Event } from '@/types'
-import { CategoryDisplayMap } from '@/types'
+import { Event, CategoryDisplayMap } from '@/types'
 import { EventCategory } from '@prisma/client'
 import { showToast } from '@/lib/toast'
 
@@ -30,7 +29,7 @@ export default function EventDetailsPage() {
   const router = useRouter()
   const { data: session } = useSession()
   const { events, registerForEvent } = useAppContext()
-  
+
   const [event, setEvent] = useState<Event | null>(null)
   const [loading, setLoading] = useState(true)
   const [isRegistering, setIsRegistering] = useState(false)
@@ -43,17 +42,21 @@ export default function EventDetailsPage() {
   useEffect(() => {
     if (params.id && events.length > 0) {
       const eventId = params.id as string
-      const foundEvent = events.find(e => e.id === eventId)
+      const foundEvent = events.find((item) => item.id === eventId)
       setEvent(foundEvent || null)
       setLoading(false)
-    } else if (params.id && events.length === 0) {
-      // Если события еще не загружены, пытаемся загрузить
-      setTimeout(() => {
+      return
+    }
+
+    if (params.id && events.length === 0) {
+      const timer = setTimeout(() => {
         const eventId = params.id as string
-        const foundEvent = events.find(e => e.id === eventId)
+        const foundEvent = events.find((item) => item.id === eventId)
         setEvent(foundEvent || null)
         setLoading(false)
       }, 1000)
+
+      return () => clearTimeout(timer)
     }
   }, [params.id, events])
 
@@ -76,42 +79,45 @@ export default function EventDetailsPage() {
   const getCategoryColor = (category: EventCategory): string => {
     const colors: Record<EventCategory, string> = {
       [EventCategory.CONCERT]: 'bg-sky-100 text-sky-700',
-      [EventCategory.INTERNAL_ACTIVITY]: 'bg-blue-100 text-blue-700',
+      [EventCategory.INTERNAL_ACTIVITY]: 'bg-indigo-100 text-indigo-700',
       [EventCategory.PUBLIC_EVENT]: 'bg-cyan-100 text-cyan-700',
-      [EventCategory.COMPETITION]: 'bg-indigo-100 text-indigo-700',
-      [EventCategory.LECTURE]: 'bg-violet-100 text-violet-700',
-      [EventCategory.MASTERCLASS]: 'bg-teal-100 text-teal-700',
-      [EventCategory.VOLUNTEER]: 'bg-slate-100 text-slate-700',
-      [EventCategory.NEWS]: 'bg-sky-50 text-sky-700'
+      [EventCategory.COMPETITION]: 'bg-violet-100 text-violet-700',
+      [EventCategory.LECTURE]: 'bg-blue-100 text-blue-700',
+      [EventCategory.MASTERCLASS]: 'bg-amber-100 text-amber-700',
+      [EventCategory.VOLUNTEER]: 'bg-emerald-100 text-emerald-700',
+      [EventCategory.NEWS]: 'bg-slate-100 text-slate-700',
     }
     return colors[category] || 'bg-accent text-white'
   }
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-accent"></div>
+      <div className="status-screen">
+        <div className="status-spinner" />
       </div>
     )
   }
 
   if (!event) {
     return (
-      <div className="text-center py-20">
-        <i className="fas fa-exclamation-triangle text-5xl text-yellow-500 mb-4"></i>
-        <h2 className="text-2xl font-bold text-gray-700 mb-4">Мероприятие не найдено</h2>
-        <p className="text-gray-500 mb-8">Запрошенное мероприятие не существует или было удалено</p>
-        <Button variant="secondary" onClick={() => router.back()}>
-          <i className="fas fa-arrow-left mr-2"></i>
-          Вернуться назад
-        </Button>
+      <div className="status-screen text-center">
+        <div className="status-card">
+          <i className="fas fa-exclamation-triangle mb-4 text-5xl text-yellow-500" />
+          <h2 className="mb-4 text-2xl font-bold text-gray-700">Мероприятие не найдено</h2>
+          <p className="mb-8 text-gray-500">Запрошенное мероприятие не существует или было удалено.</p>
+          <Button variant="secondary" onClick={() => router.back()}>
+            <i className="fas fa-arrow-left mr-2" />
+            Вернуться назад
+          </Button>
+        </div>
       </div>
     )
   }
 
   const eventDate = event.date instanceof Date ? event.date : new Date(event.date)
-  const isParticipant = event.participants?.some(p => p.id === session?.user?.id)
-  const isPending = event.pendingParticipants?.some(p => p.id === session?.user?.id)
+  const heroImage = (event.images && event.images.length > 0 ? event.images[0] : null) || (event.report?.images && event.report.images.length > 0 ? event.report.images[0] : null)
+  const isParticipant = event.participants?.some((participant) => participant.id === session?.user?.id)
+  const isPending = event.pendingParticipants?.some((participant) => participant.id === session?.user?.id)
   const isPast = event.isPast || eventDate < new Date()
   const isTeacher = session?.user?.role === 'TEACHER' || session?.user?.role === 'ADMIN'
   const isFull = event.maxParticipants > 0 && event.currentParticipants >= event.maxParticipants
@@ -125,7 +131,7 @@ export default function EventDetailsPage() {
 
     setIsRegistering(true)
     try {
-      await registerForEvent(event.id) // Теперь передаем только eventId
+      await registerForEvent(event.id)
       showToast('Вы успешно зарегистрированы на мероприятие!', 'success')
       triggerJoinEffect()
     } catch (error) {
@@ -144,268 +150,242 @@ export default function EventDetailsPage() {
   }
 
   return (
-    <div className="event-details-page px-4 md:px-[5%] py-8">
-      <div className="container mx-auto max-w-6xl">
-        <Button 
-          variant="secondary" 
-          onClick={() => router.back()}
-          className="mb-6"
-        >
-          <i className="fas fa-arrow-left mr-2"></i>
-          Назад
-        </Button>
-        
-        <div className="liquid-section overflow-hidden">
-          {/* Заголовок и категория */}
-          <div className="p-4 sm:p-6 lg:p-8 border-b">
-            <div className="flex flex-wrap items-center justify-between mb-4">
-              <span className={`inline-block px-3 sm:px-4 py-1 rounded-full text-xs sm:text-sm font-medium mb-2 ${getCategoryColor(event.category as EventCategory)}`}>
-                {categoryDisplayName}
-              </span>
-              <div className="text-sm text-gray-500">ID: {event.id.substring(0, 8)}...</div>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">{event.title}</h1>
-            <div className="flex items-center text-gray-600">
-              <i className="fas fa-user-circle mr-2"></i>
-              <span>Создатель: </span>
-              {event.creator?.id ? (
-                <Link
-                  href={`/users/${event.creator.id}`}
-                  className="ml-1 text-accent hover:text-primary hover:underline underline-offset-4"
-                  title="Перейти в профиль"
-                >
-                  {event.creator?.name || 'Профиль пользователя'}
-                </Link>
-              ) : (
-                <span className="ml-1">{event.creator?.name || 'Не указан'}</span>
-              )}
-            </div>
-          </div>
+    <div className="event-details-page page-shell px-4 py-8 md:px-[5%]">
+      <div className="mx-auto max-w-7xl space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Button variant="secondary" onClick={() => router.back()}>
+            <i className="fas fa-arrow-left mr-2" />
+            Назад
+          </Button>
 
-          {/* Основная информация */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 p-4 sm:p-6 lg:p-8">
-            <div className="flex items-start space-x-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/70 border border-white/70 rounded-xl flex items-center justify-center shadow">
-                <i className="fas fa-calendar text-accent text-lg sm:text-xl"></i>
+          {event.creator?.id ? (
+            <Link
+              href={`/users/${event.creator.id}`}
+              className="rounded-full border border-primary/18 bg-white/84 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-primary/70 transition-colors hover:border-primary/34 hover:text-primary"
+              title="Перейти в профиль создателя"
+            >
+              Создатель: {event.creator.name || 'Профиль'}
+            </Link>
+          ) : null}
+        </div>
+
+        <section className="liquid-section overflow-hidden">
+          <div className="relative min-h-[12rem] border-b border-primary/12 p-4 sm:min-h-[14rem] sm:p-5">
+            {heroImage ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={heroImage} alt={event.title} className="absolute inset-0 h-full w-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-r from-[#041126]/74 via-[#041126]/52 to-[#041126]/18" />
+              </>
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-[#0f2f68] via-[#1f5fe0] to-[#2f8df3]" />
+            )}
+
+            <div className="relative z-10 flex h-full flex-col justify-end">
+              <div className="mb-3">
+                <span className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${getCategoryColor(event.category as EventCategory)}`}>
+                  {categoryDisplayName}
+                </span>
               </div>
-              <div>
-                <div className="font-semibold text-gray-700">Дата</div>
-                <div className="text-base sm:text-lg">{eventDate.toLocaleDateString('ru-RU', {
+              <h1 className="text-2xl font-bold leading-tight text-white sm:text-3xl">{event.title}</h1>
+              <p className="mt-2 text-sm text-white/90 sm:text-base">
+                {eventDate.toLocaleDateString('ru-RU', {
                   weekday: 'long',
                   year: 'numeric',
                   month: 'long',
-                  day: 'numeric'
-                })}</div>
-              </div>
-            </div>
-            
-            <div className="flex items-start space-x-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/70 border border-white/70 rounded-xl flex items-center justify-center shadow">
-                <i className="fas fa-clock text-accent text-lg sm:text-xl"></i>
-              </div>
-              <div>
-                <div className="font-semibold text-gray-700">Время</div>
-                <div className="text-base sm:text-lg">{event.time} ({event.duration})</div>
-              </div>
-            </div>
-            
-            <div className="flex items-start space-x-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/70 border border-white/70 rounded-xl flex items-center justify-center shadow">
-                <i className="fas fa-map-marker-alt text-accent text-lg sm:text-xl"></i>
-              </div>
-              <div>
-                <div className="font-semibold text-gray-700">Место</div>
-                <div className="text-base sm:text-lg">{event.location}</div>
-              </div>
-            </div>
-            
-            <div className="flex items-start space-x-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/70 border border-white/70 rounded-xl flex items-center justify-center shadow">
-                <i className="fas fa-users text-accent text-lg sm:text-xl"></i>
-              </div>
-              <div>
-                <div className="font-semibold text-gray-700">Участники</div>
-                <div className="text-base sm:text-lg">
-                  {event.currentParticipants}{event.maxParticipants > 0 ? `/${event.maxParticipants}` : ''}
-                </div>
-                {event.pendingParticipants && event.pendingParticipants.length > 0 && (
-                  <div className="text-xs text-sky-600 mt-1">
-                    {event.pendingParticipants.length} ожидают подтверждения
-                  </div>
-                )}
-                {event.maxParticipants > 0 && (
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                    <div 
-                      className="bg-accent h-2 rounded-full" 
-                      style={{ 
-                        width: `${Math.min(100, (event.currentParticipants / event.maxParticipants) * 100)}%` 
-                      }}
-                    ></div>
-                  </div>
-                )}
-              </div>
+                  day: 'numeric',
+                })}
+              </p>
             </div>
           </div>
 
-          {/* Описание */}
-          <div className="px-4 sm:px-6 lg:px-8 pb-6 sm:pb-8">
-            <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Описание</h3>
-            <div className="prose max-w-none text-gray-700 leading-relaxed">
-              {event.description.split('\n').map((paragraph, index) => (
-                <p key={index} className="mb-4">{paragraph}</p>
-              ))}
-            </div>
-          </div>
-
-          {/* Изображения */}
-          {event.images && event.images.length > 0 && (
-            <div className="px-4 sm:px-6 lg:px-8 pb-6 sm:pb-8">
-              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Фотографии</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {event.images.map((image, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    className="block rounded-lg overflow-hidden border border-gray-200 bg-black/5 aspect-[4/3] shadow-md"
-                    onClick={() => openGallery(event.images, index)}
-                    title="Просмотр фото"
-                  >
-                    <div className="relative w-full h-full">
-                      <Image
-                        src={image}
-                        alt={`${event.title} - фото ${index + 1}`}
-                        fill
-                        sizes="(max-width: 1024px) 50vw, 25vw"
-                        className="object-cover"
-                        unoptimized
-                      />
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Контактная информация */}
-          <div className="px-4 sm:px-6 lg:px-8 pb-6 sm:pb-8">
-            <h4 className="text-lg font-semibold text-gray-900 mb-4">Контактная информация</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-              <div className="liquid-card p-4">
-                <div className="font-medium text-gray-600 mb-1">Ответственный</div>
-                <div className="text-base sm:text-lg">{event.responsible}</div>
-              </div>
-              {event.contact && (
-                <div className="liquid-card p-4">
-                  <div className="font-medium text-gray-600 mb-1">Контакт</div>
-                  <div className="text-base sm:text-lg">{event.contact}</div>
+          <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[1.2fr_0.8fr] lg:p-6">
+            <div className="space-y-4">
+              <article className="liquid-card p-4 sm:p-5">
+                <h2 className="text-xl font-semibold text-primary">Описание</h2>
+                <div className="mt-3 space-y-3 text-sm leading-7 text-primary/78 sm:text-base">
+                  {event.description.split('\n').map((paragraph, index) => (
+                    <p key={index}>{paragraph}</p>
+                  ))}
                 </div>
+              </article>
+
+              {(event.images && event.images.length > 0) && (
+                <article className="liquid-card p-4 sm:p-5">
+                  <h3 className="text-lg font-semibold text-primary">Фотографии</h3>
+                  <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+                    {event.images.map((image, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        className="relative block aspect-[4/3] overflow-hidden rounded-xl border border-primary/14"
+                        onClick={() => openGallery(event.images, index)}
+                        title="Просмотр фото"
+                      >
+                        <Image
+                          src={image}
+                          alt={`${event.title} - фото ${index + 1}`}
+                          fill
+                          sizes="(max-width: 1024px) 50vw, 25vw"
+                          className="object-cover transition-transform duration-300 hover:scale-105"
+                          unoptimized
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </article>
               )}
-            </div>
-          </div>
 
-          {/* Кнопка регистрации */}
-          {!isPast && !isTeacher && (
-            <div className="px-4 sm:px-6 lg:px-8 pb-6 sm:pb-8">
-              <div className={`join-portal ${joinEffect ? 'is-celebrating' : ''}`}>
-                <span className="join-sparkles" aria-hidden="true"></span>
-                <Button
-                  variant="primary"
-                  fullWidth
-                  onClick={handleRegister}
-                  disabled={isParticipant || isPending || isFull || isRegistering}
-                  className={`py-3 sm:py-4 text-base sm:text-lg ${joinEffect ? 'btn-celebrate' : ''}`}
-                  loading={isRegistering}
-                >
-                  {isParticipant ? (
+              {isPast && event.report && (
+                <article className="liquid-card p-4 sm:p-5">
+                  <h3 className="text-lg font-semibold text-primary">Отчет о мероприятии</h3>
+                  <p className="mt-3 text-sm leading-7 text-primary/78 sm:text-base">{event.report.summary}</p>
+
+                  {event.report.tasks && event.report.tasks.length > 0 && (
                     <>
-                      <i className="fas fa-check mr-2"></i>
-                      Вы уже зарегистрированы
-                    </>
-                  ) : isPending ? (
-                    <>
-                      <i className="fas fa-hourglass-half mr-2"></i>
-                      Заявка на подтверждении
-                    </>
-                  ) : isFull ? (
-                    <>
-                      <i className="fas fa-times mr-2"></i>
-                      Мест нет
-                    </>
-                  ) : (
-                    <>
-                      <i className="fas fa-user-plus mr-2"></i>
-                      Зарегистрироваться на мероприятие
+                      <h4 className="mt-5 text-sm font-semibold uppercase tracking-[0.08em] text-primary/65">Выполненные задачи</h4>
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-primary/75 sm:text-base">
+                        {event.report.tasks.map((task, index) => (
+                          <li key={index}>{task}</li>
+                        ))}
+                      </ul>
                     </>
                   )}
-                </Button>
-              </div>
-            </div>
-          )}
 
-          {/* Отчет о мероприятии (если прошло) */}
-          {isPast && event.report && (
-            <div className="px-4 sm:px-6 lg:px-8 pb-6 sm:pb-8 border-t pt-6 sm:pt-8">
-              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Отчет о мероприятии</h3>
-              <div className="bg-white/70 border border-white/70 p-4 sm:p-6 rounded-2xl shadow">
-                <h4 className="font-semibold text-lg mb-2">Итоги</h4>
-                <p className="mb-4">{event.report.summary}</p>
-                
-                {event.report.tasks && event.report.tasks.length > 0 && (
-                  <>
-                    <h4 className="font-semibold text-lg mb-2">Выполненные задачи:</h4>
-                    <ul className="list-disc pl-5 mb-4">
-                      {event.report.tasks.map((task, index) => (
-                        <li key={index}>{task}</li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-                
-                {event.report.activeParticipants && event.report.activeParticipants.length > 0 && (
-                  <>
-                    <h4 className="font-semibold text-lg mb-2">Активные участники:</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {event.report.activeParticipants.map((participant, index) => (
-                        <span key={index} className="bg-white px-3 py-1 rounded-full text-sm">
-                          {participant}
-                        </span>
-                      ))}
-                    </div>
-                  </>
-                )}
+                  {event.report.activeParticipants && event.report.activeParticipants.length > 0 && (
+                    <>
+                      <h4 className="mt-5 text-sm font-semibold uppercase tracking-[0.08em] text-primary/65">Активные участники</h4>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {event.report.activeParticipants.map((participant, index) => (
+                          <span key={index} className="rounded-full border border-primary/15 bg-white px-3 py-1 text-sm text-primary/75">
+                            {participant}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  )}
 
-                {event.report.images && event.report.images.length > 0 && (
-                  <div className="mt-6">
-                    <h4 className="font-semibold text-lg mb-2">Фотографии:</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                      {event.report.images.map((image, index) => (
-                        <button
-                          key={index}
-                          type="button"
-                          className="block rounded-lg overflow-hidden border border-gray-200 bg-black/5 aspect-[4/3] shadow-md"
-                          onClick={() => openGallery(event.report?.images || [], index)}
-                          title="Просмотр фото"
-                        >
-                          <div className="relative w-full h-full">
+                  {event.report.images && event.report.images.length > 0 && (
+                    <>
+                      <h4 className="mt-5 text-sm font-semibold uppercase tracking-[0.08em] text-primary/65">Фотоотчет</h4>
+                      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
+                        {event.report.images.map((image, index) => (
+                          <button
+                            key={index}
+                            type="button"
+                            className="relative block aspect-[4/3] overflow-hidden rounded-xl border border-primary/14"
+                            onClick={() => openGallery(event.report?.images || [], index)}
+                            title="Просмотр фото"
+                          >
                             <Image
                               src={image}
-                              alt={`${event.title} - фото ${index + 1}`}
+                              alt={`${event.title} - фотоотчет ${index + 1}`}
                               fill
                               sizes="(max-width: 1024px) 50vw, 25vw"
-                              className="object-cover"
+                              className="object-cover transition-transform duration-300 hover:scale-105"
                               unoptimized
                             />
-                          </div>
-                        </button>
-                      ))}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </article>
+              )}
+            </div>
+
+            <aside className="space-y-4">
+              <article className="liquid-card p-4 sm:p-5">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.1em] text-primary/60">Параметры</h3>
+                <div className="mt-4 space-y-3 text-sm text-primary/78">
+                  <div className="flex items-center gap-2">
+                    <i className="fas fa-clock w-4 text-accent" />
+                    <span>{event.time} ({event.duration})</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <i className="fas fa-location-dot w-4 text-accent" />
+                    <span>{event.location}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <i className="fas fa-users w-4 text-accent" />
+                    <span>
+                      {event.currentParticipants}
+                      {event.maxParticipants > 0 ? `/${event.maxParticipants}` : ''} участников
+                    </span>
+                  </div>
+                </div>
+
+                {event.maxParticipants > 0 && (
+                  <div className="mt-4">
+                    <div className="h-2 rounded-full bg-primary/10">
+                      <div
+                        className="h-2 rounded-full bg-primary"
+                        style={{ width: `${Math.min(100, (event.currentParticipants / event.maxParticipants) * 100)}%` }}
+                      />
                     </div>
                   </div>
                 )}
-              </div>
-            </div>
-          )}
-        </div>
+
+                {event.pendingParticipants && event.pendingParticipants.length > 0 && (
+                  <p className="mt-3 text-xs text-primary/62">{event.pendingParticipants.length} заявок ожидают подтверждения</p>
+                )}
+              </article>
+
+              <article className="liquid-card p-4 sm:p-5">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.1em] text-primary/60">Контакты</h3>
+                <p className="mt-3 text-sm text-primary/75">
+                  <span className="font-semibold text-primary/82">Ответственный:</span> {event.responsible}
+                </p>
+                {event.contact && (
+                  <p className="mt-2 text-sm text-primary/75">
+                    <span className="font-semibold text-primary/82">Контакт:</span> {event.contact}
+                  </p>
+                )}
+              </article>
+
+              {!isPast && !isTeacher && (
+                <article className={`liquid-card p-4 sm:p-5 ${joinEffect ? 'join-portal is-celebrating' : 'join-portal'}`}>
+                  <span className="join-sparkles" aria-hidden="true" />
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.1em] text-primary/60">Регистрация</h3>
+                  <div className="mt-3">
+                    <Button
+                      variant="primary"
+                      fullWidth
+                      onClick={handleRegister}
+                      disabled={isParticipant || isPending || isFull || isRegistering}
+                      className={`py-3 text-sm sm:text-base ${joinEffect ? 'btn-celebrate' : ''}`}
+                      loading={isRegistering}
+                    >
+                      {isParticipant ? (
+                        <>
+                          <i className="fas fa-check mr-2" />
+                          Вы уже зарегистрированы
+                        </>
+                      ) : isPending ? (
+                        <>
+                          <i className="fas fa-hourglass-half mr-2" />
+                          Заявка на подтверждении
+                        </>
+                      ) : isFull ? (
+                        <>
+                          <i className="fas fa-times mr-2" />
+                          Мест нет
+                        </>
+                      ) : (
+                        <>
+                          <i className="fas fa-user-plus mr-2" />
+                          Зарегистрироваться
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </article>
+              )}
+            </aside>
+          </div>
+        </section>
       </div>
+
       <ImageGalleryModal
         isOpen={galleryOpen}
         images={galleryImages}
@@ -416,11 +396,3 @@ export default function EventDetailsPage() {
     </div>
   )
 }
-
-
-
-
-
-
-
-

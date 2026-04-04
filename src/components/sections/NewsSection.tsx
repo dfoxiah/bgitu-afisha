@@ -10,137 +10,130 @@
  * - Dashboard/news routes
  * - Event news collections
  */
-'use client'
+"use client"
 
-import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Event } from '@/types'
-import ImageGalleryModal from '@/components/ui/ImageGalleryModal'
-import { EventCategory } from '@prisma/client'
-import { getCategoryIcon } from '@/utils/eventCategoryIcons'
+import { useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import { EventCategory } from "@prisma/client"
+import ImageGalleryModal from "@/components/ui/ImageGalleryModal"
+import { Event } from "@/types"
+import { getCategoryIcon } from "@/utils/eventCategoryIcons"
 
 interface NewsSectionProps {
   events: Event[]
+  plain?: boolean
 }
 
-const NewsSection = ({ events = [] }: NewsSectionProps) => {
+const NewsSection = ({ events = [], plain = false }: NewsSectionProps) => {
   const router = useRouter()
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [galleryImages, setGalleryImages] = useState<string[]>([])
   const [galleryIndex, setGalleryIndex] = useState(0)
-  const [galleryTitle, setGalleryTitle] = useState('')
+  const [galleryTitle, setGalleryTitle] = useState("")
 
-  const newsEvents = useMemo(() => 
-    events
-      .filter(event => event.isNews || (event.report && event.isPast))
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 6),
+  const newsEvents = useMemo(
+    () =>
+      events
+        .filter((event) => event.isNews || (event.report && event.isPast))
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 8),
     [events]
   )
 
-  if (newsEvents.length === 0) {
-    return (
-      <section className="news-section liquid-section p-5 sm:p-6 lg:p-8 mx-4 sm:mx-[5%] my-4">
-        <h2 className="section-title text-lg sm:text-2xl text-primary mb-5 sm:mb-6 flex items-center gap-3">
-          <i className="fas fa-newspaper"></i> Новостная лента
-        </h2>
-        <div className="text-center py-8 sm:py-12 text-gray-500">
-          <i className="fas fa-newspaper text-4xl sm:text-5xl mb-3 sm:mb-4"></i>
-          <p className="text-base sm:text-xl">Пока нет новостей</p>
-        </div>
-      </section>
-    )
+  const getGallery = (event: Event) => {
+    if (event.report?.images && event.report.images.length > 0) return event.report.images
+    return event.images || []
   }
 
-  const handleNewsClick = (event: Event) => {
-    router.push(`/events/${event.id}`)
+  const getCover = (event: Event) => {
+    const gallery = getGallery(event)
+    return gallery.length > 0 ? gallery[0] : ""
   }
 
   const openGallery = (images: string[], index: number, title?: string) => {
     if (!images || images.length === 0) return
     setGalleryImages(images)
     setGalleryIndex(index)
-    setGalleryTitle(title || 'Просмотр фото')
+    setGalleryTitle(title || "Просмотр фото")
     setGalleryOpen(true)
   }
 
   return (
-    <section className="news-section liquid-section p-5 sm:p-6 lg:p-8 mx-4 sm:mx-[5%] my-4">
-      <h2 className="section-title text-lg sm:text-2xl text-primary mb-5 sm:mb-6 flex items-center gap-3">
-        <i className="fas fa-newspaper"></i> Новостная лента
-      </h2>
-      
-      <div className="news-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-        {newsEvents.map(event => {
-          const galleryImages = event.report?.images && event.report.images.length > 0
-            ? event.report.images
-            : (event.images || [])
-          const imageUrl = event.images && event.images.length > 0 
-            ? event.images[0] 
-            : event.report?.images && event.report.images.length > 0
-            ? event.report.images[0]
-            : ''
-          
-          return (
-            <div 
-              key={event.id} 
-              className="news-card liquid-card liquid-card-hover overflow-hidden cursor-pointer"
-              onClick={() => handleNewsClick(event)}
-            >
-              <div className="news-image h-40 sm:h-48 bg-gray-900 relative overflow-hidden">
-                {imageUrl ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={imageUrl}
-                      alt={event.title}
-                      className="absolute inset-0 w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/30 to-black/50"></div>
-                  </>
-                ) : (
-                  <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900 flex items-center justify-center">
-                    <i className={`fas ${getCategoryIcon(event.category as EventCategory)} text-4xl sm:text-5xl text-white/80`}></i>
-                  </div>
-                )}
-                {galleryImages.length > 0 && (
-                  <button
-                    type="button"
-                    className="absolute left-3 bottom-3 bg-black/60 text-white text-[11px] sm:text-xs px-3 py-1.5 sm:py-2 rounded-full hover:bg-black/80 transition-colors"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openGallery(galleryImages, 0, event.title)
-                    }}
-                  >
-                    <i className="fas fa-images mr-2"></i>
-                    Просмотр фото
-                  </button>
-                )}
-              </div>
-              <div className="news-content p-4 sm:p-5">
-                <h3 className="news-title text-lg sm:text-xl font-semibold text-primary mb-2 sm:mb-3 line-clamp-2">
-                  {event.title}
-                </h3>
-                <div className="news-meta flex gap-3 sm:gap-4 text-xs sm:text-sm text-gray-500 mb-3 sm:mb-4 flex-wrap">
-                  <span><i className="fas fa-calendar mr-1"></i> {new Date(event.date).toLocaleDateString('ru-RU')}</span>
-                  {event.report?.reportDate && (
-                    <span><i className="fas fa-file-alt mr-1"></i> Отчет: {new Date(event.report.reportDate).toLocaleDateString('ru-RU')}</span>
-                  )}
-                  {event.report?.images && event.report.images.length > 0 && (
-                    <span><i className="fas fa-camera mr-1"></i> {event.report.images.length} фото</span>
-                  )}
-                </div>
-                <p className="news-excerpt text-gray-600 mb-4 sm:mb-5 text-sm sm:text-base line-clamp-3">
-                  {event.report?.summary || event.description || 'Подробности мероприятия...'}
-                </p>
-                <div className="news-link text-accent font-medium flex items-center gap-2 hover:text-primary transition-colors">
-                  Читать подробнее <i className="fas fa-arrow-right"></i>
-                </div>
-              </div>
-            </div>
-          )
-        })}
+    <section className={plain ? "" : "liquid-section p-4 sm:p-5"}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-primary">Новостная лента</h2>
+          <p className="mt-1 text-sm text-primary/62">Отчёты, фото и итоги прошедших мероприятий.</p>
+        </div>
+
+        <span className="liquid-chip px-3 py-1 text-xs font-semibold uppercase tracking-[0.09em] text-primary/62">
+          {newsEvents.length} материалов
+        </span>
       </div>
+
+      {newsEvents.length === 0 ? (
+        <div className="liquid-card py-8 text-center text-primary/62">
+          <i className="fas fa-newspaper mb-3 text-4xl" />
+          <p>Пока нет новостей.</p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-primary/12 bg-white/82">
+          {newsEvents.map((event, index) => {
+            const gallery = getGallery(event)
+            const cover = getCover(event)
+
+            return (
+              <article
+                key={event.id}
+                className={`grid cursor-pointer gap-3 p-3 transition-colors hover:bg-primary/5 sm:grid-cols-[120px_minmax(0,1fr)_auto] sm:items-start ${
+                  index !== newsEvents.length - 1 ? "border-b border-primary/12" : ""
+                }`}
+                onClick={() => router.push(`/events/${event.id}`)}
+              >
+                <div className="relative h-24 overflow-hidden border border-primary/12 bg-gradient-to-br from-[#12326c] via-[#1f5fe0] to-[#2386da] sm:h-20">
+                  {cover ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={cover} alt={event.title} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-white/80">
+                      <i className={`fas ${getCategoryIcon(event.category as EventCategory)} text-xl`} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary/55">
+                    {new Date(event.date).toLocaleDateString("ru-RU")}
+                  </p>
+                  <h3 className="mt-1 line-clamp-2 text-sm font-semibold text-primary sm:text-base">{event.title}</h3>
+                  <p className="mt-1 line-clamp-2 text-xs text-primary/65 sm:text-sm">
+                    {event.report?.summary || event.description || "Подробности мероприятия..."}
+                  </p>
+                </div>
+
+                <div className="flex items-start gap-2 sm:flex-col sm:items-end">
+                  {gallery.length > 0 && (
+                    <button
+                      type="button"
+                      className="rounded-full border border-primary/14 bg-white/86 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-primary"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openGallery(gallery, 0, event.title)
+                      }}
+                    >
+                      Фото ({gallery.length})
+                    </button>
+                  )}
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-primary/14 bg-white/86 text-primary/55">
+                    <i className="fas fa-arrow-up-right-from-square text-[10px]" />
+                  </span>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      )}
+
       <ImageGalleryModal
         isOpen={galleryOpen}
         images={galleryImages}

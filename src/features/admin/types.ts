@@ -65,6 +65,8 @@ export type AdminEvent = {
   description?: string
   maxParticipants: number
   currentParticipants?: number
+  confirmedParticipants?: number
+  pendingParticipants?: number
   isPast: boolean
   isNews?: boolean
   removedFromCalendar?: boolean
@@ -159,3 +161,68 @@ export type AdminImportResult = {
   warnings: string[]
 }
 
+export type AdminPopularEventMetric = {
+  id: string
+  title: string
+  date: string
+  responsible: string
+  confirmedParticipants: number
+}
+
+export type AdminSiteTrafficPoint = {
+  date: string
+  actions: number
+  uniqueUsers: number
+  signIns: number
+}
+
+export type AdminActiveUserMetric = {
+  userId: string
+  name: string
+  email: string
+  role: Role
+  auditActions: number
+  registrations: number
+  confirmedParticipations: number
+  createdEvents: number
+  moderatedEvents: number
+  activityScore: number
+}
+
+export type AdminDashboardMetrics = {
+  generatedAt: string
+  periods: {
+    weekStart: string
+    weekEnd: string
+    monthStart: string
+    monthEnd: string
+  }
+  popularEvents: {
+    week: AdminPopularEventMetric | null
+    month: AdminPopularEventMetric | null
+  }
+  siteTraffic: {
+    actionsLast7Days: number
+    signInsLast7Days: number
+    uniqueUsersLast7Days: number
+    dailyActivity: AdminSiteTrafficPoint[]
+  }
+  eventStats: {
+    totalEvents: number
+    upcomingEvents: number
+    completedEvents: number
+    newsMaterials: number
+    registrationsThisMonth: number
+    confirmedThisMonth: number
+    pendingApprovals: number
+    registrationConversionPercent: number
+  }
+  topActive: {
+    students: AdminActiveUserMetric[]
+    teachers: AdminActiveUserMetric[]
+  }
+  additional: {
+    upcomingWithoutModerators: number
+    eventsMissingContact: number
+  }
+}

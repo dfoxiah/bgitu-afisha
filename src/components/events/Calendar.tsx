@@ -10,34 +10,48 @@
  * - AppContext events data
  * - Day/Month events modal components
  */
-'use client'
+"use client"
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { 
-  startOfMonth, 
-  endOfMonth, 
-  eachDayOfInterval, 
-  isSameMonth, 
-  isSameDay,
-  isSameYear,
-  format,
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import {
   addMonths,
-  subMonths,
+  eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isSameDay,
+  isSameMonth,
+  isSameYear,
+  startOfMonth,
   startOfWeek,
-  endOfWeek
-} from 'date-fns'
-import { ru } from 'date-fns/locale'
-import { Event } from '@/types'
-import { EventCategory } from '@prisma/client'
+  subMonths,
+} from "date-fns"
+import { ru } from "date-fns/locale"
+import { EventCategory } from "@prisma/client"
+import { Event } from "@/types"
 
 interface CalendarProps {
   events: Event[]
   onDayClick?: (day: Date) => void
   onMonthChange?: (month: Date) => void
+  compact?: boolean
 }
 
-const Calendar = ({ events, onDayClick, onMonthChange }: CalendarProps) => {
+const weekDays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+
+const categoryColors: Record<string, string> = {
+  [EventCategory.CONCERT]: "#3f7fe8",
+  [EventCategory.INTERNAL_ACTIVITY]: "#6f79ff",
+  [EventCategory.PUBLIC_EVENT]: "#22a6d8",
+  [EventCategory.COMPETITION]: "#4f63f2",
+  [EventCategory.LECTURE]: "#3f78d6",
+  [EventCategory.MASTERCLASS]: "#f2a13a",
+  [EventCategory.VOLUNTEER]: "#1ca88f",
+  [EventCategory.NEWS]: "#5f98f9",
+}
+
+const Calendar = ({ events, onDayClick, onMonthChange, compact = false }: CalendarProps) => {
   const router = useRouter()
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [days, setDays] = useState<Date[]>([])
@@ -45,197 +59,163 @@ const Calendar = ({ events, onDayClick, onMonthChange }: CalendarProps) => {
   useEffect(() => {
     const monthStart = startOfMonth(currentMonth)
     const monthEnd = endOfMonth(currentMonth)
-    const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 })
-    const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
-    
-    const daysInMonth = eachDayOfInterval({
-      start: calendarStart,
-      end: calendarEnd
+
+    const daysInView = eachDayOfInterval({
+      start: startOfWeek(monthStart, { weekStartsOn: 1 }),
+      end: endOfWeek(monthEnd, { weekStartsOn: 1 }),
     })
-    
-    setDays(daysInMonth)
+
+    setDays(daysInView)
   }, [currentMonth])
 
   useEffect(() => {
     onMonthChange?.(currentMonth)
   }, [currentMonth, onMonthChange])
 
-  const prevMonth = () => {
-    setCurrentMonth(subMonths(currentMonth, 1))
-  }
-
-  const nextMonth = () => {
-    setCurrentMonth(addMonths(currentMonth, 1))
-  }
-
-  const getEventsForDay = (day: Date): Event[] => {
-    if (!day) return []
-    return events.filter(event => {
+  const getEventsForDay = (day: Date) => {
+    return events.filter((event) => {
       try {
         const eventDate = new Date(event.date)
-        return isSameDay(eventDate, day) && isSameMonth(eventDate, currentMonth)
+        return isSameDay(eventDate, day) && isSameMonth(eventDate, currentMonth) && !event.removedFromCalendar
       } catch {
         return false
       }
     })
   }
 
-  const getCategoryColor = (category: string): string => {
-    const colors: Record<string, string> = {
-      [EventCategory.CONCERT]: '#e91e63',
-      [EventCategory.INTERNAL_ACTIVITY]: '#9c27b0',
-      [EventCategory.PUBLIC_EVENT]: '#3f51b5',
-      [EventCategory.COMPETITION]: '#009688',
-      [EventCategory.LECTURE]: '#4b86b4',
-      [EventCategory.MASTERCLASS]: '#ff9800',
-      [EventCategory.VOLUNTEER]: '#FF7043',
-      [EventCategory.NEWS]: '#4CAF50'
-    }
-    return colors[category] || '#4b86b4'
-  }
-
-  const handleEventClick = (event: Event) => {
-    router.push(`/events/${event.id}`)
-  }
-
-  const currentMonthEvents = events.filter(event => {
+  const currentMonthEvents = events.filter((event) => {
     try {
       const eventDate = new Date(event.date)
-      return isSameMonth(eventDate, currentMonth) && 
-             isSameYear(eventDate, currentMonth) &&
-             !event.removedFromCalendar
+      return isSameMonth(eventDate, currentMonth) && isSameYear(eventDate, currentMonth) && !event.removedFromCalendar
     } catch {
       return false
     }
   })
 
+  const handleEventClick = (event: Event) => {
+    router.push(`/events/${event.id}`)
+  }
+
   return (
-    <div className="calendar-section rounded-xl sm:rounded-2xl bg-white/70 border border-white/70 p-3 sm:p-6 animate-fadeIn">
-      <div className="calendar-header flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3 sm:mb-5">
-        <div className="calendar-title flex flex-wrap items-center gap-2 sm:gap-3">
-          <i className="fas fa-calendar-alt text-accent text-lg sm:text-xl"></i>
-          <h2 className="text-base sm:text-2xl font-semibold text-primary">
-            {format(currentMonth, 'LLLL yyyy', { locale: ru })}
+    <div className={`calendar-block rounded-2xl border border-primary/14 bg-white/82 ${compact ? "p-2.5" : "p-3 sm:p-4"}`}>
+      <div className={`flex flex-wrap items-center justify-between gap-3 border-b border-primary/10 ${compact ? "mb-2.5 pb-2.5" : "mb-3 pb-3"}`}>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary/58">Расписание</p>
+          <h2 className={`mt-1 font-semibold capitalize text-primary ${compact ? "text-base" : "text-lg sm:text-2xl"}`}>
+            {format(currentMonth, "LLLL yyyy", { locale: ru })}
           </h2>
-          <div className="calendar-count-badge hidden sm:inline-flex bg-accent text-white px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-sm font-medium">
-            {currentMonthEvents.length} мероприятий
-          </div>
         </div>
-        <div className="calendar-nav flex gap-2">
-          <button 
-            className="calendar-nav-btn w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-2xl bg-white/70 border border-white/70 shadow flex items-center justify-center cursor-pointer hover:bg-white/90 hover:border-accent transition-colors"
-            onClick={prevMonth}
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className={`inline-flex items-center justify-center rounded-lg border border-primary/16 bg-white/88 text-primary transition-colors hover:bg-primary/5 ${compact ? "h-8 w-8" : "h-9 w-9"}`}
+            onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
             title="Предыдущий месяц"
           >
-            <i className="fas fa-chevron-left text-[10px] sm:text-sm"></i>
+            <i className="fas fa-chevron-left text-[11px]" />
           </button>
-          <button 
-            className="calendar-nav-btn w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-2xl bg-white/70 border border-white/70 shadow flex items-center justify-center cursor-pointer hover:bg-white/90 hover:border-accent transition-colors"
+
+          <button
+            type="button"
+            className={`inline-flex items-center justify-center rounded-lg border border-primary/16 bg-white/92 text-xs font-semibold uppercase tracking-[0.08em] text-primary transition-colors hover:bg-primary/6 ${compact ? "h-8 px-2.5" : "h-9 px-3"}`}
             onClick={() => setCurrentMonth(new Date())}
             title="Текущий месяц"
           >
-            <i className="fas fa-dot-circle text-[10px] sm:text-sm"></i>
+            Сегодня
           </button>
-          <button 
-            className="calendar-nav-btn w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-2xl bg-white/70 border border-white/70 shadow flex items-center justify-center cursor-pointer hover:bg-white/90 hover:border-accent transition-colors"
-            onClick={nextMonth}
+
+          <button
+            type="button"
+            className={`inline-flex items-center justify-center rounded-lg border border-primary/16 bg-white/88 text-primary transition-colors hover:bg-primary/5 ${compact ? "h-8 w-8" : "h-9 w-9"}`}
+            onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
             title="Следующий месяц"
           >
-            <i className="fas fa-chevron-right text-[10px] sm:text-sm"></i>
+            <i className="fas fa-chevron-right text-[11px]" />
           </button>
         </div>
       </div>
-      
-      <div className="calendar-grid grid grid-cols-7 gap-1 sm:gap-2 mb-3 sm:mb-5">
-        {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map(day => (
-          <div key={day} className="calendar-day text-center py-1.5 sm:py-3 font-semibold text-gray-500 text-[9px] sm:text-sm">
+
+      <div className="grid grid-cols-7 gap-1">
+        {weekDays.map((day) => (
+          <div key={day} className="py-1 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-primary/56 sm:text-[11px]">
             {day}
           </div>
         ))}
-        
+
         {days.map((day, index) => {
           const dayEvents = getEventsForDay(day)
           const isCurrentMonth = isSameMonth(day, currentMonth)
           const isToday = isSameDay(day, new Date())
           const hasEvents = dayEvents.length > 0
-          
+
           return (
-            <div 
-              key={index}
-              className={`calendar-cell min-h-[44px] sm:min-h-[80px] lg:min-h-[90px] border rounded-radius-sm p-1.5 sm:p-3 relative overflow-hidden cursor-pointer transition-all duration-300 ${
-                hasEvents ? 'has-event bg-accent/5 border-accent' : 'bg-white/60 border-white/70'
-              } ${!isCurrentMonth ? 'other-month opacity-50' : ''} ${isToday ? 'today border-2 border-accent' : ''}`}
-              onClick={() => {
-                if (onDayClick) {
-                  onDayClick(day)
-                }
-              }}
-              title={hasEvents ? `${dayEvents.length} мероприятий` : 'Нет мероприятий'}
+            <button
+              key={`${day.toISOString()}-${index}`}
+              type="button"
+              className={`relative rounded-lg border px-1.5 py-1 text-left transition-colors ${
+                hasEvents
+                  ? "border-primary/26 bg-gradient-to-br from-primary/7 via-white to-accent/10"
+                  : "border-primary/12 bg-white/84"
+              } ${!isCurrentMonth ? "opacity-40" : ""} ${isToday ? "ring-1 ring-secondary/80" : ""} ${
+                compact ? "min-h-[36px]" : "min-h-[42px] sm:min-h-[52px] lg:min-h-[60px] sm:px-2 sm:py-1.5"
+              }`}
+              onClick={() => onDayClick?.(day)}
+              title={hasEvents ? `Событий: ${dayEvents.length}` : "Нет событий"}
             >
-              <div 
-                className="calendar-date flex items-center justify-between mb-0.5 sm:mb-1 text-[11px] sm:text-sm"
-                style={{ 
-                  fontWeight: isCurrentMonth ? 600 : 400,
-                  color: isCurrentMonth ? (isToday ? 'var(--accent)' : 'var(--text)') : 'var(--gray)'
-                }}
-              >
-                <span>{format(day, 'd')}</span>
+              <div className={`flex items-center justify-between font-semibold text-primary ${compact ? "text-[10px]" : "text-[11px] sm:text-xs"}`}>
+                <span>{format(day, "d")}</span>
                 {hasEvents && (
-                  <span className="hidden sm:flex w-3.5 h-3.5 sm:w-4 sm:h-4 bg-accent text-white text-[10px] sm:text-xs rounded-full items-center justify-center">
+                  <span className="inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[9px] text-white">
                     {dayEvents.length}
                   </span>
                 )}
               </div>
-                            <div className="calendar-events hidden sm:block">
-                {dayEvents.slice(0, 2).map(event => (
-                  <div 
-                    key={event.id} 
-                    className="calendar-event text-xs px-2 py-1 rounded-sm mb-1 overflow-hidden whitespace-nowrap text-ellipsis"
-                    style={{ 
-                      backgroundColor: getCategoryColor(event.category),
-                      color: "white",
-                      cursor: "pointer"
-                    }}
-                    title={`${event.title} (${event.time})`}
-                    onClick={(e) => {
-                      e.stopPropagation()
+
+              <div className={`mt-1 ${compact ? "hidden" : "hidden lg:block"}`}>
+                {dayEvents.slice(0, 1).map((event) => (
+                  <div
+                    key={event.id}
+                    className="truncate rounded px-1.5 py-0.5 text-[10px] font-medium text-white"
+                    style={{ backgroundColor: categoryColors[event.category] || "#4f8cf2" }}
+                    onClick={(evt) => {
+                      evt.stopPropagation()
                       handleEventClick(event)
                     }}
                   >
-                    {event.title.length > 12 ? event.title.substring(0, 12) + "..." : event.title}
+                    {event.title}
                   </div>
                 ))}
-                {dayEvents.length > 2 && (
-                  <div className="calendar-event-more text-xs bg-gray-500 text-white px-2 py-0.5 rounded-sm">
-                    +{dayEvents.length - 2}
-                  </div>
-                )}
               </div>
+
               {hasEvents && (
-                <div className="calendar-events sm:hidden mt-0.5 flex flex-wrap gap-1">
-                  {dayEvents.slice(0, 4).map(event => (
+                <div className={`mt-1 flex flex-wrap gap-1 ${compact ? "" : "lg:hidden"}`}>
+                  {dayEvents.slice(0, 4).map((event) => (
                     <span
                       key={event.id}
                       className="inline-block h-1.5 w-1.5 rounded-full"
-                      style={{ backgroundColor: getCategoryColor(event.category) }}
-                    ></span>
+                      style={{ backgroundColor: categoryColors[event.category] || "#4f8cf2" }}
+                    />
                   ))}
-                  {dayEvents.length > 4 && (
-                    <span className="text-[9px] text-gray-500">+{dayEvents.length - 4}</span>
-                  )}
                 </div>
               )}
-            </div>
+            </button>
           )
         })}
       </div>
-      
-      <div className="hidden sm:block mt-3 sm:mt-5 text-center text-gray-600 text-[10px] sm:text-sm p-2 sm:p-3 bg-light rounded-lg border border-border">
+
+      <div className={`flex flex-wrap items-center justify-between gap-2 border-t border-primary/10 text-xs text-primary/62 ${compact ? "mt-2.5 pt-2.5" : "mt-3 pt-3"}`}>
         <p>
-          <i className="fas fa-info-circle mr-2"></i>
-          В {format(currentMonth, 'LLLL yyyy', { locale: ru })}: <strong>{currentMonthEvents.length}</strong> мероприятий
-          {currentMonthEvents.length === 0 && ' (нет мероприятий)'}
+          <i className="fas fa-calendar-check mr-1" /> В {format(currentMonth, "LLLL yyyy", { locale: ru })}: {currentMonthEvents.length}
         </p>
+        <div className="flex items-center gap-3">
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full bg-primary" /> Событие
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full bg-secondary" /> Сегодня
+          </span>
+        </div>
       </div>
     </div>
   )

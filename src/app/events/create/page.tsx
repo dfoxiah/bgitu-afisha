@@ -1,4 +1,4 @@
-/**
+﻿/**
  * File responsibility:
  * Protected page to create a new event.
  *
@@ -13,7 +13,7 @@
  */
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/contexts/AppContext'
@@ -25,6 +25,7 @@ export default function CreateEventPage() {
   const router = useRouter()
   const { data: session, status } = useSession()
   const { createEvent } = useAppContext()
+  const [isEditorOpen, setIsEditorOpen] = useState(true)
 
   const isTeacher = session?.user?.role === 'TEACHER' || session?.user?.role === 'ADMIN'
 
@@ -43,9 +44,9 @@ export default function CreateEventPage() {
 
   if (status === 'loading' || !session || !isTeacher) {
     return (
-      <div className="flex flex-col justify-center items-center min-h-screen bg-light-gray">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-accent mx-auto"></div>
+      <div className="status-screen">
+        <div className="status-card space-y-4">
+          <div className="status-spinner" />
           <p className="text-gray-600 text-lg">Загрузка...</p>
         </div>
       </div>
@@ -57,18 +58,51 @@ export default function CreateEventPage() {
       await createEvent(formData)
       router.replace('/events')
     } catch (error) {
-      console.error('Ошибка создания мероприятия:', error)
+      console.error('Event create error:', error)
       showToast('Произошла ошибка при создании мероприятия', 'error')
     }
   }
 
   return (
-    <EventForm
-      event={null}
-      onClose={() => router.push('/events')}
-      onSubmit={handleSubmit}
-    />
+    <div className="page-shell min-h-screen px-4 py-8 md:px-[5%]">
+      <div className="mx-auto max-w-7xl space-y-4">
+        <section className="grid items-start gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+          <article className="page-hero p-4 sm:p-5 md:p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary/58">Events Builder</p>
+            <h1 className="page-title mt-2 text-2xl font-semibold sm:text-4xl">Создание мероприятия</h1>
+            <p className="mt-3 text-sm text-primary/66 sm:text-base">
+              Используйте редактор для публикации события, настройки модераторов, участников и медиа. После сохранения запись сразу появится в разделе мероприятий.
+            </p>
+
+            <div className="mt-5 flex flex-wrap gap-2.5">
+              <button type="button" className="btn btn-primary px-4 py-2.5 text-sm" onClick={() => setIsEditorOpen(true)}>
+                Открыть редактор
+              </button>
+              <button type="button" className="btn btn-secondary px-4 py-2.5 text-sm" onClick={() => router.push('/events')}>
+                К списку событий
+              </button>
+            </div>
+          </article>
+
+          <aside className="liquid-section p-4">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-primary/64">Чеклист публикации</h2>
+            <ul className="mt-3 space-y-2 text-sm text-primary/68">
+              <li className="rounded-lg border border-primary/12 bg-white/78 px-3 py-2">1. Укажите точные дату, время и место.</li>
+              <li className="rounded-lg border border-primary/12 bg-white/78 px-3 py-2">2. Добавьте описание и категорию события.</li>
+              <li className="rounded-lg border border-primary/12 bg-white/78 px-3 py-2">3. При необходимости назначьте модераторов.</li>
+              <li className="rounded-lg border border-primary/12 bg-white/78 px-3 py-2">4. Прикрепите изображения для карточки.</li>
+            </ul>
+          </aside>
+        </section>
+      </div>
+
+      {isEditorOpen && (
+        <EventForm
+          event={null}
+          onClose={() => setIsEditorOpen(false)}
+          onSubmit={handleSubmit}
+        />
+      )}
+    </div>
   )
 }
-
-

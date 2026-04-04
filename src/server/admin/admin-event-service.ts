@@ -51,6 +51,11 @@ const eventListInclude = {
   creator: {
     select: { id: true, name: true, email: true, role: true },
   },
+  eventParticipants: {
+    select: {
+      status: true,
+    },
+  },
   moderators: {
     select: {
       user: { select: { id: true, name: true, email: true, role: true } },
@@ -131,13 +136,26 @@ const eventForEditSelect = {
 
 const serializeListEvent = (
   event: Prisma.EventGetPayload<{ include: typeof eventListInclude }>
-) => ({
-  ...event,
-  moderators: event.moderators.map((row) => row.user),
-  date: event.date.toISOString(),
-  createdAt: event.createdAt.toISOString(),
-  updatedAt: event.updatedAt.toISOString(),
-})
+) => {
+  const { eventParticipants: _eventParticipants, ...eventBase } = event
+  const confirmedParticipants = event.eventParticipants.filter(
+    (row) => row.status === ParticipantStatus.CONFIRMED
+  ).length
+  const pendingParticipants = event.eventParticipants.filter(
+    (row) => row.status === ParticipantStatus.PENDING
+  ).length
+
+  return {
+    ...eventBase,
+    currentParticipants: confirmedParticipants,
+    confirmedParticipants,
+    pendingParticipants,
+    moderators: event.moderators.map((row) => row.user),
+    date: event.date.toISOString(),
+    createdAt: event.createdAt.toISOString(),
+    updatedAt: event.updatedAt.toISOString(),
+  }
+}
 
 const serializeEventDetails = (
   event: Prisma.EventGetPayload<{ include: typeof eventDetailsInclude }>

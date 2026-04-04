@@ -1,4 +1,4 @@
-/**
+﻿/**
  * File responsibility:
  * Shared search input control for list filtering.
  *
@@ -22,12 +22,12 @@ interface SearchInputProps {
   inputClassName?: string
 }
 
-export default function SearchInput({ 
-  placeholder = "Поиск...", 
-  onSearch, 
+export default function SearchInput({
+  placeholder = 'Поиск...',
+  onSearch,
   delay = 300,
   className,
-  inputClassName
+  inputClassName,
 }: SearchInputProps) {
   const [query, setQuery] = useState('')
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -59,10 +59,12 @@ export default function SearchInput({
 
   return (
     <div className={`search-container relative ${className || ''}`}>
-      <i className="fas fa-search search-icon absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+      <i className="fas fa-search search-icon absolute left-4 top-1/2 -translate-y-1/2 text-primary/38"></i>
       <input
         type="text"
-        className={`search-box w-full pl-12 pr-4 py-3 liquid-input shadow-lg focus:outline-none focus:ring-3 focus:ring-accent/15 transition-all ${inputClassName || ''}`}
+        className={`search-box liquid-input w-full py-3 pl-12 pr-4 transition-all focus:outline-none focus:ring-2 focus:ring-accent/20 ${
+          inputClassName || ''
+        }`}
         placeholder={placeholder}
         value={query}
         onChange={(e) => setQuery(e.target.value)}

@@ -79,7 +79,7 @@ const NotificationBell = () => {
   return (
     <div className="notification-container relative" ref={dropdownRef}>
       <div
-        className="header-icon pressable flex h-10 w-10 cursor-pointer items-center justify-center rounded-2xl border border-white/70 bg-white/70 shadow transition-colors hover:border-accent hover:bg-white/90"
+        className="header-icon pressable flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-primary/20 bg-white/88 text-primary shadow-[0_8px_16px_rgba(18,39,76,0.12)] transition-colors hover:border-accent/60 hover:bg-primary/5"
         onClick={() => {
           const nextState = !isDropdownOpen
           setIsDropdownOpen(nextState)
@@ -88,7 +88,7 @@ const NotificationBell = () => {
           }
         }}
       >
-        <i className="fas fa-bell text-gray-600"></i>
+        <i className="fas fa-bell"></i>
         {unreadCount > 0 && (
           <div className="notification-count absolute -right-1 -top-1 flex h-5 w-5 animate-pulse items-center justify-center rounded-full bg-red-500 text-xs text-white">
             {unreadCount > 9 ? "9+" : unreadCount}
@@ -99,28 +99,28 @@ const NotificationBell = () => {
       {isDropdownOpen && (
         <div className="dropdown fixed inset-0 z-[960] sm:absolute sm:inset-auto sm:right-0 sm:top-14">
           <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm sm:hidden"
+            className="absolute inset-0 bg-primary/25 backdrop-blur-sm sm:hidden"
             onClick={() => setIsDropdownOpen(false)}
             aria-hidden="true"
           ></div>
 
-          <div className="absolute left-3 right-3 top-[4.5rem] w-auto overflow-hidden rounded-2xl border border-white/70 bg-white shadow-2xl sm:static sm:w-80 sm:max-h-[70vh]">
-            <div className="dropdown-header rounded-t-2xl border-b border-white/70 bg-white px-4 py-3 font-semibold text-primary">
+          <div className="absolute left-3 right-3 top-[4.5rem] w-auto overflow-hidden rounded-2xl border border-primary/18 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,247,255,0.95))] shadow-[0_26px_44px_rgba(21,47,90,0.22)] sm:static sm:max-h-[70vh] sm:w-80">
+            <div className="dropdown-header rounded-t-2xl border-b border-primary/12 bg-gradient-to-r from-white via-white to-primary/6 px-4 py-3 font-semibold text-primary">
               Уведомления
               {notifications.length > 0 && (
-                <span className="ml-2 text-sm text-gray-600">{unreadCount} непрочитанных</span>
+                <span className="ml-2 text-sm text-primary/65">{unreadCount} непрочитанных</span>
               )}
             </div>
 
             <div className="max-h-[calc(100vh-11rem)] overflow-y-auto sm:max-h-80">
               {notifications.length === 0 ? (
-                <div className="p-4 text-center text-gray-500">Нет уведомлений</div>
+                <div className="p-4 text-center text-primary/60">Нет уведомлений</div>
               ) : (
                 notifications.slice(0, 10).map((notification) => (
                   <div
                     key={notification.id}
-                    className={`dropdown-item cursor-pointer border-b border-gray-200 px-4 py-3 transition-colors hover:bg-gray-50 ${
-                      !notification.read ? "bg-blue-50" : ""
+                    className={`dropdown-item cursor-pointer border-b border-primary/10 px-4 py-3 transition-colors hover:bg-primary/5 ${
+                      !notification.read ? "bg-primary/6" : ""
                     }`}
                     onClick={() => {
                       setIsDropdownOpen(false)
@@ -142,14 +142,10 @@ const NotificationBell = () => {
                       ></i>
 
                       <div className="flex-grow">
-                        <div
-                          className={`font-medium ${
-                            notification.read ? "text-gray-700" : "text-primary"
-                          }`}
-                        >
+                        <div className={`font-medium ${notification.read ? "text-primary/75" : "text-primary"}`}>
                           {notification.content}
                         </div>
-                        <div className="mt-1 text-xs text-gray-500">
+                        <div className="mt-1 text-xs text-primary/55">
                           {new Date(notification.createdAt).toLocaleDateString("ru-RU")}
                         </div>
                       </div>
@@ -161,7 +157,7 @@ const NotificationBell = () => {
 
             {notifications.length > 0 && (
               <div
-                className="dropdown-item cursor-pointer border-t border-gray-200 px-4 py-3 font-semibold text-red-600 hover:bg-red-50"
+                className="dropdown-item cursor-pointer border-t border-primary/10 px-4 py-3 font-semibold text-red-600 hover:bg-red-50"
                 onClick={handleMarkAllRead}
               >
                 <i className="fas fa-check-double mr-2"></i>
@@ -170,7 +166,7 @@ const NotificationBell = () => {
             )}
 
             <div
-              className="dropdown-item cursor-pointer border-t border-gray-200 px-4 py-3 hover:bg-gray-50"
+              className="dropdown-item cursor-pointer border-t border-primary/10 px-4 py-3 text-primary/80 hover:bg-primary/5"
               onClick={() => {
                 setIsDropdownOpen(false)
                 router.push("/notifications")
@@ -182,7 +178,7 @@ const NotificationBell = () => {
 
             {canCreateNotifications && (
               <div
-                className="dropdown-item cursor-pointer border-t border-gray-200 px-4 py-3 hover:bg-gray-50"
+                className="dropdown-item cursor-pointer border-t border-primary/10 px-4 py-3 text-primary/80 hover:bg-primary/5"
                 onClick={() => {
                   setIsDropdownOpen(false)
                   setIsComposerOpen(true)
@@ -199,19 +195,15 @@ const NotificationBell = () => {
       {isComposerOpen && <NotificationModal onClose={() => setIsComposerOpen(false)} />}
 
       {activeNotification && (
-        <Modal
-          isOpen
-          onClose={() => setActiveNotificationId(null)}
-          title="Уведомление"
-        >
+        <Modal isOpen onClose={() => setActiveNotificationId(null)} title="Уведомление">
           <div className="space-y-4">
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-primary/60">
               {new Date(activeNotification.createdAt).toLocaleString("ru-RU")}
             </div>
-            <div className="text-xs uppercase tracking-wide text-gray-400">
+            <div className="text-xs uppercase tracking-wide text-primary/55">
               Статус: {activeNotification.read ? "прочитано" : "непрочитано"}
             </div>
-            <div className="whitespace-pre-wrap text-gray-800">{activeNotification.content}</div>
+            <div className="whitespace-pre-wrap text-primary/80">{activeNotification.content}</div>
 
             {activeEventId ? (
               <Button
@@ -224,9 +216,7 @@ const NotificationBell = () => {
                 Открыть мероприятие
               </Button>
             ) : (
-              <div className="text-sm text-gray-500">
-                Для этого уведомления не привязано мероприятие.
-              </div>
+              <div className="text-sm text-primary/55">Для этого уведомления не привязано мероприятие.</div>
             )}
           </div>
         </Modal>

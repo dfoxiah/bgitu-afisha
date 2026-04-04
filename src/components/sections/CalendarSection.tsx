@@ -10,21 +10,22 @@
  * - Dashboard page
  * - src/components/events/Calendar.tsx
  */
-'use client'
+"use client"
 
-import { useState, useMemo } from 'react'
-import Calendar from '@/components/events/Calendar'
-import DayEventsModal from '@/components/events/DayEventsModal'
-import MonthEventsModal from '@/components/events/MonthEventsModal'
-import { Event } from '@/types'
-import { isSameMonth, isSameYear } from 'date-fns'
+import { useMemo, useState } from "react"
+import { isSameMonth, isSameYear } from "date-fns"
+import Calendar from "@/components/events/Calendar"
+import DayEventsModal from "@/components/events/DayEventsModal"
+import MonthEventsModal from "@/components/events/MonthEventsModal"
+import { Event } from "@/types"
 
 interface CalendarSectionProps {
   events: Event[]
+  compact?: boolean
+  plain?: boolean
 }
 
-
-const CalendarSection = ({ events }: CalendarSectionProps) => {
+const CalendarSection = ({ events, compact = false, plain = false }: CalendarSectionProps) => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [dayEventsModalOpen, setDayEventsModalOpen] = useState(false)
   const [monthEventsModalOpen, setMonthEventsModalOpen] = useState(false)
@@ -33,21 +34,26 @@ const CalendarSection = ({ events }: CalendarSectionProps) => {
   const [calendarMonth, setCalendarMonth] = useState(new Date())
 
   const currentMonthEvents = useMemo(() => {
-    return events.filter(event => {
+    return events.filter((event) => {
       try {
         const eventDate = new Date(event.date)
-        return isSameMonth(eventDate, calendarMonth) && 
-               isSameYear(eventDate, calendarMonth) &&
-               !event.removedFromCalendar
+        return isSameMonth(eventDate, calendarMonth) && isSameYear(eventDate, calendarMonth) && !event.removedFromCalendar
       } catch {
         return false
       }
     })
   }, [events, calendarMonth])
 
+  const monthPreviewEvents = useMemo(() => {
+    return [...currentMonthEvents]
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(0, 5)
+  }, [currentMonthEvents])
+
   const handleDayClick = (day: Date) => {
     setSelectedDate(day)
-    const eventsForDay = events.filter(event => {
+
+    const eventsForDay = events.filter((event) => {
       try {
         const eventDate = new Date(event.date)
         return eventDate.toDateString() === day.toDateString() && !event.removedFromCalendar
@@ -55,70 +61,66 @@ const CalendarSection = ({ events }: CalendarSectionProps) => {
         return false
       }
     })
-    
+
     setDayEvents(eventsForDay)
     setDayEventsModalOpen(true)
   }
 
   const handleViewAll = () => {
-    const eventsForMonth = events.filter(event => {
+    const eventsForMonth = events.filter((event) => {
       try {
         const eventDate = new Date(event.date)
-        return isSameMonth(eventDate, calendarMonth) && 
-               isSameYear(eventDate, calendarMonth) &&
-               !event.removedFromCalendar
+        return isSameMonth(eventDate, calendarMonth) && isSameYear(eventDate, calendarMonth) && !event.removedFromCalendar
       } catch {
         return false
       }
     })
-    
+
     setMonthEvents(eventsForMonth)
     setMonthEventsModalOpen(true)
   }
 
   return (
-    <section className="calendar-section liquid-section p-3 sm:p-6 lg:p-8 mx-4 sm:mx-[5%] my-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
-        <h2 className="section-title text-lg sm:text-2xl text-primary flex items-center gap-3">
-          <i className="fas fa-calendar-alt"></i> Календарь мероприятий
-        </h2>
-        <div className="bg-light hidden sm:flex px-3 sm:px-4 py-2 rounded-full text-xs sm:text-sm text-primary items-center gap-2">
-          <i className="fas fa-chart-bar"></i>
-          <span>
-            {calendarMonth.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}: {currentMonthEvents.length} мероприятий
-          </span>
+    <section className={plain ? "" : "liquid-section p-4 sm:p-5"}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-primary/64">Календарь</h2>
+          <p className="mt-1 text-xs text-primary/56">Событий в текущем месяце: {currentMonthEvents.length}</p>
         </div>
+        <button
+          type="button"
+          className="liquid-chip px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.07em] text-primary"
+          onClick={handleViewAll}
+        >
+          Список месяца
+        </button>
       </div>
-      
-      <Calendar 
-        events={events} 
-        onDayClick={handleDayClick} 
-        onMonthChange={setCalendarMonth}
-      />
-      
-      <button 
-        className="view-all-btn w-full mt-5 sm:mt-6 p-3 sm:p-4 bg-white/70 border border-white/70 rounded-xl font-medium text-sm sm:text-base text-primary text-center hover:bg-white hover:border-accent transition-colors"
-        onClick={handleViewAll}
-      >
-        <i className="fas fa-list mr-2"></i> Все события этого месяца ({currentMonthEvents.length})
-      </button>
-      
-      <DayEventsModal
-        isOpen={dayEventsModalOpen}
-        onClose={() => setDayEventsModalOpen(false)}
-        events={dayEvents}
-        date={selectedDate}
-      />
-      
-      <MonthEventsModal
-        isOpen={monthEventsModalOpen}
-        onClose={() => setMonthEventsModalOpen(false)}
-        events={monthEvents}
-        month={calendarMonth}
-      />
+
+      <Calendar events={events} onDayClick={handleDayClick} onMonthChange={setCalendarMonth} compact={compact} />
+
+      <div className="mt-4 border-t border-primary/12 pt-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary/56">Ближайшие даты</p>
+        {monthPreviewEvents.length === 0 ? (
+          <p className="mt-2 text-xs text-primary/62">В этом месяце пока нет событий.</p>
+        ) : (
+          <div className="mt-2 overflow-hidden rounded-xl border border-primary/12 bg-white/82">
+            {monthPreviewEvents.map((event, index) => (
+              <div key={event.id} className={`px-3 py-2 ${index !== monthPreviewEvents.length - 1 ? "border-b border-primary/12" : ""}`}>
+                <p className="line-clamp-1 text-xs font-semibold text-primary">{event.title}</p>
+                <p className="mt-1 text-[11px] text-primary/62">
+                  {new Date(event.date).toLocaleDateString("ru-RU")} • {event.time}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <DayEventsModal isOpen={dayEventsModalOpen} onClose={() => setDayEventsModalOpen(false)} events={dayEvents} date={selectedDate} />
+
+      <MonthEventsModal isOpen={monthEventsModalOpen} onClose={() => setMonthEventsModalOpen(false)} events={monthEvents} month={calendarMonth} />
     </section>
   )
 }
 
 export default CalendarSection
-

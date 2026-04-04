@@ -590,9 +590,11 @@
 - `src/app/(auth)/register/page.tsx` - Registration page for new local user accounts.
 - `src/app/admin/page.tsx` - Admin dashboard page for users, events/news, imports and audit logs.
 - `src/app/api/admin/events/[id]/route.ts` - Admin event details endpoint (get/update/delete).
+- `src/app/api/admin/events/[id]/export/route.ts` - Admin endpoint for XLSX export of attendance and event metadata.
 - `src/app/api/admin/events/route.ts` - Admin events collection endpoint (list + news creation).
 - `src/app/api/admin/import/route.ts` - Admin bulk import endpoint for users/events/news.
 - `src/app/api/admin/logs/route.ts` - Admin audit logs list endpoint.
+- `src/app/api/admin/metrics/route.ts` - Admin analytics endpoint for dashboard KPIs and charts.
 - `src/app/api/admin/users/[id]/route.ts` - Admin user details endpoint (get/update/delete).
 - `src/app/api/admin/users/route.ts` - Admin users collection endpoint (list + create).
 - `src/app/api/auth/[...nextauth]/route.ts` - HTTP route handler for this App Router API endpoint.
@@ -652,6 +654,7 @@
 - `src/components/ui/ToastProvider.tsx` - Global toast renderer subscribing to toast helper events.
 - `src/contexts/AppContext.tsx` - Central application context that orchestrates events, notifications and profile actions.
 - `src/features/admin/client/admin-api.ts` - Client API adapter for admin panel workflows.
+- `src/features/admin/components/AdminMetricsDashboard.tsx` - Admin metrics dashboard UI with KPI cards and export controls.
 - `src/features/admin/types.ts` - Shared admin panel client-side types.
 - `src/features/events/client/events-api.ts` - Client-side event API adapter functions.
 - `src/features/notifications/client/notifications-api.ts` - Client-side notification API adapters.
@@ -664,6 +667,7 @@
 - `src/lib/toast.ts` - Client-side toast event helper for lightweight notifications.
 - `src/proxy.ts` - Middleware entry for route protection and session-aware redirects.
 - `src/server/admin/admin-event-service.ts` - Admin event/news domain service for CRUD, moderation links and audit metadata.
+- `src/server/admin/admin-metrics-service.ts` - Admin analytics and XLSX report service for dashboard and exports.
 - `src/server/admin/admin-session.ts` - Shared admin auth guards and helpers for admin API routes.
 - `src/server/admin/import-parser.ts` - Parsing and normalization helpers for admin CSV/JSON import endpoints.
 - `src/server/admin/import-service.ts` - Domain-level admin import workflows for users/events/news.
@@ -699,7 +703,7 @@
 
 ## 16. Карта тестов и артефактов качества
 
-- `tests/smoke/api-smoke.ts` - API smoke для auth/events/notifications/admin/profile.
+- `tests/smoke/api-smoke.ts` - API smoke для auth/events/notifications/admin/profile + admin metrics/export.
 - `tests/smoke/e2e-smoke.ts` - e2e smoke HTTP-потоков (login -> dashboard -> events/profile/notifications/admin).
 - `tests/smoke/run-local.ts` - оркестратор локального smoke-прогона (start + suites + teardown).
 - `npm run lint` - статический контроль стиля и потенциальных ошибок.
@@ -714,5 +718,47 @@
 - Маршруты `events` переведены на более тонкие контроллеры с выносом orchestration в `src/server/events/event-mutation-service.ts`.
 - Добавлены и документированы framework-фичи Next/React: `unstable_cache`+tag revalidation, `useOptimistic`, `next/image`.
 - Сформирован подробный технический файл для защиты с архитектурой, потоками, тестами и картой модулей.
+
+## 18. Дополнение к дипломной части: метрики и управленческая аналитика
+
+### 18.1 Что добавлено в админ-панель
+1. Новый таб «Метрики» в `src/app/admin/page.tsx`.
+2. UI-модуль `src/features/admin/components/AdminMetricsDashboard.tsx` с:
+- самым популярным мероприятием недели;
+- самым популярным мероприятием месяца;
+- статистикой посещения сайта (действия, авторизации, уникальные пользователи и дневной тренд);
+- статистикой мероприятий (всего/будущие/завершённые/новости, регистрационная конверсия);
+- рейтингом самых активных студентов и преподавателей;
+- дополнительным KPI: будущие мероприятия без модераторов и события с неполными контактными данными.
+
+### 18.2 Серверная реализация метрик
+1. `GET /api/admin/metrics` реализован в `src/app/api/admin/metrics/route.ts`.
+2. Доменная агрегация вынесена в `src/server/admin/admin-metrics-service.ts`.
+3. Метрики считаются на основе `AuditLog`, `Event`, `EventParticipant`, `EventModerator`, `User`.
+4. Доступ ограничен только ролью `ADMIN` через `ensureAdminSession`.
+
+### 18.3 Выгрузка статистики мероприятия в Excel
+1. `GET /api/admin/events/[id]/export` реализован в `src/app/api/admin/events/[id]/export/route.ts`.
+2. Генерация XLSX-файла выполняется в `buildEventAttendanceExcel()` (`src/server/admin/admin-metrics-service.ts`).
+3. В отчёт включены:
+- карточка события (название, дата, место, ответственный, контакт, лимиты);
+- список участников (ФИО, email, роль, статус, время регистрации);
+- модераторы;
+- данные отчёта о мероприятии (summary/tasks/images/comment).
+4. Клиентская загрузка файла реализована через `downloadAdminEventExcel()` в `src/features/admin/client/admin-api.ts`.
+
+### 18.4 UX для администратора в шапке
+1. В `src/components/layout/Header.tsx` для роли `ADMIN` desktop-навигация вынесена под burger-меню.
+2. Кнопка «Админ-панель» вынесена в шапку отдельным элементом.
+3. Меню администратора доступно как на мобильных, так и на desktop (иконка меню отображается всегда для `ADMIN`).
+
+### 18.5 Проверки качества по новым возможностям
+1. Расширен `tests/smoke/api-smoke.ts`:
+- проверка `GET /api/admin/metrics`;
+- проверка `GET /api/admin/events/[id]/export` и `content-type` XLSX.
+2. На текущем состоянии кода успешно проходят:
+- `npm run type-check`;
+- `npm run lint`;
+- `npm run build`.
 
 

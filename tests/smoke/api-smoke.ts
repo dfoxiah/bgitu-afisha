@@ -134,6 +134,25 @@ const run = async () => {
 
     const adminLogsResponse = await fetchWithJar("/api/admin/logs?limit=5", {}, adminJar)
     assert.equal(adminLogsResponse.status, 200, "Admin logs endpoint must return 200")
+
+    const adminMetricsResponse = await fetchWithJar("/api/admin/metrics", {}, adminJar)
+    assert.equal(adminMetricsResponse.status, 200, "Admin metrics endpoint must return 200")
+
+    const adminEventsResponse = await fetchWithJar("/api/admin/events?limit=1", {}, adminJar)
+    assert.equal(adminEventsResponse.status, 200, "Admin events endpoint must return 200")
+
+    const adminEvents = (await adminEventsResponse.json()) as Array<{ id: string }>
+    if (adminEvents.length > 0) {
+      const exportResponse = await fetchWithJar(`/api/admin/events/${adminEvents[0].id}/export`, {}, adminJar)
+      assert.equal(exportResponse.status, 200, "Admin event export endpoint must return 200")
+      const contentType = exportResponse.headers.get("content-type") || ""
+      assert.ok(
+        contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        "Admin event export must return XLSX content-type"
+      )
+    } else {
+      logSkip("No admin events available to validate export endpoint")
+    }
   }
 
   console.log("[api-smoke] success")

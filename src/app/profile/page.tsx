@@ -533,8 +533,8 @@ export default function ProfilePage() {
   if (!session) {
     debug.warn('auth', 'No session, showing loading state')
     return (
-      <div className="flex flex-col justify-center items-center min-h-screen bg-light-gray">
-        <div className="text-center space-y-4">
+      <div className="status-screen">
+        <div className="status-card space-y-4">
           <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-accent mx-auto"></div>
           <p className="text-gray-600 text-lg">Загрузка профиля...</p>
           <p className="text-sm text-gray-500">Пожалуйста, подождите</p>
@@ -549,7 +549,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="profile-page px-4 md:px-[5%] py-8 bg-light-gray min-h-screen">
+    <div className="profile-page page-shell px-4 py-8 md:px-[5%] min-h-screen">
       <div className="container mx-auto max-w-4xl">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6 sm:mb-8">
           <h2 className="section-title text-2xl sm:text-3xl font-bold text-primary flex items-center gap-3">
@@ -608,9 +608,9 @@ export default function ProfilePage() {
           </div>
         )}
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1 space-y-4 sm:space-y-6">
-            <div className="liquid-section p-4 sm:p-6">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <div className="lg:col-span-1 space-y-4 sm:space-y-4">
+            <div className="liquid-section p-4 sm:p-5">
               <div className="flex flex-col items-center text-center mb-5 sm:mb-6">
                 <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-white/70 overflow-hidden bg-gradient-to-br from-primary to-secondary mb-4 flex items-center justify-center shadow-xl profile-avatar-ring">
                   {session.user.image ? (
@@ -648,7 +648,7 @@ export default function ProfilePage() {
               </div>
             </div>
             
-            <div className="liquid-section p-4 sm:p-6">
+            <div className="liquid-section p-4 sm:p-5">
               <h4 className="font-semibold text-primary mb-4 flex items-center gap-2">
                 <i className="fas fa-chart-bar"></i>
                 Статистика
@@ -667,7 +667,7 @@ export default function ProfilePage() {
           </div>
           
           <div className="lg:col-span-2">
-            <div className="liquid-section p-4 sm:p-6 lg:p-8">
+            <div className="liquid-section p-4 sm:p-5 lg:p-6">
               <form onSubmit={handleSubmit}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                   <div className="form-group">

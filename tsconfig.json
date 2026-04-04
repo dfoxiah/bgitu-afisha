@@ -33,12 +33,24 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
+    "prisma/**/*.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "laravel-event-manager",
+    "tmp-wordgen",
+    "tmp_docx_check_20260301_195812",
+    "tmp_docx_check_20260301_2042",
+    "tmp_docx_check_20260301_dense",
+    "tmp_docx_check_group_401",
+    "tmp_docx_extract_1",
+    "bgitu-afisha",
+    "vendor"
   ]
 }

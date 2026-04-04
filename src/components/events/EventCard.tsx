@@ -1,4 +1,4 @@
-﻿/**
+/**
  * File responsibility:
  * Event list card component.
  *
@@ -87,146 +87,136 @@ export default function EventCard({ event, onClick, onEdit, onComplete }: EventC
     }
   }
 
-  const placeholderImage = `https://placehold.co/600x400/6fa3f4/ffffff?text=${encodeURIComponent(
-    event.title.substring(0, 20)
+  const placeholderImage = `https://placehold.co/1200x800/1f5fe0/ffffff?text=${encodeURIComponent(
+    event.title.substring(0, 22)
   )}`
 
   const getCategoryColor = (category: EventCategory) => {
     const colors: Record<EventCategory, string> = {
-      [EventCategory.CONCERT]: "bg-sky-100 text-sky-700 border-sky-200",
-      [EventCategory.INTERNAL_ACTIVITY]: "bg-blue-100 text-blue-700 border-blue-200",
+      [EventCategory.CONCERT]: "bg-blue-100 text-blue-700 border-blue-200",
+      [EventCategory.INTERNAL_ACTIVITY]: "bg-indigo-100 text-indigo-700 border-indigo-200",
       [EventCategory.PUBLIC_EVENT]: "bg-cyan-100 text-cyan-700 border-cyan-200",
-      [EventCategory.COMPETITION]: "bg-indigo-100 text-indigo-700 border-indigo-200",
-      [EventCategory.LECTURE]: "bg-violet-100 text-violet-700 border-violet-200",
-      [EventCategory.MASTERCLASS]: "bg-teal-100 text-teal-700 border-teal-200",
-      [EventCategory.VOLUNTEER]: "bg-slate-100 text-slate-700 border-slate-200",
-      [EventCategory.NEWS]: "bg-sky-50 text-sky-700 border-sky-100",
+      [EventCategory.COMPETITION]: "bg-violet-100 text-violet-700 border-violet-200",
+      [EventCategory.LECTURE]: "bg-sky-100 text-sky-700 border-sky-200",
+      [EventCategory.MASTERCLASS]: "bg-amber-100 text-amber-700 border-amber-200",
+      [EventCategory.VOLUNTEER]: "bg-emerald-100 text-emerald-700 border-emerald-200",
+      [EventCategory.NEWS]: "bg-slate-100 text-slate-700 border-slate-200",
     }
 
-    return colors[category] || "bg-accent text-white border-accent"
+    return colors[category] || "bg-accent/20 text-primary border-accent/35"
   }
 
   return (
-    <div
+    <article
       className="event-card liquid-card liquid-card-hover flex h-full cursor-pointer flex-col overflow-hidden"
       onClick={() => (onClick ? onClick(event) : router.push(`/events/${event.id}`))}
     >
-      <div className="relative flex h-40 items-center justify-center overflow-hidden bg-gray-50 sm:h-48">
+      <div className="relative h-36 overflow-hidden border-b border-primary/10 sm:h-44">
         <Image
           src={imageError || !event.images || event.images.length === 0 ? placeholderImage : event.images[0]}
           alt={event.title}
           fill
           sizes="(max-width: 640px) 100vw, 420px"
-          className="object-contain"
+          className="object-cover"
           onError={() => setImageError(true)}
           unoptimized
         />
 
-        <div className="absolute right-3 top-3">
-          <span
-            className={`rounded-full px-3 py-1 text-xs ${getCategoryColor(event.category as EventCategory)}`}
-          >
+        <div className="absolute inset-0 bg-gradient-to-b from-[#041126]/12 via-[#041126]/16 to-[#041126]/62" />
+
+        <div className="absolute left-3 top-3">
+          <span className={`rounded-full border px-3 py-1 text-xs font-medium ${getCategoryColor(event.category as EventCategory)}`}>
             {categoryDisplayName}
           </span>
+        </div>
+
+        <div className="absolute bottom-3 left-3 text-xs font-medium text-white/92">
+          <i className="fas fa-calendar-days mr-2" />
+          {eventDate.toLocaleDateString("ru-RU")}
         </div>
       </div>
 
       <div className="flex flex-grow flex-col p-4 sm:p-5">
-        <h3 className="event-card-title mb-2 line-clamp-2 text-base font-semibold text-gray-900 sm:mb-3 sm:text-lg">
-          {event.title}
-        </h3>
+        <h3 className="mb-3 line-clamp-2 text-lg font-semibold text-primary">{event.title}</h3>
 
-        <div className="event-card-meta mb-4 flex-grow space-y-2 text-xs text-gray-600 sm:text-sm">
+        <div className="mb-4 flex-grow space-y-2 text-xs text-primary/72 sm:text-sm">
           <div className="flex items-center gap-2">
-            <i className="fas fa-calendar w-4 text-accent"></i>
-            <span>{eventDate.toLocaleDateString("ru-RU")}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <i className="fas fa-clock w-4 text-accent"></i>
+            <i className="fas fa-clock w-4 text-accent" />
             <span>{event.time}</span>
           </div>
+
           <div className="flex items-center gap-2">
-            <i className="fas fa-map-marker-alt w-4 text-accent"></i>
+            <i className="fas fa-location-dot w-4 text-accent" />
             <span className="line-clamp-1">{event.location}</span>
           </div>
         </div>
 
         {canModerate && !isPast && optimisticPending.length > 0 && (
           <div
-            className="mb-4 rounded-2xl border border-white/70 bg-white/70 p-3 shadow"
+            className="mb-4 rounded-2xl border border-primary/16 bg-white/[0.9] p-3 shadow-[0_10px_22px_rgba(16,37,77,0.12)]"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="mb-2 text-xs uppercase text-sky-600">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-primary/70">
               Ожидают подтверждения: {optimisticPending.length}
             </div>
 
             <div className="space-y-2">
               {optimisticPending.slice(0, 3).map((user) => (
                 <div key={user.id} className="flex items-center justify-between gap-2">
-                  <div className="truncate text-sm text-gray-700">{user.name || user.email}</div>
+                  <div className="truncate text-sm text-primary/75">{user.name || user.email}</div>
                   <div className="flex items-center gap-2">
                     <button
-                      className="rounded-full bg-green-100 px-3 py-1 text-xs text-green-700 transition-colors hover:bg-blue-200 disabled:opacity-60"
+                      className="rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1 text-xs text-emerald-700 transition-colors hover:bg-emerald-200 disabled:opacity-60"
                       onClick={() => handleParticipantAction(user.id, "confirm")}
                       disabled={Boolean(updatingParticipantId)}
                     >
-                      {updatingParticipantId === user.id && updatingAction === "confirm"
-                        ? "..."
-                        : "Принять"}
+                      {updatingParticipantId === user.id && updatingAction === "confirm" ? "..." : "Принять"}
                     </button>
                     <button
-                      className="rounded-full bg-red-100 px-3 py-1 text-xs text-red-700 transition-colors hover:bg-red-200 disabled:opacity-60"
+                      className="rounded-full border border-rose-200 bg-rose-100 px-3 py-1 text-xs text-rose-700 transition-colors hover:bg-rose-200 disabled:opacity-60"
                       onClick={() => handleParticipantAction(user.id, "reject")}
                       disabled={Boolean(updatingParticipantId)}
                     >
-                      {updatingParticipantId === user.id && updatingAction === "reject"
-                        ? "..."
-                        : "Отклонить"}
+                      {updatingParticipantId === user.id && updatingAction === "reject" ? "..." : "Отклонить"}
                     </button>
                   </div>
                 </div>
               ))}
 
-              {optimisticPending.length > 3 && (
-                <div className="text-xs text-gray-500">и ещё {optimisticPending.length - 3}</div>
-              )}
+              {optimisticPending.length > 3 && <div className="text-xs text-primary/55">и ещё {optimisticPending.length - 3}</div>}
             </div>
           </div>
         )}
 
-        <div className="mt-auto flex items-center justify-between border-t border-gray-100 pt-4">
+        <div className="mt-auto flex items-center justify-between border-t border-primary/12 pt-4">
           <span
-            className={`event-card-status rounded-full px-2.5 py-1 text-[10px] sm:px-3 sm:text-xs ${
-              isPast ? "bg-gray-100 text-gray-600" : "bg-sky-50 text-sky-700"
+            className={`rounded-full px-2.5 py-1 text-[10px] sm:px-3 sm:text-xs ${
+              isPast ? "border border-primary/16 bg-primary/8 text-primary/70" : "border border-secondary/45 bg-secondary/20 text-primary"
             }`}
           >
-            {isPast
-              ? "Завершено"
-              : `Участников: ${event.currentParticipants}${
-                  event.maxParticipants > 0 ? `/${event.maxParticipants}` : ""
-                }`}
+            {isPast ? "Завершено" : `Участников: ${event.currentParticipants}${event.maxParticipants > 0 ? `/${event.maxParticipants}` : ""}`}
           </span>
 
           {canModerate && !isPast && (
             <div className="flex gap-2" onClick={(event) => event.stopPropagation()}>
               <button
-                className="edit-btn rounded-full bg-sky-100 px-2.5 py-1 text-[10px] text-sky-700 transition-colors hover:bg-sky-200 sm:px-3 sm:text-xs"
+                className="edit-btn rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] text-primary transition-colors hover:bg-primary/20 sm:px-3 sm:text-xs"
                 onClick={() => onEdit?.(event)}
               >
-                <i className="fas fa-edit mr-1"></i>
+                <i className="fas fa-pen mr-1" />
                 Редактировать
               </button>
               <button
-                className="complete-btn rounded-full bg-blue-100 px-2.5 py-1 text-[10px] text-blue-700 transition-colors hover:bg-blue-200 sm:px-3 sm:text-xs"
+                className="complete-btn rounded-full border border-accent/45 bg-accent/20 px-2.5 py-1 text-[10px] text-primary transition-colors hover:bg-accent/35 sm:px-3 sm:text-xs"
                 onClick={() => onComplete?.(event)}
               >
-                <i className="fas fa-check mr-1"></i>
+                <i className="fas fa-check mr-1" />
                 Завершить
               </button>
             </div>
           )}
         </div>
       </div>
-    </div>
+    </article>
   )
 }
