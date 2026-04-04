@@ -109,6 +109,25 @@ type EventWithRelations = {
   report?: Parameters<typeof serializeReport>[0]
 }
 
+const resolveResponsibleAssignee = async (responsibleId?: string) => {
+  if (!responsibleId) return null
+
+  const user = await prisma.user.findUnique({
+    where: { id: responsibleId },
+    select: { id: true, name: true, email: true, role: true },
+  })
+
+  if (!user || (user.role !== "TEACHER" && user.role !== "ADMIN")) {
+    throw new ServiceError(
+      400,
+      "VALIDATION_ERROR",
+      "Руководитель должен быть преподавателем или администратором"
+    )
+  }
+
+  return user
+}
+
 export const serializeEventForApi = (event: EventWithRelations) => {
   const { confirmed, pending } = splitEventParticipants(event.eventParticipants)
 
@@ -183,6 +202,8 @@ export const createEventFromApi = async (params: {
     )
   }
 
+  const responsibleAssignee = await resolveResponsibleAssignee(dto.responsibleId)
+
   const created = await createEventWithRelations({
     title: dto.title,
     category: dto.category,
@@ -194,8 +215,13 @@ export const createEventFromApi = async (params: {
     maxParticipants,
     isNews: Boolean(dto.isNews),
     images: Array.isArray(dto.images) ? dto.images : [],
-    responsible: dto.responsible?.trim() || actor.name || "Не указан",
-    contact: dto.contact?.trim() || actor.email || "",
+    responsible:
+      dto.responsible?.trim() ||
+      responsibleAssignee?.name ||
+      responsibleAssignee?.email ||
+      actor.name ||
+      "Не указан",
+    contact: dto.contact?.trim() || responsibleAssignee?.email || actor.email || "",
     creatorId: creator.id,
     participantIds: participantResolution.users.map((user) => user.id),
     moderatorIds: moderatorResolution.users.map((user) => user.id),
@@ -356,6 +382,21 @@ export const updateEventFromApi = async (params: {
   const updateData: Record<string, unknown> = {}
   let confirmedParticipantIds: string[] | null = null
   let moderatorIds: string[] | null = null
+
+  if (body.responsibleId !== undefined) {
+    const responsibleAssignee = await resolveResponsibleAssignee(body.responsibleId)
+    if (responsibleAssignee) {
+      updateData.responsible = responsibleAssignee.name || responsibleAssignee.email
+      if (body.contact === undefined) {
+        updateData.contact = responsibleAssignee.email
+      }
+    } else {
+      updateData.responsible = null
+      if (body.contact === undefined) {
+        updateData.contact = ""
+      }
+    }
+  }
 
   if (body.title) updateData.title = body.title
   if (body.description) updateData.description = body.description

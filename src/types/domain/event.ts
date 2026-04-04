@@ -11,7 +11,7 @@
  * - events UI/pages/context
  */
 
-import type { EventCategory } from "@prisma/client"
+import type { EventCategory, ParticipantStatus } from "@prisma/client"
 import type { User } from "./user"
 
 export interface EventReport {
@@ -45,6 +45,10 @@ export interface Event {
   report: EventReport | null
   participants: User[]
   pendingParticipants?: User[]
+  confirmedParticipantsCount?: number
+  pendingParticipantsCount?: number
+  canViewParticipants?: boolean
+  viewerParticipationStatus?: ParticipantStatus | null
   moderators?: User[]
   responsible: string
   contact: string
@@ -53,4 +57,3 @@ export interface Event {
   createdAt: Date
   updatedAt: Date
 }
-

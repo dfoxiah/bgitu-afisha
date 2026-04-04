@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
+import { ParticipantStatus } from "@prisma/client"
 import type { Role } from "@prisma/client"
 import { authOptions } from "@/lib/auth"
 import { findEventByIdForRead } from "@/server/events/event-query-service"
@@ -25,8 +26,52 @@ type RouteParams = {
   params: Promise<{ id: string }>
 }
 
+const canViewerSeeParticipants = (role?: string | null) =>
+  role === "TEACHER" || role === "ADMIN"
+
+const applyParticipantVisibility = (
+  event: Record<string, unknown>,
+  viewer: { id?: string | null; role?: string | null } | null | undefined
+) => {
+  const confirmed = Array.isArray(event.participants)
+    ? (event.participants as Array<{ id?: string }>)
+    : []
+  const pending = Array.isArray(event.pendingParticipants)
+    ? (event.pendingParticipants as Array<{ id?: string }>)
+    : []
+  const viewerId = viewer?.id || null
+
+  const viewerParticipationStatus =
+    viewerId && confirmed.some((participant) => participant?.id === viewerId)
+      ? ParticipantStatus.CONFIRMED
+      : viewerId && pending.some((participant) => participant?.id === viewerId)
+        ? ParticipantStatus.PENDING
+        : null
+
+  if (canViewerSeeParticipants(viewer?.role)) {
+    return {
+      ...event,
+      canViewParticipants: true,
+      viewerParticipationStatus,
+      confirmedParticipantsCount: confirmed.length,
+      pendingParticipantsCount: pending.length,
+    }
+  }
+
+  return {
+    ...event,
+    participants: [],
+    pendingParticipants: [],
+    canViewParticipants: false,
+    viewerParticipationStatus,
+    confirmedParticipantsCount: confirmed.length,
+    pendingParticipantsCount: pending.length,
+  }
+}
+
 export async function GET(_req: NextRequest, { params }: RouteParams) {
   try {
+    const session = await getServerSession(authOptions)
     const { id } = await params
     const event = await findEventByIdForRead(id)
 
@@ -34,7 +79,12 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       return errorJson(404, "NOT_FOUND", "Мероприятие не найдено")
     }
 
-    return NextResponse.json(serializeEventForApi(event))
+    return NextResponse.json(
+      applyParticipantVisibility(
+        serializeEventForApi(event) as unknown as Record<string, unknown>,
+        session?.user
+      )
+    )
   } catch (error) {
     console.error("GET /api/events/[id] error", error)
     return errorJson(500, "SERVER_ERROR", "Ошибка сервера")

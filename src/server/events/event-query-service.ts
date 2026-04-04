@@ -114,7 +114,7 @@ export const findEventsForList = (where: Prisma.EventWhereInput, limit?: number)
         },
       },
     },
-    orderBy: { date: "asc" },
+    orderBy: [{ date: "asc" }, { time: "asc" }, { createdAt: "asc" }],
     take: limit,
   })
 
@@ -194,4 +194,3 @@ export const findEventByIdForEdit = (eventId: string) =>
       },
     },
   })
-

@@ -26,6 +26,7 @@ export interface CreateEventDto {
   moderators?: string[]
   images?: string[]
   responsible?: string
+  responsibleId?: string
   contact?: string
   isNews?: boolean
 }

@@ -256,6 +256,27 @@ const parseModerators = async (value: unknown) => {
   return users.map((user) => user.id)
 }
 
+const resolveResponsibleById = async (value: unknown) => {
+  if (value === undefined || value === null) return null
+  const responsibleId = String(value).trim()
+  if (!responsibleId) return null
+
+  const user = await prisma.user.findUnique({
+    where: { id: responsibleId },
+    select: { id: true, name: true, email: true, role: true },
+  })
+
+  if (!user || (user.role !== "TEACHER" && user.role !== "ADMIN")) {
+    throw new ServiceError(
+      400,
+      "VALIDATION_ERROR",
+      "Руководитель должен быть преподавателем или администратором"
+    )
+  }
+
+  return user
+}
+
 const buildEventAuditInfo = (
   event: Pick<
     Event,
@@ -408,6 +429,8 @@ export const createAdminNews = async (
     throw new ServiceError(404, "NOT_FOUND", "Администратор не найден")
   }
 
+  const responsibleAssignee = await resolveResponsibleById(input.responsibleId)
+
   const created = await prisma.$transaction(async (tx) => {
     const event = await tx.event.create({
       data: {
@@ -427,9 +450,11 @@ export const createAdminNews = async (
         responsible:
           typeof input.responsible === "string" && input.responsible.trim()
             ? input.responsible.trim()
-            : adminUser.name || adminUser.email || "Администратор",
+            : responsibleAssignee?.name || responsibleAssignee?.email || adminUser.name || adminUser.email || "Администратор",
         contact:
-          typeof input.contact === "string" && input.contact.trim() ? input.contact.trim() : adminUser.email || "",
+          typeof input.contact === "string" && input.contact.trim()
+            ? input.contact.trim()
+            : responsibleAssignee?.email || adminUser.email || "",
         creatorId: adminUser.id,
       },
       include: eventListInclude,
@@ -506,6 +531,15 @@ export const updateAdminEvent = async (
   }
 
   const updateData: Prisma.EventUpdateInput = {}
+  if (body.responsibleId !== undefined) {
+    const responsibleAssignee = await resolveResponsibleById(body.responsibleId)
+    if (responsibleAssignee) {
+      updateData.responsible = responsibleAssignee.name || responsibleAssignee.email
+      if (body.contact === undefined) {
+        updateData.contact = responsibleAssignee.email
+      }
+    }
+  }
   if (body.title !== undefined) updateData.title = String(body.title).trim()
   if (body.description !== undefined) updateData.description = String(body.description).trim()
   if (body.location !== undefined) updateData.location = String(body.location).trim()

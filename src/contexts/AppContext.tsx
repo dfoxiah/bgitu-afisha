@@ -72,7 +72,11 @@ interface AppContextType {
     eventId: string,
     content: string,
     recipients: string,
-    type?: NotificationType
+    type?: NotificationType,
+    filters?: {
+      groups?: string[]
+      departments?: string[]
+    }
   ) => Promise<void>
   updateProfile: (data: Record<string, unknown>) => Promise<UpdateProfileResponse>
   refreshEvents: () => Promise<void>
@@ -151,18 +155,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const upcomingEvents = useMemo(() => {
     const now = new Date()
-    return filteredEvents.filter((event) => {
-      const eventDate = event.date instanceof Date ? event.date : new Date(event.date)
-      return eventDate >= now && !event.isPast
-    })
+    return filteredEvents
+      .filter((event) => {
+        const eventDate = event.date instanceof Date ? event.date : new Date(event.date)
+        return eventDate >= now && !event.isPast
+      })
+      .sort((left, right) => {
+        const leftTime = (left.date instanceof Date ? left.date : new Date(left.date)).getTime()
+        const rightTime = (right.date instanceof Date ? right.date : new Date(right.date)).getTime()
+        if (leftTime !== rightTime) return leftTime - rightTime
+        return String(left.time || "").localeCompare(String(right.time || ""), "ru-RU")
+      })
   }, [filteredEvents])
 
   const pastEvents = useMemo(() => {
     const now = new Date()
-    return filteredEvents.filter((event) => {
-      const eventDate = event.date instanceof Date ? event.date : new Date(event.date)
-      return eventDate < now || event.isPast
-    })
+    return filteredEvents
+      .filter((event) => {
+        const eventDate = event.date instanceof Date ? event.date : new Date(event.date)
+        return eventDate < now || event.isPast
+      })
+      .sort((left, right) => {
+        const leftTime = (left.date instanceof Date ? left.date : new Date(left.date)).getTime()
+        const rightTime = (right.date instanceof Date ? right.date : new Date(right.date)).getTime()
+        if (leftTime !== rightTime) return rightTime - leftTime
+        return String(right.time || "").localeCompare(String(left.time || ""), "ru-RU")
+      })
   }, [filteredEvents])
 
   const newsEvents = useMemo(() => pastEvents.filter((event) => event.isNews), [pastEvents])
@@ -390,16 +408,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
 
           if (status === "PENDING") {
+            const nextPending = [...(event.pendingParticipants || []), user]
             return {
               ...event,
-              pendingParticipants: [...(event.pendingParticipants || []), user],
+              pendingParticipants: nextPending,
+              pendingParticipantsCount: nextPending.length,
+              viewerParticipationStatus: "PENDING",
             }
           }
 
+          const nextConfirmed = [...(event.participants || []), user]
           return {
             ...event,
             currentParticipants: event.currentParticipants + 1,
-            participants: [...(event.participants || []), user],
+            participants: nextConfirmed,
+            confirmedParticipantsCount: nextConfirmed.length,
+            viewerParticipationStatus: "CONFIRMED",
           }
         })
       )
@@ -426,27 +450,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
           if (action === "confirm") {
             const userToAdd = pendingUser || confirmedUser
+            const nextParticipants = userToAdd
+              ? [...confirmed.filter((participant) => participant.id !== userId), userToAdd]
+              : confirmed
+            const nextPending = pending.filter((participant) => participant.id !== userId)
             return {
               ...event,
               currentParticipants:
                 typeof result.currentParticipants === "number"
                   ? result.currentParticipants
                   : event.currentParticipants,
-              participants: userToAdd
-                ? [...confirmed.filter((participant) => participant.id !== userId), userToAdd]
-                : confirmed,
-              pendingParticipants: pending.filter((participant) => participant.id !== userId),
+              participants: nextParticipants,
+              pendingParticipants: nextPending,
+              confirmedParticipantsCount: nextParticipants.length,
+              pendingParticipantsCount: nextPending.length,
             }
           }
 
+          const nextParticipants = confirmed.filter((participant) => participant.id !== userId)
+          const nextPending = pending.filter((participant) => participant.id !== userId)
           return {
             ...event,
             currentParticipants:
               typeof result.currentParticipants === "number"
                 ? result.currentParticipants
                 : event.currentParticipants,
-            participants: confirmed.filter((participant) => participant.id !== userId),
-            pendingParticipants: pending.filter((participant) => participant.id !== userId),
+            participants: nextParticipants,
+            pendingParticipants: nextPending,
+            confirmedParticipantsCount: nextParticipants.length,
+            pendingParticipantsCount: nextPending.length,
           }
         })
       )
@@ -489,9 +521,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       eventId: string,
       content: string,
       recipients: string,
-      type: NotificationType = "EVENT"
+      type: NotificationType = "EVENT",
+      filters?: {
+        groups?: string[]
+        departments?: string[]
+      }
     ) => {
-      await sendEventNotificationApi({ eventId, content, recipients, type })
+      await sendEventNotificationApi({
+        eventId,
+        content,
+        recipients,
+        type,
+        groups: filters?.groups || [],
+        departments: filters?.departments || [],
+      })
       await fetchNotifications(true)
     },
     [fetchNotifications]

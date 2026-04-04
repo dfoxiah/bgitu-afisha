@@ -76,6 +76,8 @@ type SendEventNotificationPayload = {
   content: string
   recipients: string
   type: NotificationType
+  groups?: string[]
+  departments?: string[]
 }
 
 export const sendEventNotificationApi = async (payload: SendEventNotificationPayload) => {

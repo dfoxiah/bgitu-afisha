@@ -116,10 +116,20 @@ export default function EventDetailsPage() {
 
   const eventDate = event.date instanceof Date ? event.date : new Date(event.date)
   const heroImage = (event.images && event.images.length > 0 ? event.images[0] : null) || (event.report?.images && event.report.images.length > 0 ? event.report.images[0] : null)
-  const isParticipant = event.participants?.some((participant) => participant.id === session?.user?.id)
-  const isPending = event.pendingParticipants?.some((participant) => participant.id === session?.user?.id)
+  const viewerStatusFromLists = event.participants?.some((participant) => participant.id === session?.user?.id)
+    ? 'CONFIRMED'
+    : event.pendingParticipants?.some((participant) => participant.id === session?.user?.id)
+      ? 'PENDING'
+      : null
+  const viewerStatus = event.viewerParticipationStatus || viewerStatusFromLists
+  const isParticipant = viewerStatus === 'CONFIRMED'
+  const isPending = viewerStatus === 'PENDING'
   const isPast = event.isPast || eventDate < new Date()
   const isTeacher = session?.user?.role === 'TEACHER' || session?.user?.role === 'ADMIN'
+  const canViewParticipants = isTeacher && (event.canViewParticipants ?? true)
+  const confirmedParticipants = event.participants || []
+  const pendingParticipants = event.pendingParticipants || []
+  const pendingCount = event.pendingParticipantsCount ?? pendingParticipants.length
   const isFull = event.maxParticipants > 0 && event.currentParticipants >= event.maxParticipants
   const categoryDisplayName = CategoryDisplayMap[event.category as EventCategory] || event.category
 
@@ -292,6 +302,74 @@ export default function EventDetailsPage() {
                   )}
                 </article>
               )}
+
+              {canViewParticipants && (
+                <article className="liquid-card p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-lg font-semibold text-primary">Участники мероприятия</h3>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">
+                        Подтверждено: {confirmedParticipants.length}
+                      </span>
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700">
+                        Pending: {pendingParticipants.length}
+                      </span>
+                    </div>
+                  </div>
+
+                  {confirmedParticipants.length === 0 && pendingParticipants.length === 0 ? (
+                    <p className="mt-3 text-sm text-primary/62">Пока нет зарегистрированных участников.</p>
+                  ) : (
+                    <div className="mt-4 space-y-4">
+                      {confirmedParticipants.length > 0 && (
+                        <div className="overflow-x-auto rounded-xl border border-primary/12">
+                          <table className="min-w-[620px] w-full text-sm">
+                            <thead className="bg-primary/5 text-left text-primary/64">
+                              <tr>
+                                <th className="px-3 py-2">ФИО</th>
+                                <th className="px-3 py-2">Email</th>
+                                <th className="px-3 py-2">Группа</th>
+                                <th className="px-3 py-2">Факультет/кафедра</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {confirmedParticipants.map((participant) => (
+                                <tr key={participant.id} className="border-t border-primary/10">
+                                  <td className="px-3 py-2">{participant.name || "Не указано"}</td>
+                                  <td className="px-3 py-2">{participant.email}</td>
+                                  <td className="px-3 py-2">{participant.group || "Не указана"}</td>
+                                  <td className="px-3 py-2">{participant.department || "Не указан"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {pendingParticipants.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold uppercase tracking-[0.08em] text-primary/62">
+                            Заявки на подтверждение
+                          </h4>
+                          <div className="mt-2 space-y-2">
+                            {pendingParticipants.map((participant) => (
+                              <div
+                                key={participant.id}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/12 bg-white/80 px-3 py-2"
+                              >
+                                <span className="text-sm text-primary/78">
+                                  {participant.name || participant.email}
+                                </span>
+                                <span className="text-xs text-primary/56">{participant.group || "Группа не указана"}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </article>
+              )}
             </div>
 
             <aside className="space-y-4">
@@ -326,8 +404,8 @@ export default function EventDetailsPage() {
                   </div>
                 )}
 
-                {event.pendingParticipants && event.pendingParticipants.length > 0 && (
-                  <p className="mt-3 text-xs text-primary/62">{event.pendingParticipants.length} заявок ожидают подтверждения</p>
+                {pendingCount > 0 && (
+                  <p className="mt-3 text-xs text-primary/62">{pendingCount} заявок ожидают подтверждения</p>
                 )}
               </article>
 

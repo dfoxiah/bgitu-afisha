@@ -17,5 +17,6 @@ export interface SendEventNotificationDto {
   content: string
   recipients: "all" | "confirmed" | "pending"
   type?: NotificationType
+  groups?: string[]
+  departments?: string[]
 }
-

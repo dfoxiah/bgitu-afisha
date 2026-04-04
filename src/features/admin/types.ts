@@ -115,6 +115,7 @@ export type AdminEventUpdateInput = {
   removedFromCalendar?: boolean
   images?: string[]
   responsible?: string
+  responsibleId?: string
   contact?: string
   moderators?: string[]
   report?: {
@@ -189,6 +190,64 @@ export type AdminActiveUserMetric = {
   activityScore: number
 }
 
+export type AdminPeriodSummaryMetric = {
+  from: string
+  to: string
+  days: number
+  totalEvents: number
+  upcomingEvents: number
+  completedEvents: number
+  registrations: number
+  confirmed: number
+  pending: number
+  attendanceRatePercent: number
+}
+
+export type AdminEventAttendanceMetric = {
+  eventId: string
+  title: string
+  date: string
+  confirmed: number
+  pending: number
+  total: number
+  maxParticipants: number
+  fillRatePercent: number
+}
+
+export type AdminStudentAttendanceMetric = {
+  userId: string
+  name: string
+  email: string
+  group: string
+  department: string
+  confirmed: number
+  pending: number
+  total: number
+}
+
+export type AdminGroupAttendanceMetric = {
+  group: string
+  confirmed: number
+  pending: number
+  total: number
+  uniqueStudents: number
+}
+
+export type AdminDepartmentAttendanceMetric = {
+  department: string
+  confirmed: number
+  pending: number
+  total: number
+  uniqueStudents: number
+}
+
+export type AdminRoleAttendanceMetric = {
+  role: Role
+  confirmed: number
+  pending: number
+  total: number
+}
+
 export type AdminDashboardMetrics = {
   generatedAt: string
   periods: {
@@ -216,6 +275,14 @@ export type AdminDashboardMetrics = {
     confirmedThisMonth: number
     pendingApprovals: number
     registrationConversionPercent: number
+  }
+  periodSummary: AdminPeriodSummaryMetric
+  attendanceStats: {
+    byEvent: AdminEventAttendanceMetric[]
+    byStudent: AdminStudentAttendanceMetric[]
+    byGroup: AdminGroupAttendanceMetric[]
+    byDepartment: AdminDepartmentAttendanceMetric[]
+    byRole: AdminRoleAttendanceMetric[]
   }
   topActive: {
     students: AdminActiveUserMetric[]

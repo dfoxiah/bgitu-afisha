@@ -34,6 +34,7 @@ export default function EventsPage() {
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
   const [completingEvent, setCompletingEvent] = useState<Event | null>(null)
   const [completionEffect, setCompletionEffect] = useState(false)
+  const [upcomingSort, setUpcomingSort] = useState<'soonest' | 'latest' | 'participants'>('soonest')
   const completionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -115,7 +116,25 @@ export default function EventsPage() {
   }
 
   const isTeacher = session?.user?.role === 'TEACHER' || session?.user?.role === 'ADMIN'
-  const activeCollection = activeTab === 'upcoming' ? upcomingEvents : pastEvents
+  const activeCollection = useMemo(() => {
+    if (activeTab === 'past') return pastEvents
+
+    const sorted = [...upcomingEvents]
+    if (upcomingSort === 'latest') {
+      sorted.sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
+    } else if (upcomingSort === 'participants') {
+      sorted.sort((left, right) => {
+        const leftValue = left.currentParticipants || 0
+        const rightValue = right.currentParticipants || 0
+        if (rightValue !== leftValue) return rightValue - leftValue
+        return new Date(left.date).getTime() - new Date(right.date).getTime()
+      })
+    } else {
+      sorted.sort((left, right) => new Date(left.date).getTime() - new Date(right.date).getTime())
+    }
+
+    return sorted
+  }, [activeTab, pastEvents, upcomingEvents, upcomingSort])
 
   const todayCount = useMemo(() => {
     const today = new Date().toDateString()
@@ -209,6 +228,23 @@ export default function EventsPage() {
               Активный режим: {activeTab === 'upcoming' ? 'Планирование' : 'Архив и отчеты'}
             </div>
           </div>
+
+          {activeTab === 'upcoming' && (
+            <div className="mt-3 flex items-center gap-2 text-sm">
+              <span className="text-primary/62">Сортировка:</span>
+              <select
+                className="liquid-input rounded-lg border border-primary/14 bg-white/84 px-3 py-1.5 text-sm"
+                value={upcomingSort}
+                onChange={(event) =>
+                  setUpcomingSort(event.target.value as 'soonest' | 'latest' | 'participants')
+                }
+              >
+                <option value="soonest">Сначала ближайшие</option>
+                <option value="latest">Сначала дальние</option>
+                <option value="participants">По числу участников</option>
+              </select>
+            </div>
+          )}
         </section>
 
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">

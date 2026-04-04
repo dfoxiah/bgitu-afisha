@@ -143,8 +143,18 @@ export const getAdminLogs = (query: AdminLogsQuery = {}) => {
   return request<AdminAuditLog[]>(`/api/admin/logs?${params.toString()}`)
 }
 
-export const getAdminMetrics = () =>
-  request<AdminDashboardMetrics>("/api/admin/metrics")
+export type AdminMetricsQuery = {
+  from?: string
+  to?: string
+}
+
+export const getAdminMetrics = (query: AdminMetricsQuery = {}) => {
+  const params = new URLSearchParams()
+  if (query.from) params.set("from", query.from)
+  if (query.to) params.set("to", query.to)
+  const suffix = params.toString()
+  return request<AdminDashboardMetrics>(`/api/admin/metrics${suffix ? `?${suffix}` : ""}`)
+}
 
 const extractFileName = (response: Response, fallback: string) => {
   const contentDisposition = response.headers.get("content-disposition") || ""

@@ -29,6 +29,11 @@ type AdminMetricsDashboardProps = {
   isLoading: boolean
   exportEvents: AdminEvent[]
   exportingEventId: string | null
+  period: {
+    from: string
+    to: string
+  }
+  onPeriodChange: (next: { from: string; to: string }) => void
   onRefresh: () => void
   onExportEvent: (eventId: string) => void
 }
@@ -121,10 +126,16 @@ export default function AdminMetricsDashboard({
   isLoading,
   exportEvents,
   exportingEventId,
+  period,
+  onPeriodChange,
   onRefresh,
   onExportEvent,
 }: AdminMetricsDashboardProps) {
   const [selectedEventId, setSelectedEventId] = useState("")
+
+  const handlePeriodFieldChange = (field: "from" | "to", value: string) => {
+    onPeriodChange({ ...period, [field]: value })
+  }
 
   useEffect(() => {
     if (!selectedEventId && exportEvents.length > 0) {
@@ -346,8 +357,26 @@ export default function AdminMetricsDashboard({
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-xs text-slate-600">
+              <span>Период с</span>
+              <input
+                type="date"
+                value={period.from}
+                onChange={(event) => handlePeriodFieldChange("from", event.target.value)}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-slate-600">
+              <span>по</span>
+              <input
+                type="date"
+                value={period.to}
+                onChange={(event) => handlePeriodFieldChange("to", event.target.value)}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
+              />
+            </label>
             <Button variant="secondary" onClick={onRefresh} loading={isLoading}>
-              Обновить метрики
+              Применить период
             </Button>
             <Button variant="secondary" onClick={handleExportMetricsJson}>
               Экспорт JSON
@@ -366,6 +395,54 @@ export default function AdminMetricsDashboard({
             <div className="mt-1 text-xs text-slate-500">{card.note}</div>
           </article>
         ))}
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <article className="admin-panel p-5">
+          <div className="text-sm font-semibold text-slate-900">Сводка за выбранный период</div>
+          <div className="mt-1 text-xs text-slate-500">
+            {formatDate(metrics.periodSummary.from)} - {formatDate(metrics.periodSummary.to)} ({metrics.periodSummary.days} дн.)
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200/70 bg-white/[0.85] p-3 text-sm">
+              <div className="text-slate-500">Мероприятий</div>
+              <div className="text-2xl font-bold text-slate-900">{metrics.periodSummary.totalEvents}</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200/70 bg-white/[0.85] p-3 text-sm">
+              <div className="text-slate-500">Регистраций</div>
+              <div className="text-2xl font-bold text-slate-900">{metrics.periodSummary.registrations}</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200/70 bg-white/[0.85] p-3 text-sm">
+              <div className="text-slate-500">Подтверждено</div>
+              <div className="text-2xl font-bold text-slate-900">{metrics.periodSummary.confirmed}</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200/70 bg-white/[0.85] p-3 text-sm">
+              <div className="text-slate-500">Посещаемость</div>
+              <div className="text-2xl font-bold text-slate-900">{metrics.periodSummary.attendanceRatePercent}%</div>
+            </div>
+          </div>
+        </article>
+
+        <article className="admin-panel p-5">
+          <div className="text-sm font-semibold text-slate-900">Посещаемость по ролям</div>
+          <div className="mt-3 space-y-2">
+            {metrics.attendanceStats.byRole.length === 0 ? (
+              <div className="text-sm text-slate-500">Нет данных за выбранный период.</div>
+            ) : (
+              metrics.attendanceStats.byRole.map((item) => (
+                <div key={item.role} className="rounded-xl border border-slate-200/70 bg-white/[0.85] p-3 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-slate-800">{item.role}</span>
+                    <span className="text-slate-600">Всего: {item.total}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    Confirmed: {item.confirmed} | Pending: {item.pending}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.7fr_1fr]">
@@ -584,6 +661,103 @@ export default function AdminMetricsDashboard({
         <article className="admin-panel p-5">
           <div className="mb-3 text-sm font-semibold text-slate-900">Самые активные преподаватели</div>
           {renderActivityRows(metrics.topActive.teachers, "Нет данных по преподавателям.")}
+        </article>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        <article className="admin-panel p-5">
+          <div className="mb-3 text-sm font-semibold text-slate-900">
+            Посещаемость по мероприятиям (топ)
+          </div>
+          {metrics.attendanceStats.byEvent.length === 0 ? (
+            <div className="text-sm text-slate-500">Нет данных за выбранный период.</div>
+          ) : (
+            <div className="max-h-80 overflow-auto rounded-xl border border-slate-200/70">
+              <table className="min-w-[620px] w-full text-sm">
+                <thead className="bg-slate-50 text-left text-slate-600">
+                  <tr>
+                    <th className="px-3 py-2">Мероприятие</th>
+                    <th className="px-3 py-2">Дата</th>
+                    <th className="px-3 py-2">Confirmed</th>
+                    <th className="px-3 py-2">Pending</th>
+                    <th className="px-3 py-2">Заполн.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {metrics.attendanceStats.byEvent.map((row) => (
+                    <tr key={row.eventId} className="border-t border-slate-100">
+                      <td className="px-3 py-2">{row.title}</td>
+                      <td className="px-3 py-2">{formatDate(row.date)}</td>
+                      <td className="px-3 py-2">{row.confirmed}</td>
+                      <td className="px-3 py-2">{row.pending}</td>
+                      <td className="px-3 py-2">{row.fillRatePercent}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </article>
+
+        <article className="admin-panel p-5">
+          <div className="mb-3 text-sm font-semibold text-slate-900">
+            Посещаемость: студенты / группы / факультеты
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200/70 bg-white/[0.85] p-3">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                Студенты (топ)
+              </div>
+              <div className="space-y-2 text-xs">
+                {metrics.attendanceStats.byStudent.slice(0, 8).map((row) => (
+                  <div key={row.userId} className="rounded-lg border border-slate-200/70 bg-white px-2 py-1.5">
+                    <div className="font-semibold text-slate-800">{row.name}</div>
+                    <div className="text-slate-500">{row.group} | {row.department}</div>
+                    <div className="text-slate-600">OK: {row.confirmed} | Pending: {row.pending}</div>
+                  </div>
+                ))}
+                {metrics.attendanceStats.byStudent.length === 0 && (
+                  <div className="text-slate-500">Нет данных.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-slate-200/70 bg-white/[0.85] p-3">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                  Группы
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  {metrics.attendanceStats.byGroup.slice(0, 8).map((row) => (
+                    <div key={row.group} className="flex items-center justify-between rounded-lg border border-slate-200/70 bg-white px-2 py-1.5">
+                      <span className="font-medium text-slate-800">{row.group}</span>
+                      <span className="text-slate-600">{row.confirmed}/{row.total}</span>
+                    </div>
+                  ))}
+                  {metrics.attendanceStats.byGroup.length === 0 && (
+                    <div className="text-slate-500">Нет данных.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200/70 bg-white/[0.85] p-3">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                  Факультеты/кафедры
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  {metrics.attendanceStats.byDepartment.slice(0, 8).map((row) => (
+                    <div key={row.department} className="flex items-center justify-between rounded-lg border border-slate-200/70 bg-white px-2 py-1.5">
+                      <span className="font-medium text-slate-800">{row.department}</span>
+                      <span className="text-slate-600">{row.confirmed}/{row.total}</span>
+                    </div>
+                  ))}
+                  {metrics.attendanceStats.byDepartment.length === 0 && (
+                    <div className="text-slate-500">Нет данных.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </article>
       </section>
 

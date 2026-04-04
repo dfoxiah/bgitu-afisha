@@ -61,6 +61,7 @@ type EditableEvent = {
   description: string
   maxParticipants: number
   responsible: string
+  responsibleId: string
   contact: string
   imagesText: string
   moderatorsText: string
@@ -70,6 +71,12 @@ type EditableEvent = {
   reportTasksText: string
   reportImagesText: string
   reportComment: string
+}
+
+type ResponsibleOption = {
+  id: string
+  name: string
+  email: string
 }
 
 const parseList = (value: string) =>
@@ -104,6 +111,7 @@ const toEditableEvent = (event: AdminEventDetails): EditableEvent => ({
   description: event.description || "",
   maxParticipants: event.maxParticipants ?? 0,
   responsible: event.responsible || "",
+  responsibleId: "",
   contact: event.contact || "",
   imagesText: (event.images || []).join("\n"),
   moderatorsText: (event.moderators || []).map((moderator) => moderator.email).join(", "),
@@ -150,6 +158,15 @@ export default function AdminPage() {
   const [metricsLoading, setMetricsLoading] = useState(false)
   const [metricsEvents, setMetricsEvents] = useState<AdminEvent[]>([])
   const [exportingEventId, setExportingEventId] = useState<string | null>(null)
+  const [metricsPeriod, setMetricsPeriod] = useState(() => {
+    const to = new Date()
+    const from = new Date(to)
+    from.setDate(to.getDate() - 30)
+    return {
+      from: from.toISOString().slice(0, 10),
+      to: to.toISOString().slice(0, 10),
+    }
+  })
 
   const [users, setUsers] = useState<AdminUser[]>([])
   const [userSearch, setUserSearch] = useState("")
@@ -171,6 +188,7 @@ export default function AdminPage() {
   const [eventStatus, setEventStatus] = useState<"ALL" | "UPCOMING" | "PAST">("ALL")
   const [newsOnly, setNewsOnly] = useState(false)
   const [editingEvent, setEditingEvent] = useState<EditableEvent | null>(null)
+  const [responsibleOptions, setResponsibleOptions] = useState<ResponsibleOption[]>([])
   const [savingEvent, setSavingEvent] = useState(false)
   const [newsDraft, setNewsDraft] = useState({
     title: "",
@@ -203,6 +221,39 @@ export default function AdminPage() {
       router.push("/")
     }
   }, [status, router])
+
+  useEffect(() => {
+    if (!canAccess) {
+      setResponsibleOptions([])
+      return
+    }
+
+    let active = true
+
+    const loadResponsibleOptions = async () => {
+      try {
+        const rows = await getAdminUsers({ role: "ALL", limit: 500 })
+        const options = rows
+          .filter((user) => user.role === "TEACHER" || user.role === "ADMIN")
+          .map((user) => ({
+            id: user.id,
+            name: user.name || user.email,
+            email: user.email,
+          }))
+          .sort((left, right) => left.name.localeCompare(right.name, "ru-RU"))
+
+        if (active) setResponsibleOptions(options)
+      } catch {
+        if (active) setResponsibleOptions([])
+      }
+    }
+
+    void loadResponsibleOptions()
+
+    return () => {
+      active = false
+    }
+  }, [canAccess])
 
   const loadUsers = useCallback(async () => {
     try {
@@ -239,7 +290,10 @@ export default function AdminPage() {
     try {
       setMetricsLoading(true)
       const [nextMetrics, eventsForExport] = await Promise.all([
-        getAdminMetrics(),
+        getAdminMetrics({
+          from: metricsPeriod.from,
+          to: metricsPeriod.to,
+        }),
         getAdminEvents({ limit: 200 }),
       ])
       setMetrics(nextMetrics)
@@ -249,7 +303,7 @@ export default function AdminPage() {
     } finally {
       setMetricsLoading(false)
     }
-  }, [])
+  }, [metricsPeriod.from, metricsPeriod.to])
 
   useEffect(() => {
     if (!canAccess) return
@@ -258,6 +312,21 @@ export default function AdminPage() {
     if (activeTab === "events") void loadEvents()
     if (activeTab === "logs") void loadLogs()
   }, [activeTab, canAccess, loadMetrics, loadUsers, loadEvents, loadLogs])
+
+  useEffect(() => {
+    if (!editingEvent || editingEvent.responsibleId || responsibleOptions.length === 0) return
+
+    const matchedResponsible = responsibleOptions.find(
+      (option) =>
+        option.name.trim().toLowerCase() === editingEvent.responsible.trim().toLowerCase() ||
+        option.email.trim().toLowerCase() === editingEvent.responsible.trim().toLowerCase()
+    )
+    if (!matchedResponsible) return
+
+    setEditingEvent((previous) =>
+      previous ? { ...previous, responsibleId: matchedResponsible.id } : previous
+    )
+  }, [editingEvent, responsibleOptions])
 
   useEffect(() => {
     if (!canAccess) return
@@ -345,7 +414,17 @@ export default function AdminPage() {
 
   const handleEditEvent = async (event: AdminEvent) => {
     try {
-      setEditingEvent(toEditableEvent(await getAdminEventDetails(event.id)))
+      const details = await getAdminEventDetails(event.id)
+      const editable = toEditableEvent(details)
+      const matchedResponsible = responsibleOptions.find(
+        (option) =>
+          option.name.trim().toLowerCase() === editable.responsible.trim().toLowerCase() ||
+          option.email.trim().toLowerCase() === editable.responsible.trim().toLowerCase()
+      )
+      if (matchedResponsible) {
+        editable.responsibleId = matchedResponsible.id
+      }
+      setEditingEvent(editable)
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Ошибка загрузки мероприятия", "error")
     }
@@ -364,6 +443,7 @@ export default function AdminPage() {
         description: editingEvent.description,
         maxParticipants: editingEvent.maxParticipants,
         responsible: editingEvent.responsible,
+        responsibleId: editingEvent.responsibleId || undefined,
         contact: editingEvent.contact,
         isNews: editingEvent.isNews,
         images: parseList(editingEvent.imagesText),
@@ -547,6 +627,8 @@ export default function AdminPage() {
           isLoading={metricsLoading}
           exportEvents={metricsEvents}
           exportingEventId={exportingEventId}
+          period={metricsPeriod}
+          onPeriodChange={setMetricsPeriod}
           onRefresh={() => void loadMetrics()}
           onExportEvent={(eventId) => void handleExportEventExcel(eventId)}
         />
@@ -676,6 +758,31 @@ export default function AdminPage() {
                 <input className="w-full px-3 py-2 border rounded" type="date" value={editingEvent.date} onChange={(event) => setEditingEvent((previous) => previous ? { ...previous, date: event.target.value } : previous)} />
                 <input className="w-full px-3 py-2 border rounded" placeholder="Время HH:mm" value={editingEvent.time} onChange={(event) => setEditingEvent((previous) => previous ? { ...previous, time: event.target.value } : previous)} />
                 <input className="w-full px-3 py-2 border rounded" placeholder="Место" value={editingEvent.location} onChange={(event) => setEditingEvent((previous) => previous ? { ...previous, location: event.target.value } : previous)} />
+                <select
+                  className="w-full px-3 py-2 border rounded"
+                  value={editingEvent.responsibleId}
+                  onChange={(event) =>
+                    setEditingEvent((previous) => {
+                      if (!previous) return previous
+                      const selected = responsibleOptions.find((option) => option.id === event.target.value)
+                      return {
+                        ...previous,
+                        responsibleId: event.target.value,
+                        responsible: selected?.name || previous.responsible,
+                        contact: selected?.email || previous.contact,
+                      }
+                    })
+                  }
+                >
+                  <option value="">Руководитель (по ФИО)</option>
+                  {responsibleOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name} ({option.email})
+                    </option>
+                  ))}
+                </select>
+                <input className="w-full px-3 py-2 border rounded" placeholder="ФИО руководителя" value={editingEvent.responsible} onChange={(event) => setEditingEvent((previous) => previous ? { ...previous, responsible: event.target.value } : previous)} />
+                <input className="w-full px-3 py-2 border rounded" placeholder="Контакт руководителя" value={editingEvent.contact} onChange={(event) => setEditingEvent((previous) => previous ? { ...previous, contact: event.target.value } : previous)} />
                 <input className="w-full px-3 py-2 border rounded" placeholder="Модераторы (email)" value={editingEvent.moderatorsText} onChange={(event) => setEditingEvent((previous) => previous ? { ...previous, moderatorsText: event.target.value } : previous)} />
                 <div className="flex flex-col gap-2 sm:flex-row"><Button variant="primary" onClick={() => void handleSaveEvent()} disabled={savingEvent}>{savingEvent ? "Сохранение..." : "Сохранить"}</Button><Button variant="secondary" onClick={() => setEditingEvent(null)}>Отмена</Button></div>
               </div>

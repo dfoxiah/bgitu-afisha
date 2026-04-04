@@ -12,7 +12,7 @@
  */
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAppContext } from '@/contexts/AppContext'
 import Modal from './Modal'
 import Button from './Button'
@@ -47,10 +47,51 @@ const NotificationModal = ({ onClose }: NotificationModalProps) => {
     template: 'change' as NotificationTemplate,
     content: templates.change,
     recipients: 'all' as 'all' | 'confirmed' | 'pending',
+    groups: [] as string[],
+    departments: [] as string[],
   })
 
   const futureEvents = events.filter((event) => !event.isPast)
   const selectedEvent = futureEvents.find((event) => event.id === formData.eventId)
+
+  const participantPool = useMemo(() => {
+    if (!selectedEvent) return []
+    return [...(selectedEvent.participants || []), ...(selectedEvent.pendingParticipants || [])]
+  }, [selectedEvent])
+
+  const availableGroups = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          participantPool
+            .map((user) => user.group || '')
+            .map((value) => value.trim())
+            .filter(Boolean)
+        )
+      ).sort((left, right) => left.localeCompare(right, 'ru-RU')),
+    [participantPool]
+  )
+
+  const availableDepartments = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          participantPool
+            .map((user) => user.department || '')
+            .map((value) => value.trim())
+            .filter(Boolean)
+        )
+      ).sort((left, right) => left.localeCompare(right, 'ru-RU')),
+    [participantPool]
+  )
+
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...prev,
+      groups: prev.groups.filter((group) => availableGroups.includes(group)),
+      departments: prev.departments.filter((department) => availableDepartments.includes(department)),
+    }))
+  }, [availableGroups, availableDepartments])
 
   const previewContent = useMemo(() => {
     if (!formData.content) return ''
@@ -81,6 +122,16 @@ const NotificationModal = ({ onClose }: NotificationModalProps) => {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
+  const toggleFilterValue = (field: 'groups' | 'departments', value: string) => {
+    setFormData((prev) => {
+      const values = prev[field]
+      const nextValues = values.includes(value)
+        ? values.filter((item) => item !== value)
+        : [...values, value]
+      return { ...prev, [field]: nextValues }
+    })
+  }
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
 
@@ -94,7 +145,11 @@ const NotificationModal = ({ onClose }: NotificationModalProps) => {
         formData.eventId,
         formData.content,
         formData.recipients,
-        templateTypeMap[formData.template]
+        templateTypeMap[formData.template],
+        {
+          groups: formData.groups,
+          departments: formData.departments,
+        }
       )
 
       showToast('Уведомление отправлено', 'success')
@@ -139,6 +194,58 @@ const NotificationModal = ({ onClose }: NotificationModalProps) => {
             <option value="pending">Только ожидающие подтверждения</option>
           </select>
         </div>
+
+        {(availableGroups.length > 0 || availableDepartments.length > 0) && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="form-label">Фильтр по группам</label>
+              {availableGroups.length === 0 ? (
+                <p className="text-xs text-primary/60">У участников не заполнены группы.</p>
+              ) : (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {availableGroups.map((group) => (
+                    <button
+                      key={group}
+                      type="button"
+                      className={`liquid-chip px-3 py-1.5 text-xs ${
+                        formData.groups.includes(group)
+                          ? 'bg-gradient-to-r from-primary to-accent text-white'
+                          : ''
+                      }`}
+                      onClick={() => toggleFilterValue('groups', group)}
+                    >
+                      {group}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="form-label">Фильтр по факультетам/кафедрам</label>
+              {availableDepartments.length === 0 ? (
+                <p className="text-xs text-primary/60">У участников не заполнены факультеты/кафедры.</p>
+              ) : (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {availableDepartments.map((department) => (
+                    <button
+                      key={department}
+                      type="button"
+                      className={`liquid-chip px-3 py-1.5 text-xs ${
+                        formData.departments.includes(department)
+                          ? 'bg-gradient-to-r from-primary to-accent text-white'
+                          : ''
+                      }`}
+                      onClick={() => toggleFilterValue('departments', department)}
+                    >
+                      {department}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div>
           <label className="form-label">Текст уведомления *</label>

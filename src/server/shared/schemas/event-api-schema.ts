@@ -53,6 +53,7 @@ export const createEventBodySchema = z.object({
   moderators: stringArrayOptional,
   images: stringArrayOptional,
   responsible: optionalTrimmedString,
+  responsibleId: optionalTrimmedString,
   contact: optionalTrimmedString,
   isNews: booleanWithDefaultFalse.optional().default(false),
 })
@@ -71,10 +72,10 @@ export const updateEventBodySchema = z
     moderators: stringArrayOptional,
     images: stringArrayOptional,
     responsible: optionalTrimmedString,
+    responsibleId: optionalTrimmedString,
     contact: optionalTrimmedString,
   })
   .strict()
 
 export type CreateEventBodyInput = z.infer<typeof createEventBodySchema>
 export type UpdateEventBodyInput = z.infer<typeof updateEventBodySchema>
-

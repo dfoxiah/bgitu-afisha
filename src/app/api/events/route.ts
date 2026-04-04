@@ -14,6 +14,7 @@
 import { unstable_cache } from "next/cache"
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
+import { ParticipantStatus } from "@prisma/client"
 import type { Role } from "@prisma/client"
 import { authOptions } from "@/lib/auth"
 import { buildEventListWhere, findEventsForList } from "@/server/events/event-query-service"
@@ -30,6 +31,49 @@ const debugLog = (...args: unknown[]) => {
 }
 
 export const dynamic = "force-dynamic"
+
+const canViewerSeeParticipants = (role?: string | null) =>
+  role === "TEACHER" || role === "ADMIN"
+
+const applyParticipantVisibility = (
+  event: Record<string, unknown>,
+  viewer: { id?: string | null; role?: string | null } | null | undefined
+) => {
+  const confirmed = Array.isArray(event.participants)
+    ? (event.participants as Array<{ id?: string }>)
+    : []
+  const pending = Array.isArray(event.pendingParticipants)
+    ? (event.pendingParticipants as Array<{ id?: string }>)
+    : []
+  const viewerId = viewer?.id || null
+
+  const viewerParticipationStatus =
+    viewerId && confirmed.some((participant) => participant?.id === viewerId)
+      ? ParticipantStatus.CONFIRMED
+      : viewerId && pending.some((participant) => participant?.id === viewerId)
+        ? ParticipantStatus.PENDING
+        : null
+
+  if (canViewerSeeParticipants(viewer?.role)) {
+    return {
+      ...event,
+      canViewParticipants: true,
+      viewerParticipationStatus,
+      confirmedParticipantsCount: confirmed.length,
+      pendingParticipantsCount: pending.length,
+    }
+  }
+
+  return {
+    ...event,
+    participants: [],
+    pendingParticipants: [],
+    canViewParticipants: false,
+    viewerParticipationStatus,
+    confirmedParticipantsCount: confirmed.length,
+    pendingParticipantsCount: pending.length,
+  }
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -69,7 +113,9 @@ export async function GET(req: NextRequest) {
     })
 
     const events = await getCachedEvents()
-    const serialized = events.map((event) => serializeEventForApi(event))
+    const serialized = events
+      .map((event) => serializeEventForApi(event))
+      .map((event) => applyParticipantVisibility(event as unknown as Record<string, unknown>, session?.user))
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",

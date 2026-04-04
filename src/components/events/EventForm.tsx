@@ -39,6 +39,9 @@ interface EventFormState {
   maxParticipants: number
   participants: string[]
   moderators: string[]
+  responsible: string
+  responsibleId: string
+  contact: string
   images: EventImagePreview[]
 }
 
@@ -46,6 +49,12 @@ interface EventFormProps {
   event?: Event | null
   onClose: () => void
   onSubmit: (formData: CreateEventDto) => void
+}
+
+type ResponsibleOption = {
+  id: string
+  name: string
+  email: string
 }
 
 const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
@@ -62,11 +71,15 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
     maxParticipants: 0,
     participants: [] as string[],
     moderators: [] as string[],
+    responsible: '',
+    responsibleId: '',
+    contact: '',
     images: []
   })
   
   const [newParticipant, setNewParticipant] = useState('')
   const [newModerator, setNewModerator] = useState('')
+  const [responsibleOptions, setResponsibleOptions] = useState<ResponsibleOption[]>([])
   const pendingEmails = event?.pendingParticipants?.map(p => p.email) || []
   const canManageModerators =
     !event || session?.user?.role === 'ADMIN' || event.creatorId === session?.user?.id
@@ -85,6 +98,56 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
   }
 
   useEffect(() => {
+    let active = true
+
+    const loadResponsibleOptions = async () => {
+      if (session?.user?.role !== 'TEACHER' && session?.user?.role !== 'ADMIN') {
+        setResponsibleOptions([])
+        return
+      }
+
+      try {
+        const [teachersResponse, adminsResponse] = await Promise.all([
+          fetch('/api/users?role=TEACHER', { cache: 'no-store' }),
+          fetch('/api/users?role=ADMIN', { cache: 'no-store' }),
+        ])
+
+        if (!teachersResponse.ok || !adminsResponse.ok) {
+          throw new Error('Failed to load responsible users')
+        }
+
+        const [teachersRaw, adminsRaw] = await Promise.all([
+          teachersResponse.json(),
+          adminsResponse.json(),
+        ])
+
+        const rows = [...(teachersRaw as Array<Record<string, unknown>>), ...(adminsRaw as Array<Record<string, unknown>>)]
+        const unique = new Map<string, ResponsibleOption>()
+        rows.forEach((row) => {
+          const id = String(row.id || '').trim()
+          if (!id) return
+          const email = String(row.email || '').trim()
+          const name = String(row.name || '').trim() || email
+          unique.set(id, { id, name, email })
+        })
+
+        const options = Array.from(unique.values()).sort((left, right) =>
+          left.name.localeCompare(right.name, 'ru-RU')
+        )
+        if (active) setResponsibleOptions(options)
+      } catch {
+        if (active) setResponsibleOptions([])
+      }
+    }
+
+    void loadResponsibleOptions()
+
+    return () => {
+      active = false
+    }
+  }, [session?.user?.role])
+
+  useEffect(() => {
     if (event) {
       const eventDate = event.date instanceof Date ? event.date : new Date(event.date)
       setFormData({
@@ -98,6 +161,9 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
         maxParticipants: event.maxParticipants || 0,
         participants: event.participants?.map(p => p.email) || [],
         moderators: event.moderators?.map(m => m.email) || [],
+        responsible: event.responsible || '',
+        responsibleId: '',
+        contact: event.contact || '',
         images: (event.images || []).map((url, index) => ({
           url,
           name: `image-${index + 1}`,
@@ -117,10 +183,16 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
         maxParticipants: 0,
         participants: [],
         moderators: [],
+        responsible: session?.user?.name || '',
+        responsibleId:
+          session?.user?.role === 'TEACHER' || session?.user?.role === 'ADMIN'
+            ? session.user.id || ''
+            : '',
+        contact: session?.user?.email || '',
         images: []
       })
     }
-  }, [event])
+  }, [event, session?.user?.email, session?.user?.id, session?.user?.name, session?.user?.role])
 
   useEffect(() => {
     const today = formatLocalDate(new Date())
@@ -131,6 +203,22 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
       setFormData(prev => ({ ...prev, time: nowTime }))
     }
   }, [formData.date, formData.time])
+
+  useEffect(() => {
+    if (responsibleOptions.length === 0) return
+    if (formData.responsibleId) return
+    if (!formData.responsible.trim()) return
+
+    const normalized = formData.responsible.trim().toLowerCase()
+    const matched = responsibleOptions.find((option) => option.name.trim().toLowerCase() === normalized)
+    if (!matched) return
+
+    setFormData((prev) => ({
+      ...prev,
+      responsibleId: matched.id,
+      contact: prev.contact || matched.email,
+    }))
+  }, [formData.responsible, formData.responsibleId, responsibleOptions])
 
   const categoryOptions = [
     { value: 'CONCERT', label: 'Концерт' },
@@ -150,6 +238,16 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
       // Преобразуем русское название в enum значение
       const enumValue = CategoryReverseMap[value] || value
       setFormData(prev => ({ ...prev, [name]: enumValue }))
+    } else if (name === 'responsibleId') {
+      const selected = responsibleOptions.find((option) => option.id === value)
+      setFormData(prev => ({
+        ...prev,
+        responsibleId: value,
+        responsible: selected?.name || prev.responsible,
+        contact: selected?.email || prev.contact,
+      }))
+    } else if (name === 'responsible') {
+      setFormData(prev => ({ ...prev, responsible: value, responsibleId: '' }))
     } else if (name === 'maxParticipants') {
       setFormData(prev => ({ ...prev, [name]: parseInt(value) || 0 }))
     } else {
@@ -260,6 +358,11 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
       return
     }
 
+    if (!formData.responsible.trim()) {
+      showToast('Укажите руководителя мероприятия', 'error')
+      return
+    }
+
     const selectedDateTime = new Date(`${formData.date}T${formData.time || '00:00'}`)
     if (selectedDateTime.getTime() < Date.now() - 60000) {
       showToast('Нельзя выбрать прошедшую дату и время', 'error')
@@ -268,11 +371,20 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
     
     // Форматируем данные для отправки
     const submitData: CreateEventDto = {
-      ...formData,
-      date: formData.date,
+      title: formData.title.trim(),
       category: formData.category,
+      date: formData.date,
+      time: formData.time,
+      duration: formData.duration,
+      location: formData.location.trim(),
+      description: formData.description.trim(),
+      maxParticipants: formData.maxParticipants,
+      participants: formData.participants,
       moderators: formData.moderators,
-      images: formData.images.map(img => img.url)
+      images: formData.images.map(img => img.url),
+      responsible: formData.responsible.trim(),
+      responsibleId: formData.responsibleId || undefined,
+      contact: formData.contact.trim() || undefined,
     }
     
     onSubmit(submitData)
@@ -403,6 +515,53 @@ const EventForm = ({ event, onClose, onSubmit }: EventFormProps) => {
                 className="w-full px-4 py-3 liquid-input"
                 required
                 placeholder="Например, Главный корпус, ауд. 301"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="form-group">
+                <label className="form-label">Руководитель (выбор по ФИО)</label>
+                <select
+                  name="responsibleId"
+                  value={formData.responsibleId}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 liquid-input"
+                >
+                  <option value="">Выберите руководителя</option>
+                  {responsibleOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name} ({option.email})
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  Можно выбрать преподавателя/администратора и ФИО подставится автоматически.
+                </p>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">ФИО руководителя *</label>
+                <input
+                  type="text"
+                  name="responsible"
+                  value={formData.responsible}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 liquid-input"
+                  placeholder="Иванов Иван Иванович"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Контакт руководителя</label>
+              <input
+                type="text"
+                name="contact"
+                value={formData.contact}
+                onChange={handleChange}
+                className="w-full px-4 py-3 liquid-input"
+                placeholder="email или телефон"
               />
             </div>
 
