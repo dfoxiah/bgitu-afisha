@@ -14,12 +14,12 @@
 import { unstable_cache } from "next/cache"
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
-import { ParticipantStatus } from "@prisma/client"
 import type { Role } from "@prisma/client"
 import { authOptions } from "@/lib/auth"
 import { buildEventListWhere, findEventsForList } from "@/server/events/event-query-service"
 import { EVENTS_CACHE_TAG } from "@/server/events/event-cache"
 import { createEventFromApi, serializeEventForApi } from "@/server/events/event-mutation-service"
+import { applyParticipantVisibility } from "@/server/events/participant-visibility"
 import { createEventBodySchema } from "@/server/shared/schemas/event-api-schema"
 import { errorJson } from "@/server/shared/http-response"
 import { isServiceError } from "@/server/shared/service-error"
@@ -32,49 +32,6 @@ const debugLog = (...args: unknown[]) => {
 
 export const dynamic = "force-dynamic"
 
-const canViewerSeeParticipants = (role?: string | null) =>
-  role === "TEACHER" || role === "ADMIN"
-
-const applyParticipantVisibility = (
-  event: Record<string, unknown>,
-  viewer: { id?: string | null; role?: string | null } | null | undefined
-) => {
-  const confirmed = Array.isArray(event.participants)
-    ? (event.participants as Array<{ id?: string }>)
-    : []
-  const pending = Array.isArray(event.pendingParticipants)
-    ? (event.pendingParticipants as Array<{ id?: string }>)
-    : []
-  const viewerId = viewer?.id || null
-
-  const viewerParticipationStatus =
-    viewerId && confirmed.some((participant) => participant?.id === viewerId)
-      ? ParticipantStatus.CONFIRMED
-      : viewerId && pending.some((participant) => participant?.id === viewerId)
-        ? ParticipantStatus.PENDING
-        : null
-
-  if (canViewerSeeParticipants(viewer?.role)) {
-    return {
-      ...event,
-      canViewParticipants: true,
-      viewerParticipationStatus,
-      confirmedParticipantsCount: confirmed.length,
-      pendingParticipantsCount: pending.length,
-    }
-  }
-
-  return {
-    ...event,
-    participants: [],
-    pendingParticipants: [],
-    canViewParticipants: false,
-    viewerParticipationStatus,
-    confirmedParticipantsCount: confirmed.length,
-    pendingParticipantsCount: pending.length,
-  }
-}
-
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -84,7 +41,10 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search")
     const upcoming = searchParams.get("upcoming")
     const past = searchParams.get("past")
-    const limit = searchParams.get("limit") ? Number(searchParams.get("limit")) : undefined
+    const rawLimit = searchParams.get("limit")
+    const parsedLimit = rawLimit ? Number(rawLimit) : NaN
+    const limit =
+      Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(Math.trunc(parsedLimit), 200) : undefined
 
     const where = buildEventListWhere({
       category,
@@ -100,6 +60,7 @@ export async function GET(req: NextRequest) {
     const cacheKey = [
       "events",
       session?.user?.id || "anonymous",
+      session?.user?.role || "guest",
       category || "all",
       search || "",
       upcoming || "",
@@ -107,19 +68,27 @@ export async function GET(req: NextRequest) {
       String(limit || ""),
     ].join(":")
 
-    const getCachedEvents = unstable_cache(() => findEventsForList(where, limit), [cacheKey], {
-      revalidate: 5,
-      tags: [EVENTS_CACHE_TAG],
-    })
+    const getCachedEvents = unstable_cache(
+      () => findEventsForList(where, limit, { viewerId: session?.user?.id || null }),
+      [cacheKey],
+      {
+        revalidate: 5,
+        tags: [EVENTS_CACHE_TAG],
+      }
+    )
 
     const events = await getCachedEvents()
     const serialized = events
       .map((event) => serializeEventForApi(event))
-      .map((event) => applyParticipantVisibility(event as unknown as Record<string, unknown>, session?.user))
+      .map((event) =>
+        applyParticipantVisibility(event as unknown as Record<string, unknown>, session?.user)
+      )
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      "Cache-Control": "public, s-maxage=5, stale-while-revalidate=30",
+      "Cache-Control": session?.user?.id
+        ? "private, no-cache, no-store, must-revalidate"
+        : "public, s-maxage=5, stale-while-revalidate=30",
       "X-Total-Count": String(serialized.length),
     }
 

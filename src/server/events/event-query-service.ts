@@ -12,6 +12,7 @@
  */
 
 import { prisma } from "@/lib/prisma"
+import { ParticipantStatus } from "@prisma/client"
 import type { EventCategory, Prisma } from "@prisma/client"
 
 type EventListParams = {
@@ -21,6 +22,10 @@ type EventListParams = {
   past?: string | null
   limit?: number
   includePastForAuthorized: boolean
+}
+
+type EventListFetchOptions = {
+  viewerId?: string | null
 }
 
 export const buildEventListWhere = (params: EventListParams): Prisma.EventWhereInput => {
@@ -53,8 +58,19 @@ export const buildEventListWhere = (params: EventListParams): Prisma.EventWhereI
   return where
 }
 
-export const findEventsForList = (where: Prisma.EventWhereInput, limit?: number) =>
-  prisma.event.findMany({
+export const findEventsForList = (
+  where: Prisma.EventWhereInput,
+  limit?: number,
+  options?: EventListFetchOptions
+) => {
+  const viewerId = options?.viewerId || null
+  const participantWhere: Prisma.EventParticipantWhereInput = viewerId
+    ? {
+        OR: [{ status: ParticipantStatus.PENDING }, { userId: viewerId }],
+      }
+    : { status: ParticipantStatus.PENDING }
+
+  return prisma.event.findMany({
     where,
     include: {
       report: {
@@ -71,6 +87,7 @@ export const findEventsForList = (where: Prisma.EventWhereInput, limit?: number)
         },
       },
       eventParticipants: {
+        where: participantWhere,
         select: {
           status: true,
           user: {
@@ -82,7 +99,6 @@ export const findEventsForList = (where: Prisma.EventWhereInput, limit?: number)
               department: true,
               group: true,
               image: true,
-              createdAt: true,
             },
           },
         },
@@ -117,6 +133,7 @@ export const findEventsForList = (where: Prisma.EventWhereInput, limit?: number)
     orderBy: [{ date: "asc" }, { time: "asc" }, { createdAt: "asc" }],
     take: limit,
   })
+}
 
 export const findEventByIdForRead = (id: string) =>
   prisma.event.findUnique({

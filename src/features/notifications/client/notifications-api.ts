@@ -36,10 +36,10 @@ export const normalizeNotificationFromApi = (notification: unknown): Notificatio
   }
 }
 
-export const fetchNotificationsApi = async () => {
-  const response = await fetch("/api/notifications", {
+export const fetchNotificationsApi = async (limit = 120) => {
+  const safeLimit = Number.isFinite(limit) ? Math.min(Math.max(Math.trunc(limit), 1), 500) : 120
+  const response = await fetch(`/api/notifications?limit=${safeLimit}`, {
     method: "GET",
-    headers: { "Cache-Control": "no-cache" },
   })
 
   if (!response.ok) {
@@ -80,6 +80,12 @@ type SendEventNotificationPayload = {
   departments?: string[]
 }
 
+export type SendEventNotificationResult = {
+  created: number
+  broadcastId: string
+  eventId: string
+}
+
 export const sendEventNotificationApi = async (payload: SendEventNotificationPayload) => {
   const response = await fetch("/api/notifications", {
     method: "POST",
@@ -91,5 +97,22 @@ export const sendEventNotificationApi = async (payload: SendEventNotificationPay
     throw await toError(response, "Ошибка отправки уведомления")
   }
 
-  return response.json() as Promise<{ created: number }>
+  return response.json() as Promise<SendEventNotificationResult>
+}
+
+export const deleteNotificationBroadcastApi = async (broadcastId: string) => {
+  const response = await fetch(`/api/notifications/broadcast/${broadcastId}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok) {
+    throw await toError(response, "Не удалось отменить рассылку уведомлений")
+  }
+
+  return response.json() as Promise<{
+    success: true
+    deleted: number
+    broadcastId: string
+    eventId: string
+  }>
 }

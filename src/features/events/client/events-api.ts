@@ -15,6 +15,9 @@ import type { CreateEventDto, UpdateEventDto, CompleteEventDto } from "@/types/d
 import type { Event, User } from "@/types"
 
 type ParticipantAction = "confirm" | "reject"
+type FetchEventsOptions = {
+  signal?: AbortSignal
+}
 
 const toError = async (response: Response, fallback: string) => {
   const contentType = response.headers.get("content-type") || ""
@@ -61,17 +64,17 @@ export const normalizeEventFromApi = (event: unknown): Event => {
   }
 }
 
-export const fetchEventsApi = async (authenticated: boolean) => {
+export const fetchEventsApi = async (
+  authenticated: boolean,
+  options: FetchEventsOptions = {}
+) => {
   const query = new URLSearchParams()
   if (!authenticated) query.set("upcoming", "true")
   query.set("limit", "100")
 
   const response = await fetch(`/api/events?${query.toString()}`, {
     credentials: "include",
-    headers: {
-      "Cache-Control": "no-cache",
-      Pragma: "no-cache",
-    },
+    signal: options.signal,
   })
 
   if (!response.ok) {
@@ -80,6 +83,19 @@ export const fetchEventsApi = async (authenticated: boolean) => {
 
   const payload = (await response.json()) as unknown[]
   return payload.map(normalizeEventFromApi)
+}
+
+export const fetchEventByIdApi = async (eventId: string) => {
+  const response = await fetch(`/api/events/${eventId}`, {
+    credentials: "include",
+  })
+
+  if (!response.ok) {
+    throw await toError(response, "Ошибка загрузки мероприятия")
+  }
+
+  const payload = await response.json()
+  return normalizeEventFromApi(payload)
 }
 
 export const createEventApi = async (payload: CreateEventDto) => {

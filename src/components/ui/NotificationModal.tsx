@@ -28,7 +28,7 @@ const isNotificationTemplate = (value: string): value is NotificationTemplate =>
   value === 'change' || value === 'custom' || value === 'reminder'
 
 const NotificationModal = ({ onClose }: NotificationModalProps) => {
-  const { events, sendEventNotification } = useAppContext()
+  const { events, sendEventNotification, cancelNotificationBroadcast } = useAppContext()
 
   const templates: Record<NotificationTemplate, string> = {
     change: 'Изменение: мероприятие "[Название]" перенесено на [Дата] [Время].',
@@ -50,6 +50,11 @@ const NotificationModal = ({ onClose }: NotificationModalProps) => {
     groups: [] as string[],
     departments: [] as string[],
   })
+  const [lastBroadcast, setLastBroadcast] = useState<{
+    broadcastId: string
+    created: number
+  } | null>(null)
+  const [isCancellingBroadcast, setIsCancellingBroadcast] = useState(false)
 
   const futureEvents = events.filter((event) => !event.isPast)
   const selectedEvent = futureEvents.find((event) => event.id === formData.eventId)
@@ -141,7 +146,7 @@ const NotificationModal = ({ onClose }: NotificationModalProps) => {
     }
 
     try {
-      await sendEventNotification(
+      const result = await sendEventNotification(
         formData.eventId,
         formData.content,
         formData.recipients,
@@ -152,11 +157,30 @@ const NotificationModal = ({ onClose }: NotificationModalProps) => {
         }
       )
 
-      showToast('Уведомление отправлено', 'success')
-      onClose()
+      setLastBroadcast({
+        broadcastId: result.broadcastId,
+        created: result.created,
+      })
+      showToast(`Уведомление отправлено (${result.created})`, 'success')
     } catch (error) {
       console.error('Notification send error:', error)
       showToast('Не удалось отправить уведомление', 'error')
+    }
+  }
+
+  const handleCancelLastBroadcast = async () => {
+    if (!lastBroadcast || isCancellingBroadcast) return
+
+    try {
+      setIsCancellingBroadcast(true)
+      const result = await cancelNotificationBroadcast(lastBroadcast.broadcastId)
+      showToast(`Рассылка отменена. Удалено уведомлений: ${result.deleted}`, 'success')
+      setLastBroadcast(null)
+    } catch (error) {
+      console.error('Cancel broadcast error:', error)
+      showToast('Не удалось отменить рассылку', 'error')
+    } finally {
+      setIsCancellingBroadcast(false)
     }
   }
 
@@ -264,6 +288,24 @@ const NotificationModal = ({ onClose }: NotificationModalProps) => {
             <p className="text-xs font-semibold uppercase tracking-[0.1em] text-primary/55">Превью</p>
             <p className="mt-2 whitespace-pre-wrap text-sm text-primary/76">{previewContent}</p>
             {!selectedEvent && <p className="mt-2 text-xs text-amber-700">Выберите мероприятие, чтобы подставить дату и время.</p>}
+          </div>
+        )}
+
+        {lastBroadcast && (
+          <div className="liquid-card border border-amber-200 bg-amber-50/80 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.1em] text-amber-700">Последняя рассылка</p>
+            <p className="mt-2 text-sm text-amber-900">
+              Отправлено уведомлений: {lastBroadcast.created}. Если отправка была ошибочной, отмените её.
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-3 w-full sm:w-auto"
+              onClick={handleCancelLastBroadcast}
+              loading={isCancellingBroadcast}
+            >
+              Отменить последнюю рассылку
+            </Button>
           </div>
         )}
 

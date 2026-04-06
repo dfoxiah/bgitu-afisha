@@ -1,4 +1,4 @@
-/**
+﻿/**
  * File responsibility:
  * Admin metrics and analytics service for dashboard widgets and XLSX exports.
  *
@@ -56,6 +56,19 @@ type PeriodSummaryMetric = {
   confirmed: number
   pending: number
   attendanceRatePercent: number
+  activeParticipants: number
+  uniqueStudents: number
+  activeStudents: number
+  activeStudentsRatePercent: number
+  averageFillRatePercent: number
+  averageConfirmationRatePercent: number
+  reportedActiveEntries: number
+  matchedActiveEntries: number
+  unmatchedActiveEntries: number
+  activeMatchingQualityPercent: number
+  averageRegistrationsPerEvent: number
+  averageConfirmedPerEvent: number
+  averageActiveStudentsPerEvent: number
 }
 
 type EventAttendanceMetric = {
@@ -64,9 +77,19 @@ type EventAttendanceMetric = {
   date: string
   confirmed: number
   pending: number
+  registrations: number
   total: number
   maxParticipants: number
   fillRatePercent: number
+  confirmedRatePercent: number
+  confirmedStudents: number
+  activeParticipants: number
+  activeStudents: number
+  activeStudentsRatePercent: number
+  reportedActiveCount: number
+  matchedActiveEntries: number
+  activeMatchRatePercent: number
+  activeUnmatched: number
 }
 
 type StudentAttendanceMetric = {
@@ -77,30 +100,62 @@ type StudentAttendanceMetric = {
   department: string
   confirmed: number
   pending: number
+  active: number
   total: number
+  confirmationRatePercent: number
+  activityRatePercent: number
 }
 
 type GroupAttendanceMetric = {
   group: string
   confirmed: number
   pending: number
+  active: number
   total: number
   uniqueStudents: number
+  confirmationRatePercent: number
+  activityRatePercent: number
 }
 
 type DepartmentAttendanceMetric = {
   department: string
   confirmed: number
   pending: number
+  active: number
   total: number
   uniqueStudents: number
+  confirmationRatePercent: number
+  activityRatePercent: number
 }
 
 type RoleAttendanceMetric = {
   role: Role
   confirmed: number
   pending: number
+  active: number
   total: number
+  confirmationRatePercent: number
+  activityRatePercent: number
+}
+
+type AttendanceSummaryMetric = {
+  registrations: number
+  confirmed: number
+  pending: number
+  attendanceRatePercent: number
+  activeParticipants: number
+  uniqueStudents: number
+  activeStudents: number
+  activeStudentsRatePercent: number
+  averageFillRatePercent: number
+  averageConfirmationRatePercent: number
+  reportedActiveEntries: number
+  matchedActiveEntries: number
+  unmatchedActiveEntries: number
+  activeMatchingQualityPercent: number
+  averageRegistrationsPerEvent: number
+  averageConfirmedPerEvent: number
+  averageActiveStudentsPerEvent: number
 }
 
 export type AdminDashboardMetricsResult = {
@@ -133,6 +188,7 @@ export type AdminDashboardMetricsResult = {
   }
   periodSummary: PeriodSummaryMetric
   attendanceStats: {
+    summary: AttendanceSummaryMetric
     byEvent: EventAttendanceMetric[]
     byStudent: StudentAttendanceMetric[]
     byGroup: GroupAttendanceMetric[]
@@ -199,6 +255,18 @@ const parseTimeToMinutes = (value: string | null | undefined) => {
   return hh * 60 + mm
 }
 
+const normalizeActiveParticipantKey = (value: string) =>
+  value
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+
+const averagePercent = (values: number[]) => {
+  if (values.length === 0) return 0
+  const sum = values.reduce((acc, value) => acc + value, 0)
+  return Math.round((sum / values.length) * 10) / 10
+}
+
 const toEventDateTime = (date: Date, time?: string | null) => {
   const result = new Date(date)
   const minutes = parseTimeToMinutes(time)
@@ -235,6 +303,11 @@ const buildAttendanceStats = async (params: { from: Date; to: Date }) => {
       date: true,
       time: true,
       maxParticipants: true,
+      report: {
+        select: {
+          activeParticipants: true,
+        },
+      },
       eventParticipants: {
         select: {
           status: true,
@@ -251,7 +324,7 @@ const buildAttendanceStats = async (params: { from: Date; to: Date }) => {
         },
       },
     },
-    orderBy: [{ date: "asc" }, { time: "asc" }],
+    orderBy: [{ date: 'asc' }, { time: 'asc' }],
   })
 
   const byStudentMap = new Map<
@@ -264,80 +337,162 @@ const buildAttendanceStats = async (params: { from: Date; to: Date }) => {
       department: string
       confirmed: number
       pending: number
+      active: number
     }
   >()
 
   const byGroupMap = new Map<
     string,
-    { group: string; confirmed: number; pending: number; studentIds: Set<string> }
+    {
+      group: string
+      confirmed: number
+      pending: number
+      active: number
+      studentIds: Set<string>
+    }
   >()
   const byDepartmentMap = new Map<
     string,
-    { department: string; confirmed: number; pending: number; studentIds: Set<string> }
+    {
+      department: string
+      confirmed: number
+      pending: number
+      active: number
+      studentIds: Set<string>
+    }
   >()
-  const byRoleMap = new Map<Role, { role: Role; confirmed: number; pending: number }>()
+  const byRoleMap = new Map<Role, { role: Role; confirmed: number; pending: number; active: number }>()
+  const uniqueStudentIds = new Set<string>()
+  const activeStudentIds = new Set<string>()
+  let reportedActiveEntriesTotal = 0
+  let matchedActiveEntriesTotal = 0
+  let unmatchedActiveEntriesTotal = 0
 
   const byEvent: EventAttendanceMetric[] = events
     .map((event) => {
-      const confirmed = event.eventParticipants.filter(
+      const confirmedRows = event.eventParticipants.filter(
         (row) => row.status === ParticipantStatus.CONFIRMED
-      ).length
-      const pending = event.eventParticipants.filter(
+      )
+      const pendingRows = event.eventParticipants.filter(
         (row) => row.status === ParticipantStatus.PENDING
-      ).length
-      const total = confirmed + pending
+      )
+      const confirmed = confirmedRows.length
+      const pending = pendingRows.length
+      const registrations = confirmed + pending
+      const total = registrations
+      const confirmedStudents = confirmedRows.filter((row) => row.user.role === Role.STUDENT).length
       const maxParticipants = event.maxParticipants || 0
 
+      const participantRows = event.eventParticipants.map((row) => {
+        const keys = new Set<string>([normalizeActiveParticipantKey(row.user.email)])
+        if (row.user.name) {
+          keys.add(normalizeActiveParticipantKey(row.user.name))
+        }
+
+        return {
+          ...row,
+          keys,
+        }
+      })
+
+      const activeParticipantIds = new Set<string>()
+      const activeStudentIdsInEvent = new Set<string>()
+      let reportedActiveCount = 0
+      let matchedActiveEntries = 0
+      let activeUnmatched = 0
+
+      for (const rawName of event.report?.activeParticipants || []) {
+        const key = normalizeActiveParticipantKey(rawName)
+        if (!key) continue
+        reportedActiveCount += 1
+
+        const matched = participantRows.find((row) => row.keys.has(key))
+        if (!matched) {
+          activeUnmatched += 1
+          continue
+        }
+
+        matchedActiveEntries += 1
+        activeParticipantIds.add(matched.user.id)
+        if (matched.user.role === Role.STUDENT) {
+          activeStudentIdsInEvent.add(matched.user.id)
+        }
+      }
+
       event.eventParticipants.forEach((row) => {
+        const isActive = activeParticipantIds.has(row.user.id)
         const roleKey = row.user.role
         const roleBucket = byRoleMap.get(roleKey) || {
           role: roleKey,
           confirmed: 0,
           pending: 0,
+          active: 0,
         }
         if (row.status === ParticipantStatus.CONFIRMED) roleBucket.confirmed += 1
         if (row.status === ParticipantStatus.PENDING) roleBucket.pending += 1
+        if (isActive) roleBucket.active += 1
         byRoleMap.set(roleKey, roleBucket)
 
         if (row.user.role !== Role.STUDENT) return
+
+        uniqueStudentIds.add(row.user.id)
+        if (isActive) activeStudentIds.add(row.user.id)
 
         const student = byStudentMap.get(row.user.id) || {
           userId: row.user.id,
           name: row.user.name || row.user.email,
           email: row.user.email,
-          group: row.user.group || "Не указана",
-          department: row.user.department || "Не указан",
+          group: row.user.group || 'Не указана',
+          department: row.user.department || 'Не указан',
           confirmed: 0,
           pending: 0,
+          active: 0,
         }
         if (row.status === ParticipantStatus.CONFIRMED) student.confirmed += 1
         if (row.status === ParticipantStatus.PENDING) student.pending += 1
+        if (isActive) student.active += 1
         byStudentMap.set(row.user.id, student)
 
-        const groupKey = row.user.group || "Не указана"
+        const groupKey = row.user.group || 'Не указана'
         const groupBucket = byGroupMap.get(groupKey) || {
           group: groupKey,
           confirmed: 0,
           pending: 0,
+          active: 0,
           studentIds: new Set<string>(),
         }
         if (row.status === ParticipantStatus.CONFIRMED) groupBucket.confirmed += 1
         if (row.status === ParticipantStatus.PENDING) groupBucket.pending += 1
+        if (isActive) groupBucket.active += 1
         groupBucket.studentIds.add(row.user.id)
         byGroupMap.set(groupKey, groupBucket)
 
-        const departmentKey = row.user.department || "Не указан"
+        const departmentKey = row.user.department || 'Не указан'
         const departmentBucket = byDepartmentMap.get(departmentKey) || {
           department: departmentKey,
           confirmed: 0,
           pending: 0,
+          active: 0,
           studentIds: new Set<string>(),
         }
         if (row.status === ParticipantStatus.CONFIRMED) departmentBucket.confirmed += 1
         if (row.status === ParticipantStatus.PENDING) departmentBucket.pending += 1
+        if (isActive) departmentBucket.active += 1
         departmentBucket.studentIds.add(row.user.id)
         byDepartmentMap.set(departmentKey, departmentBucket)
       })
+
+      const fillRatePercent =
+        maxParticipants > 0 ? safePercent(confirmed, maxParticipants) : confirmed > 0 ? 100 : 0
+      const confirmedRatePercent = safePercent(confirmed, registrations)
+      const activeParticipants = activeParticipantIds.size
+      const activeStudents = activeStudentIdsInEvent.size
+      const activeStudentsRatePercent = safePercent(activeStudents, confirmedStudents)
+      const activeMatchRatePercent = safePercent(matchedActiveEntries, reportedActiveCount)
+
+      reportedActiveEntriesTotal += reportedActiveCount
+      matchedActiveEntriesTotal += matchedActiveEntries
+      unmatchedActiveEntriesTotal += activeUnmatched
 
       return {
         eventId: event.id,
@@ -345,14 +500,24 @@ const buildAttendanceStats = async (params: { from: Date; to: Date }) => {
         date: toEventDateTime(event.date, event.time).toISOString(),
         confirmed,
         pending,
+        registrations,
         total,
         maxParticipants,
-        fillRatePercent:
-          maxParticipants > 0 ? safePercent(confirmed, maxParticipants) : confirmed > 0 ? 100 : 0,
+        fillRatePercent,
+        confirmedRatePercent,
+        confirmedStudents,
+        activeParticipants,
+        activeStudents,
+        activeStudentsRatePercent,
+        reportedActiveCount,
+        matchedActiveEntries,
+        activeMatchRatePercent,
+        activeUnmatched,
       } satisfies EventAttendanceMetric
     })
     .sort((left, right) => {
       if (right.confirmed !== left.confirmed) return right.confirmed - left.confirmed
+      if (right.activeStudents !== left.activeStudents) return right.activeStudents - left.activeStudents
       if (right.total !== left.total) return right.total - left.total
       return new Date(left.date).getTime() - new Date(right.date).getTime()
     })
@@ -362,9 +527,12 @@ const buildAttendanceStats = async (params: { from: Date; to: Date }) => {
     .map((student) => ({
       ...student,
       total: student.confirmed + student.pending,
+      confirmationRatePercent: safePercent(student.confirmed, student.confirmed + student.pending),
+      activityRatePercent: safePercent(student.active, student.confirmed),
     }))
     .sort((left, right) => {
       if (right.confirmed !== left.confirmed) return right.confirmed - left.confirmed
+      if (right.active !== left.active) return right.active - left.active
       return right.total - left.total
     })
     .slice(0, 30)
@@ -374,11 +542,15 @@ const buildAttendanceStats = async (params: { from: Date; to: Date }) => {
       group: group.group,
       confirmed: group.confirmed,
       pending: group.pending,
+      active: group.active,
       total: group.confirmed + group.pending,
       uniqueStudents: group.studentIds.size,
+      confirmationRatePercent: safePercent(group.confirmed, group.confirmed + group.pending),
+      activityRatePercent: safePercent(group.active, group.confirmed),
     }))
     .sort((left, right) => {
       if (right.confirmed !== left.confirmed) return right.confirmed - left.confirmed
+      if (right.active !== left.active) return right.active - left.active
       return right.total - left.total
     })
     .slice(0, 20)
@@ -388,11 +560,18 @@ const buildAttendanceStats = async (params: { from: Date; to: Date }) => {
       department: department.department,
       confirmed: department.confirmed,
       pending: department.pending,
+      active: department.active,
       total: department.confirmed + department.pending,
       uniqueStudents: department.studentIds.size,
+      confirmationRatePercent: safePercent(
+        department.confirmed,
+        department.confirmed + department.pending
+      ),
+      activityRatePercent: safePercent(department.active, department.confirmed),
     }))
     .sort((left, right) => {
       if (right.confirmed !== left.confirmed) return right.confirmed - left.confirmed
+      if (right.active !== left.active) return right.active - left.active
       return right.total - left.total
     })
     .slice(0, 20)
@@ -402,13 +581,20 @@ const buildAttendanceStats = async (params: { from: Date; to: Date }) => {
       role: roleItem.role,
       confirmed: roleItem.confirmed,
       pending: roleItem.pending,
+      active: roleItem.active,
       total: roleItem.confirmed + roleItem.pending,
+      confirmationRatePercent: safePercent(roleItem.confirmed, roleItem.confirmed + roleItem.pending),
+      activityRatePercent: safePercent(roleItem.active, roleItem.confirmed),
     }))
     .sort((left, right) => right.total - left.total)
 
   const registrations = byRole.reduce((sum, row) => sum + row.total, 0)
   const confirmed = byRole.reduce((sum, row) => sum + row.confirmed, 0)
   const pending = byRole.reduce((sum, row) => sum + row.pending, 0)
+  const activeParticipants = byRole.reduce((sum, row) => sum + row.active, 0)
+  const uniqueStudents = uniqueStudentIds.size
+  const activeStudents = activeStudentIds.size
+  const eventsCount = byEvent.length
 
   return {
     byEvent,
@@ -421,10 +607,27 @@ const buildAttendanceStats = async (params: { from: Date; to: Date }) => {
       confirmed,
       pending,
       attendanceRatePercent: safePercent(confirmed, registrations),
+      activeParticipants,
+      uniqueStudents,
+      activeStudents,
+      activeStudentsRatePercent: safePercent(activeStudents, uniqueStudents),
+      averageFillRatePercent: averagePercent(byEvent.map((row) => row.fillRatePercent)),
+      averageConfirmationRatePercent: averagePercent(
+        byEvent.map((row) => row.confirmedRatePercent)
+      ),
+      reportedActiveEntries: reportedActiveEntriesTotal,
+      matchedActiveEntries: matchedActiveEntriesTotal,
+      unmatchedActiveEntries: unmatchedActiveEntriesTotal,
+      activeMatchingQualityPercent: safePercent(
+        matchedActiveEntriesTotal,
+        reportedActiveEntriesTotal
+      ),
+      averageRegistrationsPerEvent: eventsCount > 0 ? Math.round((registrations / eventsCount) * 10) / 10 : 0,
+      averageConfirmedPerEvent: eventsCount > 0 ? Math.round((confirmed / eventsCount) * 10) / 10 : 0,
+      averageActiveStudentsPerEvent: eventsCount > 0 ? Math.round((activeStudents / eventsCount) * 10) / 10 : 0,
     },
   }
 }
-
 const buildTopEventMetric = async (start: Date, end: Date) => {
   const grouped = await prisma.eventParticipant.groupBy({
     by: ["eventId"],
@@ -795,8 +998,22 @@ export const getAdminDashboardMetrics = async (
       confirmed: attendanceStats.totals.confirmed,
       pending: attendanceStats.totals.pending,
       attendanceRatePercent: attendanceStats.totals.attendanceRatePercent,
+      activeParticipants: attendanceStats.totals.activeParticipants,
+      uniqueStudents: attendanceStats.totals.uniqueStudents,
+      activeStudents: attendanceStats.totals.activeStudents,
+      activeStudentsRatePercent: attendanceStats.totals.activeStudentsRatePercent,
+      averageFillRatePercent: attendanceStats.totals.averageFillRatePercent,
+      averageConfirmationRatePercent: attendanceStats.totals.averageConfirmationRatePercent,
+      reportedActiveEntries: attendanceStats.totals.reportedActiveEntries,
+      matchedActiveEntries: attendanceStats.totals.matchedActiveEntries,
+      unmatchedActiveEntries: attendanceStats.totals.unmatchedActiveEntries,
+      activeMatchingQualityPercent: attendanceStats.totals.activeMatchingQualityPercent,
+      averageRegistrationsPerEvent: attendanceStats.totals.averageRegistrationsPerEvent,
+      averageConfirmedPerEvent: attendanceStats.totals.averageConfirmedPerEvent,
+      averageActiveStudentsPerEvent: attendanceStats.totals.averageActiveStudentsPerEvent,
     },
     attendanceStats: {
+      summary: attendanceStats.totals,
       byEvent: attendanceStats.byEvent,
       byStudent: attendanceStats.byStudent,
       byGroup: attendanceStats.byGroup,
@@ -879,12 +1096,22 @@ export const buildEventAttendanceExcel = async (
     throw new ServiceError(404, "NOT_FOUND", "Мероприятие не найдено")
   }
 
-  const confirmed = event.eventParticipants.filter(
+  const confirmedRows = event.eventParticipants.filter(
     (participant) => participant.status === ParticipantStatus.CONFIRMED
-  ).length
-  const pending = event.eventParticipants.filter(
+  )
+  const pendingRows = event.eventParticipants.filter(
     (participant) => participant.status === ParticipantStatus.PENDING
+  )
+  const confirmed = confirmedRows.length
+  const pending = pendingRows.length
+  const registrations = confirmed + pending
+  const confirmedStudents = confirmedRows.filter((participant) => participant.user.role === Role.STUDENT).length
+  const allStudents = event.eventParticipants.filter(
+    (participant) => participant.user.role === Role.STUDENT
   ).length
+  const fillRatePercent =
+    event.maxParticipants > 0 ? safePercent(confirmed, event.maxParticipants) : confirmed > 0 ? 100 : 0
+  const confirmationRatePercent = safePercent(confirmed, registrations)
 
   const overviewRows = [
     { Metric: "Event ID", Value: event.id },
@@ -901,14 +1128,60 @@ export const buildEventAttendanceExcel = async (
     { Metric: "Current Participants", Value: event.currentParticipants },
     { Metric: "Confirmed Participants", Value: confirmed },
     { Metric: "Pending Participants", Value: pending },
+    { Metric: "Registrations", Value: registrations },
+    { Metric: "Confirmation Rate, %", Value: confirmationRatePercent },
+    { Metric: "Fill Rate, %", Value: fillRatePercent },
     { Metric: "Is Past", Value: event.isPast ? "Yes" : "No" },
     { Metric: "Is News", Value: event.isNews ? "Yes" : "No" },
   ]
 
-  const normalizeActiveParticipantKey = (value: string) => value.trim().toLowerCase()
-  const activeParticipantKeys = new Set(
-    (event.report?.activeParticipants || []).map(normalizeActiveParticipantKey)
-  )
+  const participantByKey = new Map<
+    string,
+    (typeof event.eventParticipants)[number]
+  >()
+  event.eventParticipants.forEach((participant) => {
+    participantByKey.set(normalizeActiveParticipantKey(participant.user.email), participant)
+    if (participant.user.name) {
+      participantByKey.set(normalizeActiveParticipantKey(participant.user.name), participant)
+    }
+  })
+
+  const activeParticipantsSet = new Set<string>()
+  const activeStudentsSet = new Set<string>()
+  const activeParticipantRows = (event.report?.activeParticipants || []).map((name, index) => {
+    const key = normalizeActiveParticipantKey(name)
+    const matched = key ? participantByKey.get(key) : null
+
+    if (matched) {
+      activeParticipantsSet.add(matched.user.id)
+      if (matched.user.role === Role.STUDENT) {
+        activeStudentsSet.add(matched.user.id)
+      }
+    }
+
+    return {
+      No: index + 1,
+      NameFromReport: name,
+      Matched: matched ? "Yes" : "No",
+      MatchedName: matched?.user.name || "",
+      MatchedEmail: matched?.user.email || "",
+      MatchedRole: matched?.user.role || "",
+      MatchedGroup: matched?.user.group || "",
+      MatchedDepartment: matched?.user.department || "",
+    }
+  })
+
+  const activeParticipants = activeParticipantsSet.size
+  const activeStudents = activeStudentsSet.size
+  const activeStudentsRatePercent = safePercent(activeStudents, confirmedStudents)
+  const activeUnmatched = activeParticipantRows.filter((row) => row.Matched === "No").length
+  const reportedActiveCount = activeParticipantRows.length
+  const matchedActiveEntries = activeParticipantRows.filter((row) => row.Matched === "Yes").length
+  const activeMatchRatePercent = safePercent(matchedActiveEntries, reportedActiveCount)
+  const activePendingParticipants = event.eventParticipants.filter(
+    (participant) =>
+      participant.status === ParticipantStatus.PENDING && activeParticipantsSet.has(participant.user.id)
+  ).length
 
   const attendeesRows = event.eventParticipants.map((participant) => ({
     Status: participant.status,
@@ -919,19 +1192,226 @@ export const buildEventAttendanceExcel = async (
     Group: participant.user.group || "",
     RegisteredAt: formatDateTime(participant.createdAt),
     UpdatedAt: formatDateTime(participant.updatedAt),
-    ActiveInReport:
-      activeParticipantKeys.has(
-        normalizeActiveParticipantKey(participant.user.name || participant.user.email)
-      )
-        ? "Yes"
-        : "No",
+    ActiveInReport: activeParticipantsSet.has(participant.user.id) ? "Yes" : "No",
   }))
+
+  const activeStudentsRows = event.eventParticipants
+    .filter((participant) => participant.user.role === Role.STUDENT && activeStudentsSet.has(participant.user.id))
+    .map((participant, index) => ({
+      No: index + 1,
+      Name: participant.user.name || "",
+      Email: participant.user.email,
+      Group: participant.user.group || "",
+      Department: participant.user.department || "",
+      Status: participant.status,
+    }))
+
+  const studentsMatrixRows = event.eventParticipants
+    .filter((participant) => participant.user.role === Role.STUDENT)
+    .map((participant, index) => ({
+      No: index + 1,
+      Name: participant.user.name || "",
+      Email: participant.user.email,
+      Group: participant.user.group || "",
+      Department: participant.user.department || "",
+      Status: participant.status,
+      Confirmed: participant.status === ParticipantStatus.CONFIRMED ? "Yes" : "No",
+      Pending: participant.status === ParticipantStatus.PENDING ? "Yes" : "No",
+      ActiveInReport: activeParticipantsSet.has(participant.user.id) ? "Yes" : "No",
+    }))
 
   const moderatorsRows = event.moderators.map((row) => ({
     Name: row.user.name || "",
     Email: row.user.email,
     Role: row.user.role,
   }))
+
+  const groupMap = new Map<
+    string,
+    { group: string; confirmed: number; pending: number; active: number; studentIds: Set<string> }
+  >()
+  const departmentMap = new Map<
+    string,
+    {
+      department: string
+      confirmed: number
+      pending: number
+      active: number
+      studentIds: Set<string>
+    }
+  >()
+  const roleMap = new Map<Role, { role: Role; confirmed: number; pending: number; active: number }>()
+  const timelineMap = new Map<string, { date: string; registrations: number; confirmed: number; pending: number }>()
+
+  event.eventParticipants.forEach((participant) => {
+    const isActive = activeParticipantsSet.has(participant.user.id)
+    const roleKey = participant.user.role
+    const roleBucket = roleMap.get(roleKey) || { role: roleKey, confirmed: 0, pending: 0, active: 0 }
+    if (participant.status === ParticipantStatus.CONFIRMED) roleBucket.confirmed += 1
+    if (participant.status === ParticipantStatus.PENDING) roleBucket.pending += 1
+    if (isActive) roleBucket.active += 1
+    roleMap.set(roleKey, roleBucket)
+
+    const timelineKey = toDateKey(participant.createdAt)
+    const timelineBucket = timelineMap.get(timelineKey) || {
+      date: timelineKey,
+      registrations: 0,
+      confirmed: 0,
+      pending: 0,
+    }
+    timelineBucket.registrations += 1
+    if (participant.status === ParticipantStatus.CONFIRMED) timelineBucket.confirmed += 1
+    if (participant.status === ParticipantStatus.PENDING) timelineBucket.pending += 1
+    timelineMap.set(timelineKey, timelineBucket)
+
+    if (participant.user.role !== Role.STUDENT) return
+
+    const groupKey = participant.user.group || "Не указана"
+    const groupBucket = groupMap.get(groupKey) || {
+      group: groupKey,
+      confirmed: 0,
+      pending: 0,
+      active: 0,
+      studentIds: new Set<string>(),
+    }
+    if (participant.status === ParticipantStatus.CONFIRMED) groupBucket.confirmed += 1
+    if (participant.status === ParticipantStatus.PENDING) groupBucket.pending += 1
+    if (isActive) groupBucket.active += 1
+    groupBucket.studentIds.add(participant.user.id)
+    groupMap.set(groupKey, groupBucket)
+
+    const departmentKey = participant.user.department || "Не указан"
+    const departmentBucket = departmentMap.get(departmentKey) || {
+      department: departmentKey,
+      confirmed: 0,
+      pending: 0,
+      active: 0,
+      studentIds: new Set<string>(),
+    }
+    if (participant.status === ParticipantStatus.CONFIRMED) departmentBucket.confirmed += 1
+    if (participant.status === ParticipantStatus.PENDING) departmentBucket.pending += 1
+    if (isActive) departmentBucket.active += 1
+    departmentBucket.studentIds.add(participant.user.id)
+    departmentMap.set(departmentKey, departmentBucket)
+  })
+
+  const groupRows = Array.from(groupMap.values())
+    .map((row) => ({
+      Group: row.group,
+      Confirmed: row.confirmed,
+      Pending: row.pending,
+      Registrations: row.confirmed + row.pending,
+      ActiveStudents: row.active,
+      UniqueStudents: row.studentIds.size,
+      ConfirmationRatePercent: safePercent(row.confirmed, row.confirmed + row.pending),
+      ActivityRatePercent: safePercent(row.active, row.confirmed),
+    }))
+    .sort((left, right) => {
+      if (right.Confirmed !== left.Confirmed) return right.Confirmed - left.Confirmed
+      return right.Registrations - left.Registrations
+    })
+
+  const departmentRows = Array.from(departmentMap.values())
+    .map((row) => ({
+      Department: row.department,
+      Confirmed: row.confirmed,
+      Pending: row.pending,
+      Registrations: row.confirmed + row.pending,
+      ActiveStudents: row.active,
+      UniqueStudents: row.studentIds.size,
+      ConfirmationRatePercent: safePercent(row.confirmed, row.confirmed + row.pending),
+      ActivityRatePercent: safePercent(row.active, row.confirmed),
+    }))
+    .sort((left, right) => {
+      if (right.Confirmed !== left.Confirmed) return right.Confirmed - left.Confirmed
+      return right.Registrations - left.Registrations
+    })
+
+  const roleRows = Array.from(roleMap.values())
+    .map((row) => ({
+      Role: row.role,
+      Confirmed: row.confirmed,
+      Pending: row.pending,
+      Registrations: row.confirmed + row.pending,
+      Active: row.active,
+      ConfirmationRatePercent: safePercent(row.confirmed, row.confirmed + row.pending),
+      ActivityRatePercent: safePercent(row.active, row.confirmed),
+    }))
+    .sort((left, right) => right.Registrations - left.Registrations)
+
+  let cumulativeRegistrations = 0
+  let cumulativeConfirmed = 0
+  let cumulativePending = 0
+  const timelineRows = Array.from(timelineMap.values())
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .map((row) => {
+      cumulativeRegistrations += row.registrations
+      cumulativeConfirmed += row.confirmed
+      cumulativePending += row.pending
+      return {
+        Date: row.date,
+        Registrations: row.registrations,
+        Confirmed: row.confirmed,
+        Pending: row.pending,
+        ConfirmationRatePercent: safePercent(row.confirmed, row.registrations),
+        CumulativeRegistrations: cumulativeRegistrations,
+        CumulativeConfirmed: cumulativeConfirmed,
+        CumulativePending: cumulativePending,
+      }
+    })
+
+  const kpiRows = [
+    { KPI: "Registrations", Value: registrations },
+    { KPI: "Confirmed", Value: confirmed },
+    { KPI: "Pending", Value: pending },
+    { KPI: "Confirmation Rate, %", Value: confirmationRatePercent },
+    { KPI: "Fill Rate, %", Value: fillRatePercent },
+    { KPI: "Students (all)", Value: allStudents },
+    { KPI: "Students (confirmed)", Value: confirmedStudents },
+    { KPI: "Active Participants (matched)", Value: activeParticipants },
+    { KPI: "Active entries in report", Value: reportedActiveCount },
+    { KPI: "Matched active entries", Value: matchedActiveEntries },
+    { KPI: "Active matching quality, %", Value: activeMatchRatePercent },
+    { KPI: "Active Students (matched)", Value: activeStudents },
+    { KPI: "Active Students / Confirmed Students, %", Value: activeStudentsRatePercent },
+    { KPI: "Active Pending Participants", Value: activePendingParticipants },
+    { KPI: "Active names not matched to attendees", Value: activeUnmatched },
+  ]
+
+  const qualityRows = [
+    {
+      Check: "Active entries in report",
+      Value: reportedActiveCount,
+      Comment: "Сколько активных участников указано в отчете",
+    },
+    {
+      Check: "Matched active entries",
+      Value: matchedActiveEntries,
+      Comment: "Сколько активных удалось сопоставить с участниками",
+    },
+    {
+      Check: "Unmatched active entries",
+      Value: activeUnmatched,
+      Comment: "Сколько записей из отчета не удалось сопоставить",
+    },
+    {
+      Check: "Matching quality, %",
+      Value: activeMatchRatePercent,
+      Comment: "Доля совпадений active-записей отчета",
+    },
+    {
+      Check: "Active students / confirmed students, %",
+      Value: activeStudentsRatePercent,
+      Comment: "Доля активных студентов среди подтвержденных",
+    },
+  ]
+
+  const unmatchedActiveRows = activeParticipantRows
+    .filter((row) => row.Matched === "No")
+    .map((row, index) => ({
+      No: index + 1,
+      NameFromReport: row.NameFromReport,
+    }))
 
   const reportRows = event.report
     ? [
@@ -944,16 +1424,16 @@ export const buildEventAttendanceExcel = async (
       ]
     : [{ Field: "Report", Value: "No report attached" }]
 
-  const activeParticipantsRows = (event.report?.activeParticipants || []).map((name, index) => ({
-    No: index + 1,
-    Name: name,
-  }))
-
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(
     workbook,
     XLSX.utils.json_to_sheet(overviewRows),
     "Event Overview"
+  )
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(kpiRows),
+    "KPI"
   )
   XLSX.utils.book_append_sheet(
     workbook,
@@ -963,11 +1443,67 @@ export const buildEventAttendanceExcel = async (
   XLSX.utils.book_append_sheet(
     workbook,
     XLSX.utils.json_to_sheet(
-      activeParticipantsRows.length
-        ? activeParticipantsRows
+      activeParticipantRows.length
+        ? activeParticipantRows
         : [{ Name: "No active participants in report" }]
     ),
     "Active Participants"
+  )
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(
+      activeStudentsRows.length
+        ? activeStudentsRows
+        : [{ Name: "No active students found in report" }]
+    ),
+    "Active Students"
+  )
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(
+      studentsMatrixRows.length
+        ? studentsMatrixRows
+        : [{ Name: "No students in attendees list" }]
+    ),
+    "Students Matrix"
+  )
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(groupRows.length ? groupRows : [{ Group: "No student groups data" }]),
+    "Group Stats"
+  )
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(
+      departmentRows.length ? departmentRows : [{ Department: "No department data" }]
+    ),
+    "Department Stats"
+  )
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(roleRows.length ? roleRows : [{ Role: "No role data" }]),
+    "Role Stats"
+  )
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(
+      timelineRows.length ? timelineRows : [{ Date: "No registration timeline data" }]
+    ),
+    "Reg Timeline"
+  )
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(qualityRows),
+    "Quality Checks"
+  )
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(
+      unmatchedActiveRows.length
+        ? unmatchedActiveRows
+        : [{ NameFromReport: "No unmatched active entries" }]
+    ),
+    "Unmatched Active"
   )
   XLSX.utils.book_append_sheet(
     workbook,
@@ -987,3 +1523,4 @@ export const buildEventAttendanceExcel = async (
 
   return { fileName, buffer }
 }
+

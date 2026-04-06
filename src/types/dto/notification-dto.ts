@@ -20,3 +20,16 @@ export interface SendEventNotificationDto {
   groups?: string[]
   departments?: string[]
 }
+
+export interface SendEventNotificationResultDto {
+  created: number
+  broadcastId: string
+  eventId: string
+}
+
+export interface CancelNotificationBroadcastResultDto {
+  success: true
+  deleted: number
+  broadcastId: string
+  eventId: string
+}

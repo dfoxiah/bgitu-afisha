@@ -201,6 +201,19 @@ export type AdminPeriodSummaryMetric = {
   confirmed: number
   pending: number
   attendanceRatePercent: number
+  activeParticipants: number
+  uniqueStudents: number
+  activeStudents: number
+  activeStudentsRatePercent: number
+  averageFillRatePercent: number
+  averageConfirmationRatePercent: number
+  reportedActiveEntries: number
+  matchedActiveEntries: number
+  unmatchedActiveEntries: number
+  activeMatchingQualityPercent: number
+  averageRegistrationsPerEvent: number
+  averageConfirmedPerEvent: number
+  averageActiveStudentsPerEvent: number
 }
 
 export type AdminEventAttendanceMetric = {
@@ -209,9 +222,19 @@ export type AdminEventAttendanceMetric = {
   date: string
   confirmed: number
   pending: number
+  registrations: number
   total: number
   maxParticipants: number
   fillRatePercent: number
+  confirmedRatePercent: number
+  confirmedStudents: number
+  activeParticipants: number
+  activeStudents: number
+  activeStudentsRatePercent: number
+  reportedActiveCount: number
+  matchedActiveEntries: number
+  activeMatchRatePercent: number
+  activeUnmatched: number
 }
 
 export type AdminStudentAttendanceMetric = {
@@ -222,30 +245,62 @@ export type AdminStudentAttendanceMetric = {
   department: string
   confirmed: number
   pending: number
+  active: number
   total: number
+  confirmationRatePercent: number
+  activityRatePercent: number
 }
 
 export type AdminGroupAttendanceMetric = {
   group: string
   confirmed: number
   pending: number
+  active: number
   total: number
   uniqueStudents: number
+  confirmationRatePercent: number
+  activityRatePercent: number
 }
 
 export type AdminDepartmentAttendanceMetric = {
   department: string
   confirmed: number
   pending: number
+  active: number
   total: number
   uniqueStudents: number
+  confirmationRatePercent: number
+  activityRatePercent: number
 }
 
 export type AdminRoleAttendanceMetric = {
   role: Role
   confirmed: number
   pending: number
+  active: number
   total: number
+  confirmationRatePercent: number
+  activityRatePercent: number
+}
+
+export type AdminAttendanceSummaryMetric = {
+  registrations: number
+  confirmed: number
+  pending: number
+  attendanceRatePercent: number
+  activeParticipants: number
+  uniqueStudents: number
+  activeStudents: number
+  activeStudentsRatePercent: number
+  averageFillRatePercent: number
+  averageConfirmationRatePercent: number
+  reportedActiveEntries: number
+  matchedActiveEntries: number
+  unmatchedActiveEntries: number
+  activeMatchingQualityPercent: number
+  averageRegistrationsPerEvent: number
+  averageConfirmedPerEvent: number
+  averageActiveStudentsPerEvent: number
 }
 
 export type AdminDashboardMetrics = {
@@ -278,6 +333,7 @@ export type AdminDashboardMetrics = {
   }
   periodSummary: AdminPeriodSummaryMetric
   attendanceStats: {
+    summary: AdminAttendanceSummaryMetric
     byEvent: AdminEventAttendanceMetric[]
     byStudent: AdminStudentAttendanceMetric[]
     byGroup: AdminGroupAttendanceMetric[]

@@ -48,16 +48,23 @@ const parseStringList = (value: unknown) => {
   return [] as string[]
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
+    const { searchParams } = new URL(req.url)
+    const rawLimit = searchParams.get("limit")
+    const parsedLimit = rawLimit ? Number(rawLimit) : NaN
+    const limit =
+      Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(Math.trunc(parsedLimit), 500) : 120
+
     const notifications = await prisma.notification.findMany({
       where: { userId: session.user.id },
       orderBy: { createdAt: "desc" },
+      take: limit,
     })
 
     return NextResponse.json(notifications)
@@ -84,6 +91,7 @@ export async function POST(req: NextRequest) {
     const content = String(body.content || "").trim()
     const recipients = String(body.recipients || "all")
     const type = (body.type as NotificationType) || "EVENT"
+    const broadcastId = globalThis.crypto.randomUUID()
     const groups = parseStringList(body.groups)
     const departments = parseStringList(body.departments)
 
@@ -165,14 +173,17 @@ export async function POST(req: NextRequest) {
       content,
       type,
       read: false,
-      metadata: {
-        eventId,
-        recipients,
-        groups,
-        departments,
-        sentBy: session.user.name || session.user.email || "Система",
-      },
-    }))
+        metadata: {
+          broadcastId,
+          eventId,
+          recipients,
+          groups,
+          departments,
+          sentById: session.user.id,
+          sentBy: session.user.name || session.user.email || "Система",
+          sentAt: new Date().toISOString(),
+        },
+      }))
 
     if (notificationsData.length === 0) {
       return NextResponse.json({ created: 0 })
@@ -191,7 +202,7 @@ export async function POST(req: NextRequest) {
       userAgent,
     })
 
-    return NextResponse.json({ created: result.count })
+    return NextResponse.json({ created: result.count, broadcastId, eventId })
   } catch (error) {
     console.error("POST /api/notifications error", error)
     return errorJson(500, "SERVER_ERROR", "Ошибка сервера")

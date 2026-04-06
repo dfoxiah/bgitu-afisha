@@ -94,6 +94,7 @@ type EventWithRelations = {
   location: string
   description: string
   maxParticipants: number
+  currentParticipants?: number
   isPast: boolean
   removedFromCalendar: boolean
   isNews: boolean
@@ -130,10 +131,14 @@ const resolveResponsibleAssignee = async (responsibleId?: string) => {
 
 export const serializeEventForApi = (event: EventWithRelations) => {
   const { confirmed, pending } = splitEventParticipants(event.eventParticipants)
+  const confirmedCount =
+    typeof event.currentParticipants === "number" ? event.currentParticipants : confirmed.length
 
   return {
     ...event,
-    currentParticipants: confirmed.length,
+    currentParticipants: confirmedCount,
+    confirmedParticipantsCount: confirmedCount,
+    pendingParticipantsCount: pending.length,
     participants: confirmed,
     pendingParticipants: pending,
     moderators: flattenModerators(event.moderators),

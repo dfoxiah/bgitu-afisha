@@ -316,6 +316,9 @@ export default function EventDetailsPage() {
                       </span>
                     </div>
                   </div>
+                  <p className="mt-2 text-xs text-primary/58">
+                    Нажмите на ФИО, чтобы открыть профиль и историю посещений (для студентов в рамках ваших прав доступа).
+                  </p>
 
                   {confirmedParticipants.length === 0 && pendingParticipants.length === 0 ? (
                     <p className="mt-3 text-sm text-primary/62">Пока нет зарегистрированных участников.</p>
@@ -335,7 +338,19 @@ export default function EventDetailsPage() {
                             <tbody>
                               {confirmedParticipants.map((participant) => (
                                 <tr key={participant.id} className="border-t border-primary/10">
-                                  <td className="px-3 py-2">{participant.name || "Не указано"}</td>
+                                  <td className="px-3 py-2">
+                                    {participant.id &&
+                                    (session?.user?.role === "ADMIN" || participant.role === "STUDENT") ? (
+                                      <Link
+                                        href={`/users/${participant.id}`}
+                                        className="font-medium text-primary hover:underline"
+                                      >
+                                        {participant.name || "Не указано"}
+                                      </Link>
+                                    ) : (
+                                      participant.name || "Не указано"
+                                    )}
+                                  </td>
                                   <td className="px-3 py-2">{participant.email}</td>
                                   <td className="px-3 py-2">{participant.group || "Не указана"}</td>
                                   <td className="px-3 py-2">{participant.department || "Не указан"}</td>
@@ -358,7 +373,17 @@ export default function EventDetailsPage() {
                                 className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/12 bg-white/80 px-3 py-2"
                               >
                                 <span className="text-sm text-primary/78">
-                                  {participant.name || participant.email}
+                                  {participant.id &&
+                                  (session?.user?.role === "ADMIN" || participant.role === "STUDENT") ? (
+                                    <Link
+                                      href={`/users/${participant.id}`}
+                                      className="font-medium text-primary hover:underline"
+                                    >
+                                      {participant.name || participant.email}
+                                    </Link>
+                                  ) : (
+                                    participant.name || participant.email
+                                  )}
                                 </span>
                                 <span className="text-xs text-primary/56">{participant.group || "Группа не указана"}</span>
                               </div>

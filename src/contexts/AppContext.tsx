@@ -38,9 +38,11 @@ import {
 } from "@/features/events/client/events-api"
 import {
   clearNotificationsApi,
+  deleteNotificationBroadcastApi,
   fetchNotificationsApi,
   markAllNotificationsAsReadApi,
   markNotificationAsReadApi,
+  type SendEventNotificationResult,
   sendEventNotificationApi,
 } from "@/features/notifications/client/notifications-api"
 import { updateProfileApi, type UpdateProfileResponse } from "@/features/profile/client/profile-api"
@@ -77,7 +79,8 @@ interface AppContextType {
       groups?: string[]
       departments?: string[]
     }
-  ) => Promise<void>
+  ) => Promise<SendEventNotificationResult>
+  cancelNotificationBroadcast: (broadcastId: string) => Promise<{ deleted: number }>
   updateProfile: (data: Record<string, unknown>) => Promise<UpdateProfileResponse>
   refreshEvents: () => Promise<void>
 }
@@ -105,6 +108,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const lastLoadTimeRef = useRef(0)
   const isFetchingRef = useRef(false)
   const loadAttemptsRef = useRef(0)
+  const eventsRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventsAbortControllerRef = useRef<AbortController | null>(null)
 
   const notificationsLoadedRef = useRef<string | null>(null)
   const lastNotificationsFetchRef = useRef(0)
@@ -200,13 +205,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(true)
       setError(null)
 
+      eventsAbortControllerRef.current?.abort()
+      const controller = new AbortController()
+      eventsAbortControllerRef.current = controller
+      let shouldRetry = false
+
       try {
-        const data = await fetchEventsApi(status === "authenticated")
+        const data = await fetchEventsApi(status === "authenticated", { signal: controller.signal })
         setEvents(data)
         setHasLoadedEvents(true)
         lastLoadTimeRef.current = now
         loadAttemptsRef.current = 0
+
+        if (eventsRetryTimerRef.current) {
+          clearTimeout(eventsRetryTimerRef.current)
+          eventsRetryTimerRef.current = null
+        }
       } catch (loadError) {
+        if (loadError instanceof DOMException && loadError.name === "AbortError") {
+          return
+        }
+
+        shouldRetry = true
         debug.error("events", "Failed to load events", loadError)
         setEvents([])
         setHasLoadedEvents(false)
@@ -214,13 +234,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setError("Ошибка загрузки мероприятий")
         }
       } finally {
+        if (eventsAbortControllerRef.current === controller) {
+          eventsAbortControllerRef.current = null
+        }
+
         isFetchingRef.current = false
         setIsLoading(false)
 
-        if (loadAttemptsRef.current > 0 && loadAttemptsRef.current <= 3) {
-          setTimeout(() => {
-            loadEvents(true)
-          }, 10000)
+        if (shouldRetry && loadAttemptsRef.current > 0 && loadAttemptsRef.current <= 3) {
+          if (eventsRetryTimerRef.current) {
+            clearTimeout(eventsRetryTimerRef.current)
+          }
+          const retryDelay = Math.min(12000, loadAttemptsRef.current * 4000)
+          eventsRetryTimerRef.current = setTimeout(() => {
+            void loadEvents(true)
+          }, retryDelay)
         }
       }
     },
@@ -229,21 +257,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (status === "authenticated" && session && !hasLoadedEvents) {
-      const timer = setTimeout(() => {
-        loadEvents()
-      }, 800)
-
-      return () => clearTimeout(timer)
+      void loadEvents()
     }
   }, [hasLoadedEvents, loadEvents, session, status])
 
   useEffect(() => {
     if (status === "unauthenticated") {
+      eventsAbortControllerRef.current?.abort()
+      eventsAbortControllerRef.current = null
+      if (eventsRetryTimerRef.current) {
+        clearTimeout(eventsRetryTimerRef.current)
+        eventsRetryTimerRef.current = null
+      }
+      isFetchingRef.current = false
       setEvents([])
       setHasLoadedEvents(false)
       loadAttemptsRef.current = 0
+      setIsLoading(false)
     }
   }, [status])
+
+  useEffect(
+    () => () => {
+      eventsAbortControllerRef.current?.abort()
+      eventsAbortControllerRef.current = null
+      if (eventsRetryTimerRef.current) {
+        clearTimeout(eventsRetryTimerRef.current)
+        eventsRetryTimerRef.current = null
+      }
+    },
+    []
+  )
 
   const fetchNotifications = useCallback(
     async (force = false) => {
@@ -527,7 +571,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         departments?: string[]
       }
     ) => {
-      await sendEventNotificationApi({
+      const result = await sendEventNotificationApi({
         eventId,
         content,
         recipients,
@@ -536,9 +580,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         departments: filters?.departments || [],
       })
       await fetchNotifications(true)
+      return result
     },
     [fetchNotifications]
   )
+
+  const cancelNotificationBroadcast = useCallback(async (broadcastId: string) => {
+    const result = await deleteNotificationBroadcastApi(broadcastId)
+    await fetchNotifications(true)
+    return { deleted: result.deleted }
+  }, [fetchNotifications])
 
   const updateProfile = useCallback(
     async (data: Record<string, unknown>) => {
@@ -580,6 +631,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       markAllNotificationsAsRead,
       clearAllNotifications,
       sendEventNotification,
+      cancelNotificationBroadcast,
       updateProfile,
       refreshEvents,
     }),
@@ -607,6 +659,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       markAllNotificationsAsRead,
       clearAllNotifications,
       sendEventNotification,
+      cancelNotificationBroadcast,
       updateProfile,
       refreshEvents,
     ]

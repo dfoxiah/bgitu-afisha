@@ -15,15 +15,18 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useSession } from 'next-auth/react'
 import { useAppContext } from '@/contexts/AppContext'
 import EventCard from '@/components/events/EventCard'
-import EventForm from '@/components/events/EventForm'
-import CompleteEventModal from '@/components/events/CompleteEventModal'
 import Button from '@/components/ui/Button'
 import { Event } from '@/types'
 import { showToast } from '@/lib/toast'
 import type { CompleteEventDto, CreateEventDto } from '@/types/dto'
+import { fetchEventByIdApi } from '@/features/events/client/events-api'
+
+const EventForm = dynamic(() => import('@/components/events/EventForm'))
+const CompleteEventModal = dynamic(() => import('@/components/events/CompleteEventModal'))
 
 export default function EventsPage() {
   const { data: session } = useSession()
@@ -35,6 +38,7 @@ export default function EventsPage() {
   const [completingEvent, setCompletingEvent] = useState<Event | null>(null)
   const [completionEffect, setCompletionEffect] = useState(false)
   const [upcomingSort, setUpcomingSort] = useState<'soonest' | 'latest' | 'participants'>('soonest')
+  const [loadingEventId, setLoadingEventId] = useState<string | null>(null)
   const completionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -81,7 +85,24 @@ export default function EventsPage() {
     }
   }
 
-  const handleEditClick = (event: Event) => {
+  const loadEventForAction = async (eventId: string) => {
+    if (loadingEventId) return null
+
+    setLoadingEventId(eventId)
+    try {
+      return await fetchEventByIdApi(eventId)
+    } catch (error) {
+      console.error('Event details load error:', error)
+      showToast('Не удалось загрузить актуальные данные мероприятия', 'error')
+      return null
+    } finally {
+      setLoadingEventId(null)
+    }
+  }
+
+  const handleEditClick = async (event: Event) => {
+    if (loadingEventId) return
+
     const canModerate =
       session?.user?.role === 'ADMIN' ||
       event.creatorId === session?.user?.id ||
@@ -92,11 +113,16 @@ export default function EventsPage() {
       return
     }
 
-    setEditingEvent(event)
+    const fullEvent = await loadEventForAction(event.id)
+    if (!fullEvent) return
+
+    setEditingEvent(fullEvent)
     setShowForm(true)
   }
 
-  const handleCompleteClick = (event: Event) => {
+  const handleCompleteClick = async (event: Event) => {
+    if (loadingEventId) return
+
     const canModerate =
       session?.user?.role === 'ADMIN' ||
       event.creatorId === session?.user?.id ||
@@ -107,7 +133,10 @@ export default function EventsPage() {
       return
     }
 
-    setCompletingEvent(event)
+    const fullEvent = await loadEventForAction(event.id)
+    if (!fullEvent) return
+
+    setCompletingEvent(fullEvent)
   }
 
   const handleCreateClick = () => {
@@ -224,8 +253,10 @@ export default function EventsPage() {
               </button>
             </div>
 
-            <div className="rounded-full border border-primary/14 bg-white/78 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-primary/62">
-              Активный режим: {activeTab === 'upcoming' ? 'Планирование' : 'Архив и отчеты'}
+          <div className="rounded-full border border-primary/14 bg-white/78 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-primary/62">
+              {loadingEventId
+                ? 'Загрузка данных...'
+                : `Активный режим: ${activeTab === 'upcoming' ? 'Планирование' : 'Архив и отчеты'}`}
             </div>
           </div>
 

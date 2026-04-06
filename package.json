@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node -e \"try { require('fs').rmSync('.next/dev', { recursive: true, force: true }) } catch (_) {}\"",
     "build": "next build",
+    "pretype-check": "node -e \"try { require('fs').rmSync('.next/dev', { recursive: true, force: true }) } catch (_) {}\"",
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
