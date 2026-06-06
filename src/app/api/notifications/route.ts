@@ -52,7 +52,7 @@ const parseStringList = (value: unknown) => {
 
 const parseEventTimeToMinutes = (value: string | null | undefined) => {
   if (!value) return 0
-  const match = value.trim().match(/^(\d{1,2}):(\d{2})$/)
+  const match = value.trim().match(/(\d{1,2}):(\d{2})/)
   if (!match) return 0
   const hh = Number(match[1])
   const mm = Number(match[2])
@@ -66,6 +66,20 @@ const toEventDateTime = (date: Date, time: string | null | undefined) => {
   const minutes = parseEventTimeToMinutes(time)
   result.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0)
   return result
+}
+
+const renderNotificationContent = (
+  template: string,
+  event: { title: string; date: Date; time: string | null }
+) => {
+  const eventDate = event.date.toLocaleDateString("ru-RU")
+  const eventTime = event.time?.trim() || "[Время]"
+
+  return template
+    .replace(/\[Название мероприятия\]/gi, event.title)
+    .replace(/\[Название\]/gi, event.title)
+    .replace(/\[Дата\]/gi, eventDate)
+    .replace(/\[Время\]/gi, eventTime)
 }
 
 export async function GET(req: NextRequest) {
@@ -226,10 +240,16 @@ export async function POST(req: NextRequest) {
       targetIds = users.map((user) => user.id)
     }
 
+    const renderedContent = renderNotificationContent(content, {
+      title: event.title,
+      date: event.date,
+      time: event.time,
+    })
+
     const notificationsData = Array.from(new Set(targetIds)).map((userId) => ({
       userId,
       title: "Уведомление о мероприятии",
-      content,
+      content: renderedContent,
       type,
       link: buildEventLink(eventId),
       read: false,
@@ -251,6 +271,9 @@ export async function POST(req: NextRequest) {
     if (notificationsData.length === 0) {
       return NextResponse.json({
         created: 0,
+        inAppCreated: 0,
+        externalAttempted: 0,
+        externalFailed: 0,
         broadcastId,
         eventId,
         filters: { audience, groups, departments, userIds },
@@ -271,7 +294,10 @@ export async function POST(req: NextRequest) {
         groups,
         userIds,
         departments,
-        count: result.count,
+        count: result.targetedUsers,
+        inAppCreated: result.count,
+        externalAttempted: result.externalAttempted,
+        externalFailed: result.externalFailed,
         baseScopeCount: scopeIds.length,
       },
       ip,
@@ -279,7 +305,10 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json({
-      created: result.count,
+      created: result.targetedUsers,
+      inAppCreated: result.count,
+      externalAttempted: result.externalAttempted,
+      externalFailed: result.externalFailed,
       broadcastId,
       eventId,
       filters: { audience, groups, departments, userIds },

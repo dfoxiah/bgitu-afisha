@@ -26,6 +26,9 @@ export interface SendEventNotificationDto {
 
 export interface SendEventNotificationResultDto {
   created: number
+  inAppCreated: number
+  externalAttempted: number
+  externalFailed: number
   broadcastId: string
   eventId: string
   filters?: {

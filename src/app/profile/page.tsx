@@ -31,11 +31,15 @@ interface ProfileFormData {
   department: string
   group: string
   admissionYear: string
+  vkUserId: string
   bio: string
   notifications: {
     newEvents: boolean
     changes: boolean
     news: boolean
+    inApp: boolean
+    email: boolean
+    vk: boolean
     categories: EventCategory[]
   }
 }
@@ -59,11 +63,15 @@ export default function ProfilePage() {
     department: '',
     group: '',
     admissionYear: '',
+    vkUserId: '',
     bio: '',
     notifications: {
       newEvents: true,
       changes: true,
       news: false,
+      inApp: true,
+      email: false,
+      vk: false,
       categories: []
     }
   })
@@ -130,11 +138,15 @@ export default function ProfilePage() {
         department: session.user.department || '',
         group: session.user.group || '',
         admissionYear: session.user.admissionYear ? String(session.user.admissionYear) : '',
+        vkUserId: session.user.vkUserId || '',
         bio: session.user.bio || '',
         notifications: {
           newEvents: session.user.notifyNewEvents ?? true,
           changes: session.user.notifyChanges ?? true,
           news: session.user.notifyNews ?? false,
+          inApp: session.user.notifyInApp ?? true,
+          email: session.user.notifyEmail ?? false,
+          vk: session.user.notifyVk ?? false,
           categories: resolvedCategories
         }
       }
@@ -266,7 +278,11 @@ export default function ProfilePage() {
       ]
     }
 
-    if (profileStats.role === 'TEACHER' || profileStats.role === 'EDITOR') {
+    if (
+      profileStats.role === 'TEACHER' ||
+      profileStats.role === 'EDITOR' ||
+      profileStats.role === 'MODERATOR'
+    ) {
       return [
         ...baseRows,
         { label: 'Создано мероприятий', value: String(profileStats.createdEventsCount) },
@@ -302,6 +318,10 @@ export default function ProfilePage() {
       errors.email = 'Неверный формат email'
     }
     
+    if (formData.notifications.vk && !formData.vkUserId.trim()) {
+      errors.vkUserId = 'Чтобы включить VK-уведомления, укажите VK ID, @username или ссылку на профиль'
+    }
+
     setValidationErrors(errors)
     
     return Object.keys(errors).length === 0
@@ -384,11 +404,15 @@ export default function ProfilePage() {
         department: formData.department,
         group: formData.group,
         admissionYear: formData.admissionYear ? Number(formData.admissionYear) : null,
+        vkUserId: formData.vkUserId,
         bio: formData.bio,
         notifications: {
           newEvents: formData.notifications.newEvents,
           changes: formData.notifications.changes,
           news: formData.notifications.news,
+          inApp: formData.notifications.inApp,
+          email: formData.notifications.email,
+          vk: formData.notifications.vk,
           categories: formData.notifications.categories
         }
       })
@@ -402,11 +426,15 @@ export default function ProfilePage() {
           department: formData.department,
           group: formData.group,
           admissionYear: response?.user?.admissionYear ?? (formData.admissionYear ? Number(formData.admissionYear) : null),
+          vkUserId: (response?.user?.vkUserId as string | null | undefined) ?? formData.vkUserId,
           bio: formData.bio,
           groupChangeCount: response?.user?.groupChangeCount ?? groupChangeCount,
           notifyNewEvents: formData.notifications.newEvents,
           notifyChanges: formData.notifications.changes,
           notifyNews: formData.notifications.news,
+          notifyInApp: formData.notifications.inApp,
+          notifyEmail: formData.notifications.email,
+          notifyVk: formData.notifications.vk,
           notificationCategories: formData.notifications.categories
         }
       })
@@ -748,6 +776,31 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
+                <div className="form-group">
+                  <label htmlFor="vkUserId" className="form-label">
+                    VK ID / ссылка
+                  </label>
+                  <input
+                    id="vkUserId"
+                    type="text"
+                    name="vkUserId"
+                    value={formData.vkUserId}
+                    onChange={handleChange}
+                    className={`form-control ${validationErrors.vkUserId ? 'border-red-500' : ''}`}
+                    placeholder="Например: id123, @username или https://vk.com/username"
+                    aria-invalid={!!validationErrors.vkUserId}
+                    aria-describedby={validationErrors.vkUserId ? 'vkUserId-error' : 'vkUserId-help'}
+                  />
+                  <p id="vkUserId-help" className="mt-1 text-xs text-gray-500">
+                    Нужен только если вы хотите получать уведомления через VK-сообщения сообщества.
+                  </p>
+                  {validationErrors.vkUserId && (
+                    <p id="vkUserId-error" className="mt-1 text-sm text-red-600">
+                      {validationErrors.vkUserId}
+                    </p>
+                  )}
+                </div>
+
                 <div className="form-group mb-8">
                   <label htmlFor="bio" className="form-label">
                     О себе
@@ -812,6 +865,52 @@ export default function ProfilePage() {
                       </div>
                       <div className={`w-3 h-3 rounded-full mt-1 sm:mt-0 ${formData.notifications.news ? 'bg-green-500' : 'bg-gray-300'}`}></div>
                     </label>
+
+                    <div className="border-t border-gray-200 pt-4">
+                      <div className="font-medium text-primary">Каналы доставки</div>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Управляет тем, куда отправлять ваши уведомления. Флажки выше определяют, о чем именно уведомлять.
+                      </p>
+                      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        {[
+                          {
+                            name: 'notifications.inApp',
+                            title: 'Внутри системы',
+                            description: 'Лента уведомлений на сайте',
+                            enabled: formData.notifications.inApp,
+                          },
+                          {
+                            name: 'notifications.email',
+                            title: 'Email',
+                            description: 'Письмо на основной email аккаунта',
+                            enabled: formData.notifications.email,
+                          },
+                          {
+                            name: 'notifications.vk',
+                            title: 'VK',
+                            description: 'Сообщение сообщества во ВКонтакте',
+                            enabled: formData.notifications.vk,
+                          },
+                        ].map(({ name, title, description, enabled }) => (
+                          <label
+                            key={name}
+                            className="flex items-start gap-3 rounded-lg border border-white/70 bg-white/70 p-3 transition-colors hover:bg-white cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              name={name}
+                              checked={enabled}
+                              onChange={handleChange}
+                              className="mt-1 h-4 w-4 rounded text-accent focus:ring-2 focus:ring-accent"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-medium text-primary">{title}</span>
+                              <span className="block text-xs text-gray-500">{description}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
 
                     <div className="border-t border-gray-200 pt-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">

@@ -11,6 +11,7 @@
  */
 
 import type { EventCategory, Role, User } from "@prisma/client"
+import { isVkRecipientConfigured, normalizeVkRecipient } from "@/lib/vk"
 
 type ProfileNotificationsInput = {
   newEvents?: boolean
@@ -142,8 +143,13 @@ export const buildProfileUpdates = (params: BuildUpdatesParams) => {
   if (body.notifyEmail !== undefined) updates.notifyEmail = Boolean(body.notifyEmail)
   if (body.notifyVk !== undefined) updates.notifyVk = Boolean(body.notifyVk)
   if (body.vkUserId !== undefined) {
-    const nextVkUserId = toOptionalString(body.vkUserId)
-    updates.vkUserId = nextVkUserId && nextVkUserId.length > 0 ? nextVkUserId : null
+    const nextVkRecipient = normalizeVkRecipient(body.vkUserId)
+    if (nextVkRecipient.storageValue && !isVkRecipientConfigured(nextVkRecipient.storageValue)) {
+      validationError ??=
+        "Укажите корректный VK ID, @username или ссылку на профиль VK."
+    } else {
+      updates.vkUserId = nextVkRecipient.storageValue
+    }
   }
 
   const directCategories = normalizeCategories(body.notificationCategories, validCategories)
@@ -160,6 +166,14 @@ export const buildProfileUpdates = (params: BuildUpdatesParams) => {
 
     const nestedCategories = normalizeCategories(notifications.categories, validCategories)
     if (nestedCategories) updates.notificationCategories = nestedCategories
+  }
+
+  const effectiveNotifyVk =
+    typeof updates.notifyVk === "boolean" ? updates.notifyVk : user.notifyVk
+  const effectiveVkUserId = updates.vkUserId !== undefined ? updates.vkUserId : user.vkUserId
+  if (effectiveNotifyVk && !isVkRecipientConfigured(effectiveVkUserId)) {
+    validationError ??=
+      "Чтобы включить VK-уведомления, укажите корректный VK ID, @username или ссылку на профиль VK."
   }
 
   if (updates.group !== undefined) {

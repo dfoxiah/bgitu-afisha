@@ -38,7 +38,7 @@ const isNotificationTemplate = (value: string): value is NotificationTemplate =>
 
 const toEventDateTime = (date: Date | string, time?: string) => {
   const result = new Date(date)
-  const match = String(time || '').trim().match(/^(\d{1,2}):(\d{2})$/)
+  const match = String(time || '').trim().match(/(\d{1,2}):(\d{2})/)
   if (match) {
     const hh = Number(match[1])
     const mm = Number(match[2])
@@ -79,6 +79,9 @@ const NotificationModal = ({ isOpen = false, onClose }: NotificationModalProps) 
   const [lastBroadcast, setLastBroadcast] = useState<{
     broadcastId: string
     created: number
+    inAppCreated: number
+    externalAttempted: number
+    externalFailed: number
   } | null>(null)
   const [isCancellingBroadcast, setIsCancellingBroadcast] = useState(false)
   const [directoryUsers, setDirectoryUsers] = useState<NotificationTargetUser[]>([])
@@ -275,8 +278,14 @@ const NotificationModal = ({ isOpen = false, onClose }: NotificationModalProps) 
       setLastBroadcast({
         broadcastId: result.broadcastId,
         created: result.created,
+        inAppCreated: result.inAppCreated,
+        externalAttempted: result.externalAttempted,
+        externalFailed: result.externalFailed,
       })
-      showToast(`Уведомление отправлено (${result.created})`, 'success')
+      showToast(`Рассылка отправлена: ${result.created} получ.`, 'success')
+      if (result.externalFailed > 0) {
+        showToast(`Во внешних каналах есть ошибки доставки: ${result.externalFailed}`, 'info')
+      }
     } catch (error) {
       console.error('Notification send error:', error)
       showToast('Не удалось отправить уведомление', 'error')
@@ -289,7 +298,7 @@ const NotificationModal = ({ isOpen = false, onClose }: NotificationModalProps) 
     try {
       setIsCancellingBroadcast(true)
       const result = await cancelNotificationBroadcast(lastBroadcast.broadcastId)
-      showToast(`Рассылка отменена. Удалено уведомлений: ${result.deleted}`, 'success')
+      showToast(`Рассылка отменена. Удалено внутри системы: ${result.deleted}`, 'success')
       setLastBroadcast(null)
     } catch (error) {
       console.error('Cancel broadcast error:', error)
@@ -454,11 +463,14 @@ const NotificationModal = ({ isOpen = false, onClose }: NotificationModalProps) 
         </div>
 
         <div className="rounded-lg border border-sky-200 bg-sky-50/80 p-3 text-xs leading-5 text-sky-900">
-          <div className="font-semibold">VK после отправки</div>
+          <div className="font-semibold">VK и email</div>
           <p>
-            Для доставки в ВК нужен серверный мост: сохранить VK ID у пользователя, создать VK Community API token,
-            после `createMany` уведомлений вызвать очередь/route handler, который отправит `messages.send` каждому получателю.
-            Нужны согласия пользователей на сообщения сообщества и обработка ошибок/лимитов.
+            Внешние каналы отправляются сервером сразу после создания уведомлений, если у получателя включены
+            соответствующие настройки профиля и заданы переменные окружения. Для VK нужен токен сообщества и
+            корректный VK ID, `@username` или ссылка `vk.com/...` в профиле пользователя.
+          </p>
+          <p className="mt-2">
+            Отмена рассылки удаляет только уведомления внутри системы и не отзывает уже отправленные VK/email сообщения.
           </p>
         </div>
 
@@ -486,7 +498,15 @@ const NotificationModal = ({ isOpen = false, onClose }: NotificationModalProps) 
           <div className="liquid-card border border-amber-200 bg-amber-50/80 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.1em] text-amber-700">Последняя рассылка</p>
             <p className="mt-2 text-sm text-amber-900">
-              Отправлено уведомлений: {lastBroadcast.created}. Если отправка была ошибочной, отмените её.
+              Получателей: {lastBroadcast.created}. Внутри системы сохранено: {lastBroadcast.inAppCreated}.
+            </p>
+            {lastBroadcast.externalAttempted > 0 && (
+              <p className="mt-2 text-xs text-amber-800">
+                Внешних отправок: {lastBroadcast.externalAttempted}, ошибок доставки: {lastBroadcast.externalFailed}.
+              </p>
+            )}
+            <p className="mt-2 text-xs text-amber-700">
+              Отмена удаляет только внутренние уведомления из системы.
             </p>
             <Button
               type="button"

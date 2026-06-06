@@ -247,7 +247,7 @@ const toCountMap = <T extends string | null>(
 
 const parseTimeToMinutes = (value: string | null | undefined) => {
   if (!value) return 0
-  const match = value.trim().match(/^(\d{1,2}):(\d{2})$/)
+  const match = value.trim().match(/(\d{1,2}):(\d{2})/)
   if (!match) return 0
   const hh = Number(match[1])
   const mm = Number(match[2])

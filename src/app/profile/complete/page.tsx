@@ -279,12 +279,12 @@ export default function CompleteProfilePage() {
               </div>
 
               <div>
-                <label className="form-label">ID внешнего мессенджера для уведомлений</label>
+                <label className="form-label">VK ID или ссылка на профиль</label>
                 <input
                   className="form-control"
                   value={formData.vkUserId}
                   onChange={(event) => handleChange("vkUserId", event.target.value)}
-                  placeholder="Можно заполнить позже в профиле"
+                  placeholder="Например: id123, @username или https://vk.com/username"
                 />
               </div>
             </div>
@@ -295,7 +295,7 @@ export default function CompleteProfilePage() {
                 {[
                   ["notifyInApp", "Внутри системы"],
                   ["notifyEmail", "Email / Яндекс"],
-                  ["notifyVk", "Мессенджер"],
+                  ["notifyVk", "VK / сообщения сообщества"],
                 ].map(([field, label]) => (
                   <label key={field} className="flex items-center gap-2 text-sm text-primary/72">
                     <input

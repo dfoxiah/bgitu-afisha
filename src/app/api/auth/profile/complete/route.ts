@@ -22,6 +22,7 @@ import {
   TERMS_VERSION,
   getProfileCompletionIssues,
 } from "@/lib/profile-completion"
+import { isVkRecipientConfigured, normalizeVkRecipient } from "@/lib/vk"
 import { errorJson } from "@/server/shared/http-response"
 
 export const dynamic = "force-dynamic"
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
   const admissionYear = normalizeAdmissionYear(body.admissionYear)
   const acceptPrivacy = Boolean(body.acceptPrivacy)
   const acceptTerms = Boolean(body.acceptTerms)
-  const vkUserId = String(body.vkUserId || "").trim()
+  const normalizedVkRecipient = normalizeVkRecipient(body.vkUserId)
 
   if (!isValidEmail(email)) {
     return errorJson(400, "VALIDATION_ERROR", "Укажите корректный email")
@@ -71,6 +72,14 @@ export async function POST(req: NextRequest) {
 
   if (!acceptPrivacy || !acceptTerms) {
     return errorJson(400, "VALIDATION_ERROR", "Необходимо принять политику и соглашение")
+  }
+
+  if (normalizedVkRecipient.storageValue && !isVkRecipientConfigured(normalizedVkRecipient.storageValue)) {
+    return errorJson(
+      400,
+      "VALIDATION_ERROR",
+      "Укажите корректный VK ID, @username или ссылку на профиль VK"
+    )
   }
 
   const existingEmailOwner = await prisma.user.findFirst({
@@ -121,6 +130,15 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  const resolvedVkUserId = normalizedVkRecipient.storageValue || currentUser.vkUserId
+  if (Boolean(body.notifyVk) && !isVkRecipientConfigured(resolvedVkUserId)) {
+    return errorJson(
+      400,
+      "VALIDATION_ERROR",
+      "Чтобы включить VK-уведомления, укажите корректный VK ID, @username или ссылку на профиль VK"
+    )
+  }
+
   const { ip, userAgent } = buildAuditMeta(req)
   const updatedUser = await prisma.$transaction(async (tx) => {
     const updated = await tx.user.update({
@@ -131,7 +149,7 @@ export async function POST(req: NextRequest) {
         department,
         group,
         admissionYear,
-        vkUserId: vkUserId || currentUser.vkUserId,
+        vkUserId: resolvedVkUserId,
         notifyInApp: body.notifyInApp === undefined ? true : Boolean(body.notifyInApp),
         notifyEmail: Boolean(body.notifyEmail),
         notifyVk: Boolean(body.notifyVk),

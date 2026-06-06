@@ -18,13 +18,17 @@ export type UpdateProfileResponse = {
   user?: {
     groupChangeCount?: number
     admissionYear?: number | null
+    vkUserId?: string | null
+    notifyInApp?: boolean
+    notifyEmail?: boolean
+    notifyVk?: boolean
     [key: string]: unknown
   }
   [key: string]: unknown
 }
 
 export type ProfileStatsResponse = {
-  role: "STUDENT" | "TEACHER" | "EDITOR" | "ADMIN"
+  role: "STUDENT" | "TEACHER" | "EDITOR" | "MODERATOR" | "ADMIN"
   registeredAt: string
   lastActivityAt: string | null
   createdEventsCount: number

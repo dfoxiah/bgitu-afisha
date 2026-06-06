@@ -85,6 +85,9 @@ type SendEventNotificationPayload = {
 
 export type SendEventNotificationResult = {
   created: number
+  inAppCreated: number
+  externalAttempted: number
+  externalFailed: number
   broadcastId: string
   eventId: string
   filters?: {

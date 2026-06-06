@@ -1,8 +1,18 @@
 // prisma/seed.ts
 import { PrismaClient, EventCategory, NotificationType } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import {
+  PRIVACY_POLICY_VERSION,
+  TERMS_VERSION,
+} from '../src/lib/profile-completion'
 
 const prisma = new PrismaClient()
+const studentSeedEmail = 'student@bgitu.ru'
+const studentSeedDepartment = 'ФИТ'
+const studentSeedAdmissionYear = 2024
+const teacherSeedDepartment = 'Кафедра информационных технологий'
+const adminSeedDepartment = 'Администрация БГИТУ'
+const defaultAdminEmails = ['admin1@bgitu.ru', 'admin2@bgitu.ru', 'admin3@bgitu.ru']
 
 async function main() {
   console.log('🌱 Начало сидинга базы данных...')
@@ -45,9 +55,14 @@ async function main() {
         data: {
           name: existingTeacher.name || 'Main Teacher',
           role: 'TEACHER',
-          department: existingTeacher.department || 'Кафедра информационных технологий',
+          department: existingTeacher.department || teacherSeedDepartment,
           privacyConsentAt: existingTeacher.privacyConsentAt || consentAt,
+          privacyConsentVersion:
+            existingTeacher.privacyConsentVersion || PRIVACY_POLICY_VERSION,
           termsConsentAt: existingTeacher.termsConsentAt || consentAt,
+          termsConsentVersion: existingTeacher.termsConsentVersion || TERMS_VERSION,
+          consentSource: existingTeacher.consentSource || 'seed',
+          profileCompletedAt: existingTeacher.profileCompletedAt || consentAt,
           ...(allowPasswordUpdate || !existingTeacher.password
             ? { password: hashedTeacherPassword }
             : {})
@@ -59,25 +74,36 @@ async function main() {
           name: 'Main Teacher',
           password: hashedTeacherPassword,
           role: 'TEACHER',
-          department: 'Кафедра информационных технологий',
+          department: teacherSeedDepartment,
           privacyConsentAt: consentAt,
-          termsConsentAt: consentAt
+          privacyConsentVersion: PRIVACY_POLICY_VERSION,
+          termsConsentAt: consentAt,
+          termsConsentVersion: TERMS_VERSION,
+          consentSource: 'seed',
+          profileCompletedAt: consentAt
         }
       })
 
   const existingStudent = await prisma.user.findUnique({
-    where: { email: 'student@bgitu.ru' }
+    where: { email: studentSeedEmail }
   })
 
   const student = existingStudent
     ? await prisma.user.update({
-        where: { email: 'student@bgitu.ru' },
+        where: { email: studentSeedEmail },
         data: {
           name: existingStudent.name || 'Мария Сидорова',
           role: 'STUDENT',
+          department: existingStudent.department || studentSeedDepartment,
           group: existingStudent.group || 'ИС-21',
+          admissionYear: existingStudent.admissionYear || studentSeedAdmissionYear,
           privacyConsentAt: existingStudent.privacyConsentAt || consentAt,
+          privacyConsentVersion:
+            existingStudent.privacyConsentVersion || PRIVACY_POLICY_VERSION,
           termsConsentAt: existingStudent.termsConsentAt || consentAt,
+          termsConsentVersion: existingStudent.termsConsentVersion || TERMS_VERSION,
+          consentSource: existingStudent.consentSource || 'seed',
+          profileCompletedAt: existingStudent.profileCompletedAt || consentAt,
           ...(allowPasswordUpdate || !existingStudent.password
             ? { password: hashedStudentPassword }
             : {})
@@ -85,13 +111,19 @@ async function main() {
       })
     : await prisma.user.create({
         data: {
-          email: 'student@bgitu.ru',
+          email: studentSeedEmail,
           name: 'Мария Сидорова',
           password: hashedStudentPassword,
           role: 'STUDENT',
+          department: studentSeedDepartment,
           group: 'ИС-21',
+          admissionYear: studentSeedAdmissionYear,
           privacyConsentAt: consentAt,
-          termsConsentAt: consentAt
+          privacyConsentVersion: PRIVACY_POLICY_VERSION,
+          termsConsentAt: consentAt,
+          termsConsentVersion: TERMS_VERSION,
+          consentSource: 'seed',
+          profileCompletedAt: consentAt
         }
       })
 
@@ -99,11 +131,6 @@ async function main() {
   const adminSeedPassword =
     process.env.ADMIN_SEED_PASSWORD || 'R5mQ9tX2sL7pV8cN'
   const adminSeedName = process.env.ADMIN_SEED_NAME
-  const defaultAdminEmails = [
-    'AdminNovaQ7K3Z9X@bgitu.ru',
-    'AdminNovaQ7K3Z9Y@bgitu.ru',
-    'AdminNovaQ7K3Z9Z@bgitu.ru'
-  ]
   const adminEmails = (process.env.ADMIN_SEED_EMAILS || '')
     .split(',')
     .map((email) => email.trim())
@@ -129,8 +156,13 @@ async function main() {
             name,
             password: hashedAdminPassword,
             role: 'ADMIN',
+            department: adminSeedDepartment,
             privacyConsentAt: consentAt,
-            termsConsentAt: consentAt
+            privacyConsentVersion: PRIVACY_POLICY_VERSION,
+            termsConsentAt: consentAt,
+            termsConsentVersion: TERMS_VERSION,
+            consentSource: 'seed',
+            profileCompletedAt: consentAt
           }
         })
       } else {
@@ -139,8 +171,14 @@ async function main() {
           data: {
             name: existingAdmin.name || name,
             role: 'ADMIN',
+            department: existingAdmin.department || adminSeedDepartment,
             privacyConsentAt: existingAdmin.privacyConsentAt || consentAt,
+            privacyConsentVersion:
+              existingAdmin.privacyConsentVersion || PRIVACY_POLICY_VERSION,
             termsConsentAt: existingAdmin.termsConsentAt || consentAt,
+            termsConsentVersion: existingAdmin.termsConsentVersion || TERMS_VERSION,
+            consentSource: existingAdmin.consentSource || 'seed',
+            profileCompletedAt: existingAdmin.profileCompletedAt || consentAt,
             ...(allowPasswordUpdate || !existingAdmin.password
               ? { password: hashedAdminPassword }
               : {})
@@ -152,11 +190,6 @@ async function main() {
     console.log('⚠️ ADMIN_SEED_PASSWORD не задан. Админы не созданы.')
   }
 
-  // Создание тестовых мероприятий (только если их нет)
-  const existingEvents = await prisma.event.count()
-  if (existingEvents > 0 && !allowReset) {
-    console.log('ℹ️ События уже существуют, пропускаем создание тестовых мероприятий.')
-  } else {
   const makeDate = (daysFromNow: number, hours: number, minutes: number) => {
     const date = new Date()
     date.setDate(date.getDate() + daysFromNow)
@@ -168,102 +201,192 @@ async function main() {
   const event2Date = makeDate(30, 18, 0)
   const event3Date = makeDate(-60, 9, 0)
 
-    await prisma.event.create({
-      data: {
-        title: 'День открытых дверей БГИТУ',
-      category: EventCategory.PUBLIC_EVENT,
-      date: event1Date,
-      time: '10:00 - 14:00',
-      duration: '4 часа',
-      location: 'Главный корпус, ауд. 301',
-      description: 'Приглашаем абитуриентов и их родителей на день открытых дверей БГИТУ.',
-      maxParticipants: 150,
-      currentParticipants: 1,
-      responsible: 'Иванов И.И.',
-      contact: 'i.ivanov@bgitu.ru',
-      creatorId: teacher.id,
-      isPast: false,
-      eventParticipants: {
-        create: [
-          {
-            userId: student.id,
-            status: 'CONFIRMED'
-          }
-        ]
-      }
+  const ensureSeedEvent = async (params: {
+    title: string
+    category: EventCategory
+    date: Date
+    time: string
+    duration: string
+    location: string
+    description: string
+    maxParticipants: number
+    currentParticipants: number
+    responsible: string
+    contact: string
+    isPast: boolean
+  }) => {
+    const existingEvent = await prisma.event.findFirst({
+      where: {
+        title: params.title,
+        creatorId: teacher.id,
+      },
+      select: { id: true },
+    })
+
+    if (existingEvent) {
+      return prisma.event.update({
+        where: { id: existingEvent.id },
+        data: {
+          category: params.category,
+          date: params.date,
+          time: params.time,
+          duration: params.duration,
+          location: params.location,
+          description: params.description,
+          maxParticipants: params.maxParticipants,
+          currentParticipants: params.currentParticipants,
+          responsible: params.responsible,
+          contact: params.contact,
+          isPast: params.isPast,
+          removedFromCalendar: false,
+          isPublic: true,
+        },
+      })
     }
+
+    return prisma.event.create({
+      data: {
+        title: params.title,
+        category: params.category,
+        date: params.date,
+        time: params.time,
+        duration: params.duration,
+        location: params.location,
+        description: params.description,
+        maxParticipants: params.maxParticipants,
+        currentParticipants: params.currentParticipants,
+        responsible: params.responsible,
+        contact: params.contact,
+        creatorId: teacher.id,
+        isPast: params.isPast,
+      },
+    })
+  }
+
+  const event1 = await ensureSeedEvent({
+    title: 'День открытых дверей БГИТУ',
+    category: EventCategory.PUBLIC_EVENT,
+    date: event1Date,
+    time: '10:00 - 14:00',
+    duration: '4 часа',
+    location: 'Главный корпус, ауд. 301',
+    description: 'Приглашаем абитуриентов и их родителей на день открытых дверей БГИТУ.',
+    maxParticipants: 150,
+    currentParticipants: 1,
+    responsible: 'Иванов И.И.',
+    contact: 'i.ivanov@bgitu.ru',
+    isPast: false,
   })
 
-    await prisma.event.create({
-      data: {
-        title: 'Концерт ко Дню студента',
-      category: EventCategory.CONCERT,
-      date: event2Date,
-      time: '18:00 - 21:00',
-      duration: '3 часа',
-      location: 'Актовый зал',
-      description: 'Ежегодный концерт, посвященный Дню студента',
-      maxParticipants: 300,
-      currentParticipants: 0,
-      responsible: 'Петрова А.А.',
-      contact: 'a.petrova@bgitu.ru',
-      creatorId: teacher.id,
-      isPast: false
-    }
+  await prisma.eventParticipant.upsert({
+    where: {
+      eventId_userId: {
+        eventId: event1.id,
+        userId: student.id,
+      },
+    },
+    update: {
+      status: 'CONFIRMED',
+    },
+    create: {
+      eventId: event1.id,
+      userId: student.id,
+      status: 'CONFIRMED',
+    },
+  })
+  await prisma.event.update({
+    where: { id: event1.id },
+    data: { currentParticipants: 1 },
   })
 
-    const event3 = await prisma.event.create({
-      data: {
-        title: 'Научная конференция "Инновации-2024"',
-      category: EventCategory.LECTURE,
-      date: event3Date,
-      time: '09:00 - 18:00',
-      duration: '8 часов',
-      location: 'Конференц-зал',
-      description: 'Ежегодная научная конференция с участием ведущих специалистов',
-      maxParticipants: 200,
-      currentParticipants: 0,
-      responsible: 'Сидоров С.С.',
-      contact: 's.sidorov@bgitu.ru',
-      creatorId: teacher.id,
-      isPast: true
-    }
+  await ensureSeedEvent({
+    title: 'Концерт ко Дню студента',
+    category: EventCategory.CONCERT,
+    date: event2Date,
+    time: '18:00 - 21:00',
+    duration: '3 часа',
+    location: 'Актовый зал',
+    description: 'Ежегодный концерт, посвященный Дню студента',
+    maxParticipants: 300,
+    currentParticipants: 0,
+    responsible: 'Петрова А.А.',
+    contact: 'a.petrova@bgitu.ru',
+    isPast: false,
   })
 
+  const event3 = await ensureSeedEvent({
+    title: 'Научная конференция "Инновации-2024"',
+    category: EventCategory.LECTURE,
+    date: event3Date,
+    time: '09:00 - 18:00',
+    duration: '8 часов',
+    location: 'Конференц-зал',
+    description: 'Ежегодная научная конференция с участием ведущих специалистов',
+    maxParticipants: 200,
+    currentParticipants: 0,
+    responsible: 'Сидоров С.С.',
+    contact: 's.sidorov@bgitu.ru',
+    isPast: true,
+  })
+
+  const existingReport = await prisma.eventReport.findUnique({
+    where: { eventId: event3.id },
+    select: { id: true },
+  })
+  if (existingReport) {
+    await prisma.eventReport.update({
+      where: { eventId: event3.id },
+      data: {
+        summary: 'Конференция прошла успешно, было представлено 25 докладов',
+        tasks: ['Подготовка зала', 'Регистрация участников', 'Кофе-брейк'],
+        reportDate: event3Date,
+        activeParticipants: ['Иванов И.И.', 'Петрова А.А.', 'Сидоров С.С.'],
+        images: [],
+      },
+    })
+  } else {
     await prisma.eventReport.create({
       data: {
         eventId: event3.id,
-      summary: 'Конференция прошла успешно, было представлено 25 докладов',
-      tasks: ['Подготовка зала', 'Регистрация участников', 'Кофе-брейк'],
-      reportDate: event3Date,
-      activeParticipants: ['Иванов И.И.', 'Петрова А.А.', 'Сидоров С.С.'],
-      images: []
-    }
-  })
+        summary: 'Конференция прошла успешно, было представлено 25 докладов',
+        tasks: ['Подготовка зала', 'Регистрация участников', 'Кофе-брейк'],
+        reportDate: event3Date,
+        activeParticipants: ['Иванов И.И.', 'Петрова А.А.', 'Сидоров С.С.'],
+        images: [],
+      },
+    })
+  }
 
+  const existingNotifications = await prisma.notification.count({
+    where: {
+      userId: student.id,
+      title: { in: ['Новое мероприятие', 'Напоминание'] },
+    },
+  })
+  if (existingNotifications === 0) {
     await prisma.notification.createMany({
       data: [
         {
           userId: student.id,
-        title: 'Новое мероприятие',
-        content: 'Создано новое мероприятие "День открытых дверей БГИТУ"',
-        type: NotificationType.NEW,
-        read: false
-      },
-      {
-        userId: student.id,
-        title: 'Напоминание',
-        content: 'Завтра в 18:00 состоится концерт ко Дню студента',
-        type: NotificationType.EVENT,
-        read: true
-      }
-    ]
+          title: 'Новое мероприятие',
+          content: 'Создано новое мероприятие "День открытых дверей БГИТУ"',
+          type: NotificationType.NEW,
+          read: false,
+        },
+        {
+          userId: student.id,
+          title: 'Напоминание',
+          content: 'Завтра в 18:00 состоится концерт ко Дню студента',
+          type: NotificationType.EVENT,
+          read: true,
+        },
+      ],
     })
   }
 
   console.log('✅ Сидинг базы данных завершен!')
   console.log(`👨‍🏫 Преподаватель: ${teacherSeedEmail} / ${teacherSeedPassword}`)
-  console.log(`👩‍🎓 Студент: student@bgitu.ru / student`)
+  console.log(`👩‍🎓 Студент: ${studentSeedEmail} / student`)
   if (adminSeedPassword) {
     console.log(`🛠️ Админы: ${resolvedAdminEmails.join(', ')}`)
     if (process.env.NODE_ENV !== 'production') {

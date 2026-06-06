@@ -12,6 +12,8 @@
  */
 
 import { spawn } from "node:child_process"
+import { existsSync, readFileSync } from "node:fs"
+import { createConnection, createServer } from "node:net"
 import { setTimeout as delay } from "node:timers/promises"
 
 const parsePositiveInt = (value: string | undefined, fallback: number) => {
@@ -19,9 +21,9 @@ const parsePositiveInt = (value: string | undefined, fallback: number) => {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
 }
 
-const smokeBaseUrl = process.env.SMOKE_BASE_URL || "http://localhost:3000"
-const url = new URL(smokeBaseUrl)
-const port = Number(url.port || 3000)
+const configuredSmokeBaseUrl = process.env.SMOKE_BASE_URL || "http://localhost:3000"
+const configuredUrl = new URL(configuredSmokeBaseUrl)
+const preferredPort = Number(configuredUrl.port || 3000)
 const readinessAttempts = parsePositiveInt(process.env.SMOKE_READINESS_ATTEMPTS, 60)
 const readinessIntervalMs = parsePositiveInt(process.env.SMOKE_READINESS_INTERVAL_MS, 1000)
 const readinessRequestTimeoutMs = parsePositiveInt(
@@ -29,6 +31,99 @@ const readinessRequestTimeoutMs = parsePositiveInt(
   5000
 )
 const smokeSuitesTimeoutMs = parsePositiveInt(process.env.SMOKE_SUITES_TIMEOUT_MS, 480000)
+const seedTimeoutMs = parsePositiveInt(process.env.SMOKE_SEED_TIMEOUT_MS, 240000)
+const parseEnvFile = (filePath: string) => {
+  if (!existsSync(filePath)) return {} as Record<string, string>
+
+  const values: Record<string, string> = {}
+  for (const line of readFileSync(filePath, "utf8").split(/\r?\n/g)) {
+    const normalized = line.trim()
+    if (!normalized || normalized.startsWith("#")) continue
+
+    const separatorIndex = normalized.indexOf("=")
+    if (separatorIndex <= 0) continue
+
+    const key = normalized.slice(0, separatorIndex).trim()
+    const rawValue = normalized.slice(separatorIndex + 1).trim()
+    values[key] = rawValue.replace(/^['"]|['"]$/g, "")
+  }
+
+  return values
+}
+const fileEnv = {
+  ...parseEnvFile(".env"),
+  ...parseEnvFile(".env.local"),
+}
+const readEnvValue = (key: string, fallback: string) =>
+  process.env[key] || fileEnv[key] || fallback
+const defaultStudentEmail = "student@bgitu.ru"
+const defaultStudentPassword = "student"
+const defaultTeacherEmail = readEnvValue("TEACHER_SEED_EMAIL", "MainTeacher2026@bgitu.ru")
+const defaultTeacherPassword = readEnvValue("TEACHER_SEED_PASSWORD", "T9mW2pK7sL8xQ4cN")
+const defaultAdminEmail =
+  readEnvValue("ADMIN_SEED_EMAILS", "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)[0] || "admin1@bgitu.ru"
+const defaultAdminPassword = readEnvValue("ADMIN_SEED_PASSWORD", "R5mQ9tX2sL7pV8cN")
+
+const isPortOccupied = async (host: string, port: number) =>
+  new Promise<boolean>((resolve) => {
+    const socket = createConnection({ host, port })
+    let settled = false
+
+    const finish = (value: boolean) => {
+      if (settled) return
+      settled = true
+      socket.destroy()
+      resolve(value)
+    }
+
+    socket.setTimeout(400)
+    socket.once("connect", () => finish(true))
+    socket.once("timeout", () => finish(false))
+    socket.once("error", () => finish(false))
+  })
+
+const resolveListenPort = async (preferred: number) => {
+  if (process.env.SMOKE_BASE_URL) {
+    return preferred
+  }
+
+  const startPort = (await isPortOccupied(configuredUrl.hostname, preferred)) ? 0 : preferred
+
+  return new Promise<number>((resolve, reject) => {
+    const tryListen = (port: number, allowFallback: boolean) => {
+      const server = createServer()
+      server.unref()
+
+      server.once("error", (error) => {
+        const code = (error as NodeJS.ErrnoException).code
+        if (allowFallback && code === "EADDRINUSE") {
+          tryListen(0, false)
+          return
+        }
+        reject(error)
+      })
+
+      server.listen(port, "127.0.0.1", () => {
+        const address = server.address()
+        const resolvedPort =
+          typeof address === "object" && address ? address.port : preferred
+
+        server.close((closeError) => {
+          if (closeError) {
+            reject(closeError)
+            return
+          }
+          resolve(resolvedPort)
+        })
+      })
+    }
+
+    tryListen(startPort, startPort !== 0)
+  })
+}
 
 const runShellCommand = (command: string) =>
   new Promise<number>((resolve, reject) => {
@@ -42,12 +137,16 @@ const runShellCommand = (command: string) =>
     child.on("exit", (code) => resolve(code ?? 1))
   })
 
-const runShellCommandWithTimeout = (command: string, timeoutMs: number) =>
+const runShellCommandWithTimeout = (
+  command: string,
+  timeoutMs: number,
+  env: NodeJS.ProcessEnv = process.env
+) =>
   new Promise<number>((resolve, reject) => {
     const child = spawn(command, {
       stdio: "inherit",
       shell: true,
-      env: process.env,
+      env,
     })
 
     let timedOut = false
@@ -126,14 +225,52 @@ const waitForServer = async (baseUrl: string) => {
   throw new Error(`Server did not become ready: ${readinessUrl} (${reason})`)
 }
 
+const ensureLocalSeedData = async (env: NodeJS.ProcessEnv) => {
+  if (process.env.SMOKE_SKIP_SEED === "true") return
+
+  console.log("[smoke-local] ensuring seeded demo accounts")
+  const exitCode = await runShellCommandWithTimeout(
+    "npm run db:seed",
+    seedTimeoutMs,
+    env
+  )
+
+  if (exitCode !== 0) {
+    throw new Error(`Seed command failed with code ${exitCode}`)
+  }
+}
+
 const run = async () => {
+  const port = await resolveListenPort(preferredPort)
+  const smokeBaseUrl =
+    process.env.SMOKE_BASE_URL ||
+    `${configuredUrl.protocol}//${configuredUrl.hostname}:${port}`
+  const childEnv = {
+    ...process.env,
+    SMOKE_BASE_URL: smokeBaseUrl,
+    SMOKE_STUDENT_EMAIL: process.env.SMOKE_STUDENT_EMAIL || defaultStudentEmail,
+    SMOKE_STUDENT_PASSWORD: process.env.SMOKE_STUDENT_PASSWORD || defaultStudentPassword,
+    SMOKE_TEACHER_EMAIL: process.env.SMOKE_TEACHER_EMAIL || defaultTeacherEmail,
+    SMOKE_TEACHER_PASSWORD: process.env.SMOKE_TEACHER_PASSWORD || defaultTeacherPassword,
+    SMOKE_ADMIN_EMAIL: process.env.SMOKE_ADMIN_EMAIL || defaultAdminEmail,
+    SMOKE_ADMIN_PASSWORD: process.env.SMOKE_ADMIN_PASSWORD || defaultAdminPassword,
+  }
+
+  if (!process.env.SMOKE_BASE_URL && port !== preferredPort) {
+    console.log(
+      `[smoke-local] preferred port ${preferredPort} is busy, using ${port}`
+    )
+  }
+
   console.log(`[smoke-local] starting server on port ${port}`)
   console.log(`[smoke-local] suites timeout: ${smokeSuitesTimeoutMs}ms`)
+
+  await ensureLocalSeedData(childEnv)
 
   const server = spawn(`npm run start -- --port ${port}`, {
     stdio: "inherit",
     shell: true,
-    env: process.env,
+    env: childEnv,
   })
 
   try {
@@ -141,7 +278,8 @@ const run = async () => {
     console.log("[smoke-local] server is ready, running smoke suites")
     const exitCode = await runShellCommandWithTimeout(
       "npm run test:smoke",
-      smokeSuitesTimeoutMs
+      smokeSuitesTimeoutMs,
+      childEnv
     )
     if (exitCode !== 0) {
       throw new Error(`Smoke suites failed with code ${exitCode}`)

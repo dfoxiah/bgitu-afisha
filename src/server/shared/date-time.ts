@@ -11,13 +11,13 @@
  * - Used by events/admin import/update endpoints
  */
 
-const parseTimeParts = (value?: string | null) => {
+export const parseTimeParts = (value?: string | null) => {
   if (!value) return null
 
   const raw = String(value).trim()
   if (!raw) return null
 
-  const match = raw.match(/^(\d{1,2})[:.](\d{2})$/)
+  const match = raw.match(/(\d{1,2})[:.](\d{2})/)
   if (!match) return null
 
   const hours = Number(match[1])
@@ -96,4 +96,3 @@ export const formatLocalTime = (date: Date) => {
   const mm = String(date.getMinutes()).padStart(2, "0")
   return `${hh}:${mm}`
 }
-

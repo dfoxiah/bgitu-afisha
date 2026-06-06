@@ -93,6 +93,24 @@ const fetchWithJar = async (
   return response
 }
 
+const jsonRequest = async (
+  path: string,
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
+  body: unknown,
+  jar: CookieJar,
+  label?: string
+) =>
+  fetchWithJar(
+    path,
+    {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    jar,
+    label
+  )
+
 const login = async (credentials: Credentials) => {
   const jar: CookieJar = new Map()
 
@@ -220,14 +238,164 @@ const run = async () => {
     assert.equal(adminMetricsResponse.status, 200, "Admin metrics endpoint must return 200")
 
     const adminEventsResponse = await fetchWithJar(
-      "/api/admin/events?limit=1",
+      "/api/admin/events?limit=5",
       {},
       adminJar,
-      "GET /api/admin/events?limit=1"
+      "GET /api/admin/events?limit=5"
     )
     assert.equal(adminEventsResponse.status, 200, "Admin events endpoint must return 200")
 
-    const adminEvents = (await adminEventsResponse.json()) as Array<{ id: string }>
+    const diagnosticsResponse = await fetchWithJar(
+      "/api/admin/diagnostics",
+      {},
+      adminJar,
+      "GET /api/admin/diagnostics"
+    )
+    assert.equal(diagnosticsResponse.status, 200, "Admin diagnostics endpoint must return 200")
+
+    const structureResponse = await fetchWithJar(
+      "/api/admin/structure",
+      {},
+      adminJar,
+      "GET /api/admin/structure"
+    )
+    assert.equal(structureResponse.status, 200, "Admin structure endpoint must return 200")
+
+    const groupPromotionPreviewResponse = await jsonRequest(
+      "/api/admin/structure",
+      "POST",
+      { dryRun: true },
+      adminJar,
+      "POST /api/admin/structure (dry-run)"
+    )
+    assert.equal(
+      groupPromotionPreviewResponse.status,
+      200,
+      "Admin structure dry-run must return 200"
+    )
+
+    const importHistoryResponse = await fetchWithJar(
+      "/api/admin/import",
+      {},
+      adminJar,
+      "GET /api/admin/import"
+    )
+    assert.equal(importHistoryResponse.status, 200, "Admin import history endpoint must return 200")
+
+    const importTemplateResponse = await fetchWithJar(
+      "/api/admin/import?template=users",
+      {},
+      adminJar,
+      "GET /api/admin/import?template=users"
+    )
+    assert.equal(importTemplateResponse.status, 200, "Admin import template endpoint must return 200")
+    assert.ok(
+      (importTemplateResponse.headers.get("content-type") || "").includes("text/csv"),
+      "Admin import template must return CSV content-type"
+    )
+
+    const newsTemplatesResponse = await fetchWithJar(
+      "/api/news-templates",
+      {},
+      adminJar,
+      "GET /api/news-templates"
+    )
+    assert.equal(newsTemplatesResponse.status, 200, "News templates endpoint must return 200 for admin")
+
+    let createdUserId: string | null = null
+    try {
+      const tempUserEmail = `smoke.user.${Date.now()}@bgitu.ru`
+      const createUserResponse = await jsonRequest(
+        "/api/admin/users",
+        "POST",
+        {
+          name: "Smoke User",
+          email: tempUserEmail,
+          password: "smoke123",
+          role: "STUDENT",
+          department: "ФИТ",
+          group: "СМ-01",
+          admissionYear: 2024,
+        },
+        adminJar,
+        "POST /api/admin/users"
+      )
+      assert.equal(createUserResponse.status, 201, "Admin user create must return 201")
+      const createdUser = (await createUserResponse.json()) as { id: string }
+      assert.ok(createdUser.id, "Created admin user must have id")
+      createdUserId = createdUser.id
+
+      const updateUserResponse = await jsonRequest(
+        `/api/admin/users/${createdUserId}`,
+        "PUT",
+        {
+          name: "Smoke User Updated",
+          department: "ФИТ / smoke",
+          groupChangeCount: 0,
+        },
+        adminJar,
+        "PUT /api/admin/users/:id"
+      )
+      assert.equal(updateUserResponse.status, 200, "Admin user update must return 200")
+    } finally {
+      if (createdUserId) {
+        const deleteUserResponse = await fetchWithJar(
+          `/api/admin/users/${createdUserId}`,
+          { method: "DELETE" },
+          adminJar,
+          "DELETE /api/admin/users/:id"
+        )
+        assert.equal(deleteUserResponse.status, 200, "Admin user delete must return 200")
+      }
+    }
+
+    let createdTemplateId: string | null = null
+    try {
+      const createTemplateResponse = await jsonRequest(
+        "/api/news-templates",
+        "POST",
+        {
+          name: `Smoke template ${Date.now()}`,
+          description: "Smoke validation template",
+          body: "Новость о {{event.title}} на {{event.date}}",
+        },
+        adminJar,
+        "POST /api/news-templates"
+      )
+      assert.equal(createTemplateResponse.status, 201, "News template create must return 201")
+      const createdTemplate = (await createTemplateResponse.json()) as { id: string }
+      assert.ok(createdTemplate.id, "Created news template must have id")
+      createdTemplateId = createdTemplate.id
+
+      const updateTemplateResponse = await jsonRequest(
+        `/api/news-templates/${createdTemplateId}`,
+        "PUT",
+        {
+          name: "Smoke template updated",
+          description: "Updated by smoke",
+          body: "Обновленная новость о {{event.title}}",
+        },
+        adminJar,
+        "PUT /api/news-templates/:id"
+      )
+      assert.equal(updateTemplateResponse.status, 200, "News template update must return 200")
+    } finally {
+      if (createdTemplateId) {
+        const deleteTemplateResponse = await fetchWithJar(
+          `/api/news-templates/${createdTemplateId}`,
+          { method: "DELETE" },
+          adminJar,
+          "DELETE /api/news-templates/:id"
+        )
+        assert.equal(deleteTemplateResponse.status, 200, "News template delete must return 200")
+      }
+    }
+
+    const adminEvents = (await adminEventsResponse.json()) as Array<{
+      id: string
+      isPast?: boolean
+      title?: string
+    }>
     if (adminEvents.length > 0) {
       const exportResponse = await fetchWithJar(
         `/api/admin/events/${adminEvents[0].id}/export`,
@@ -240,6 +408,76 @@ const run = async () => {
       assert.ok(
         contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
         "Admin event export must return XLSX content-type"
+      )
+
+      const preferredSeedEventTitles = new Set([
+        "День открытых дверей БГИТУ",
+        "Концерт ко Дню студента",
+      ])
+      const eventCandidates = [
+        ...adminEvents.filter(
+          (event) =>
+            event.isPast !== true &&
+            Boolean(event.title && preferredSeedEventTitles.has(event.title))
+        ),
+        ...adminEvents.filter((event) => event.isPast !== true),
+      ]
+
+      let broadcastPayload: { broadcastId?: string } | null = null
+      let lastBroadcastError = "No upcoming events available"
+
+      for (const event of eventCandidates) {
+        const broadcastResponse = await jsonRequest(
+          "/api/notifications",
+          "POST",
+          {
+            eventId: event.id,
+            content: "Smoke: мероприятие [Название] запланировано на [Дата] [Время].",
+            audience: "users",
+            recipients: "all",
+            departments: ["ФИТ"],
+            groups: [],
+            userIds: [],
+            type: "EVENT",
+          },
+          adminJar,
+          `POST /api/notifications (broadcast ${event.id})`
+        )
+
+        if (broadcastResponse.status === 200) {
+          broadcastPayload = (await broadcastResponse.json()) as {
+            broadcastId?: string
+          }
+          break
+        }
+
+        try {
+          const errorPayload = (await broadcastResponse.json()) as {
+            error?: string
+            message?: string
+          }
+          lastBroadcastError = errorPayload.error || errorPayload.message || `status ${broadcastResponse.status}`
+        } catch {
+          lastBroadcastError = `status ${broadcastResponse.status}`
+        }
+      }
+
+      assert.ok(
+        broadcastPayload,
+        `Notification broadcast endpoint must return 200 for at least one event (${lastBroadcastError})`
+      )
+      assert.ok(broadcastPayload.broadcastId, "Broadcast response must include broadcastId")
+
+      const cancelBroadcastResponse = await fetchWithJar(
+        `/api/notifications/broadcast/${broadcastPayload.broadcastId}`,
+        { method: "DELETE" },
+        adminJar,
+        "DELETE /api/notifications/broadcast/:broadcastId"
+      )
+      assert.equal(
+        cancelBroadcastResponse.status,
+        200,
+        "Notification broadcast cancel endpoint must return 200"
       )
     } else {
       logSkip("No admin events available to validate export endpoint")
