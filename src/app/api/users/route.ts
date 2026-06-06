@@ -16,6 +16,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { Role, type Prisma } from '@prisma/client'
+import { isContentManagerRole, isRoleValue } from '@/lib/roles'
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
   }
 
-  if (session.user.role !== 'TEACHER' && session.user.role !== 'ADMIN') {
+  if (!isContentManagerRole(session.user.role)) {
     return NextResponse.json({ error: 'Недостаточно прав' }, { status: 403 })
   }
 
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
 
   const where: Prisma.UserWhereInput = {}
 
-  if (['TEACHER', 'ADMIN', 'STUDENT'].includes(role)) {
+  if (isRoleValue(role)) {
     where.role = role
   }
 

@@ -20,6 +20,7 @@ import { buildEventAttendanceExcel } from "@/server/admin/admin-metrics-service"
 import { canModerateEventByRole } from "@/server/shared/session"
 import { errorJson } from "@/server/shared/http-response"
 import { isServiceError } from "@/server/shared/service-error"
+import { isAdminRole, isContentManagerRole } from "@/lib/roles"
 
 type RouteParams = {
   params: Promise<{ id: string }>
@@ -33,14 +34,14 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     return errorJson(401, "UNAUTHORIZED", "Не авторизован")
   }
 
-  if (session.user.role !== "TEACHER" && session.user.role !== "ADMIN") {
+  if (!isContentManagerRole(session.user.role)) {
     return errorJson(403, "FORBIDDEN", "Недостаточно прав")
   }
 
   const { id } = await params
 
   try {
-    if (session.user.role !== "ADMIN") {
+    if (!isAdminRole(session.user.role)) {
       const event = await prisma.event.findUnique({
         where: { id },
         select: {
@@ -85,4 +86,3 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     return errorJson(500, "SERVER_ERROR", "Ошибка сервера")
   }
 }
-

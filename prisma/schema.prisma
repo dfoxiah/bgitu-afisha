@@ -19,19 +19,32 @@ model User {
   password      String?
   department    String?
   group         String?
+  admissionYear Int?
   groupChangeCount Int         @default(0)
   bio           String?        @db.Text
+  profileCompletedAt DateTime?
   notifyNewEvents Boolean       @default(true)
   notifyChanges   Boolean       @default(true)
   notifyNews      Boolean       @default(false)
+  notifyInApp     Boolean       @default(true)
+  notifyEmail     Boolean       @default(false)
+  notifyVk        Boolean       @default(false)
   notificationCategories EventCategory[] @default([])
+  vkUserId      String?
+  yandexEmail   String?
   privacyConsentAt DateTime?
+  privacyConsentVersion String?
   termsConsentAt   DateTime?
+  termsConsentVersion   String?
+  consentSource String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   
   accounts          Account[]
   sessions          Session[]
+  consents          UserConsent[]
+  importJobs        ImportJob[]         @relation("ImportActor")
+  newsTemplates     NewsTemplate[]      @relation("NewsTemplateCreator")
   eventsCreated     Event[]             @relation("EventCreator")
   eventsModerated   EventModerator[]
   eventParticipants EventParticipant[]
@@ -86,6 +99,8 @@ model Event {
   description       String       @db.Text
   maxParticipants   Int
   currentParticipants Int        @default(0)
+  requiresApproval  Boolean      @default(true)
+  isPublic          Boolean      @default(true)
   isPast            Boolean      @default(false)
   removedFromCalendar Boolean    @default(false)
   isNews            Boolean      @default(false)
@@ -104,11 +119,13 @@ model Event {
   
   // Metadata
   createdAt         DateTime     @default(now())
+  completedAt       DateTime?
   updatedAt         DateTime     @updatedAt
   
   @@index([date])
   @@index([category])
   @@index([isPast])
+  @@index([isPublic])
 }
 
 model EventModerator {
@@ -158,14 +175,18 @@ model EventReport {
   id                String   @id @default(cuid())
   eventId           String   @unique
   event             Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  status            ReportStatus @default(DRAFT)
   summary           String   @db.Text
   tasks             String[] // JSON array stored as text
   comment           String?  @db.Text
   reportDate        DateTime
   activeParticipants String[] // JSON array stored as text
   images            String[] // JSON array stored as text
+  publishedAt       DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  @@index([status])
 }
 
 model Notification {
@@ -176,6 +197,7 @@ model Notification {
   content   String           @db.Text
   type      NotificationType
   read      Boolean          @default(false)
+  link      String?
   metadata  Json?            // Store additional data as JSON
   createdAt DateTime         @default(now())
   
@@ -183,9 +205,61 @@ model Notification {
   @@index([createdAt])
 }
 
+model UserConsent {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      ConsentType
+  version   String
+  source    String
+  provider  String?
+  ip        String?
+  userAgent String?
+  acceptedAt DateTime   @default(now())
+
+  @@index([userId, type])
+  @@index([acceptedAt])
+}
+
+model ImportJob {
+  id        String       @id @default(cuid())
+  actorId   String?
+  actor     User?        @relation("ImportActor", fields: [actorId], references: [id], onDelete: SetNull)
+  type      ImportType
+  mode      String
+  status    ImportStatus
+  inputRows Int          @default(0)
+  created   Int          @default(0)
+  updated   Int          @default(0)
+  skipped   Int          @default(0)
+  errors    Json?
+  warnings  Json?
+  fileName  String?
+  createdAt DateTime     @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([type, createdAt])
+}
+
+model NewsTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  body        String   @db.Text
+  variables   String[] @default([])
+  createdById String?
+  createdBy   User?    @relation("NewsTemplateCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdById])
+}
+
 enum Role {
   STUDENT
   TEACHER
+  MODERATOR
+  EDITOR
   ADMIN
 }
 
@@ -206,9 +280,41 @@ enum NotificationType {
   COMPLETE
   EVENT
   SYSTEM
+  ACTIVE_PARTICIPANT
+  LEADER_ASSIGNED
+  ROLE_ASSIGNED
+  PARTICIPANT_ADDED
+  PARTICIPATION_STATUS_CHANGED
+  EVENT_COMPLETED
+  REPORT_DRAFT_CREATED
+  IMPORT_COMPLETED
+  IMPORT_COMPLETED_WITH_ERRORS
+  ACCESS_CHANGED
 }
 
 enum ParticipantStatus {
   PENDING
   CONFIRMED
+}
+
+enum ConsentType {
+  PRIVACY
+  TERMS
+}
+
+enum ImportType {
+  USERS
+  EVENTS
+  NEWS
+}
+
+enum ImportStatus {
+  COMPLETED
+  COMPLETED_WITH_ERRORS
+  FAILED
+}
+
+enum ReportStatus {
+  DRAFT
+  PUBLISHED
 }

@@ -1,6 +1,6 @@
 /**
  * File responsibility:
- * Build privacy-aware student attendance history for viewer roles.
+ * Build privacy-aware attendance history for student/teacher profiles.
  *
  * Main logic:
  * - Enforce access scope (self/admin/teacher-context)
@@ -15,6 +15,7 @@
 import { ParticipantStatus, Role, type EventCategory } from "@prisma/client"
 import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
 import { prisma } from "@/lib/prisma"
+import { isContentManagerRole } from "@/lib/roles"
 
 const TEACHER_HISTORY_DAYS = 180
 const FULL_HISTORY_DAYS = 365
@@ -25,7 +26,7 @@ type Viewer = {
   role: Role
 }
 
-type StudentIdentity = {
+type UserIdentity = {
   id: string
   role: Role
   name: string | null
@@ -34,7 +35,7 @@ type StudentIdentity = {
 
 type HistoryMode = "SELF_FULL" | "ADMIN_FULL" | "TEACHER_CONTEXT"
 
-export type StudentAttendanceHistoryItem = {
+export type UserAttendanceHistoryItem = {
   eventId: string
   title: string
   category: EventCategory
@@ -44,7 +45,7 @@ export type StudentAttendanceHistoryItem = {
   isActive: boolean
 }
 
-export type StudentAttendanceHistory = {
+export type UserAttendanceHistory = {
   mode: HistoryMode
   period: {
     from: Date
@@ -59,7 +60,7 @@ export type StudentAttendanceHistory = {
     confirmationRatePercent: number
     activityRatePercent: number
   }
-  items: StudentAttendanceHistoryItem[]
+  items: UserAttendanceHistoryItem[]
 }
 
 const normalizeParticipantKey = (value: string | null | undefined) =>
@@ -73,17 +74,17 @@ const safePercent = (part: number, total: number) => {
   return Math.round((part / total) * 1000) / 10
 }
 
-const resolveMode = async (viewer: Viewer, student: StudentIdentity): Promise<HistoryMode | null> => {
-  if (viewer.id === student.id) return "SELF_FULL"
+const resolveMode = async (viewer: Viewer, user: UserIdentity): Promise<HistoryMode | null> => {
+  if (viewer.id === user.id) return "SELF_FULL"
   if (viewer.role === Role.ADMIN) return "ADMIN_FULL"
 
-  if (viewer.role !== Role.TEACHER || student.role !== Role.STUDENT) {
+  if (!isContentManagerRole(viewer.role) || user.role !== Role.STUDENT) {
     return null
   }
 
   const relationCount = await prisma.eventParticipant.count({
     where: {
-      userId: student.id,
+      userId: user.id,
       event: {
         OR: [{ creatorId: viewer.id }, { moderators: { some: { userId: viewer.id } } }],
       },
@@ -94,11 +95,11 @@ const resolveMode = async (viewer: Viewer, student: StudentIdentity): Promise<Hi
   return "TEACHER_CONTEXT"
 }
 
-export async function getStudentAttendanceHistoryForViewer(params: {
+export async function getUserAttendanceHistoryForViewer(params: {
   viewer: Viewer
-  student: StudentIdentity
-}): Promise<StudentAttendanceHistory | null> {
-  const mode = await resolveMode(params.viewer, params.student)
+  user: UserIdentity
+}): Promise<UserAttendanceHistory | null> {
+  const mode = await resolveMode(params.viewer, params.user)
   if (!mode) return null
 
   const days = mode === "TEACHER_CONTEXT" ? TEACHER_HISTORY_DAYS : FULL_HISTORY_DAYS
@@ -115,7 +116,7 @@ export async function getStudentAttendanceHistoryForViewer(params: {
 
   const rows = await prisma.eventParticipant.findMany({
     where: {
-      userId: params.student.id,
+      userId: params.user.id,
       event: {
         isNews: false,
         date: { gte: periodFrom, lte: periodTo },
@@ -139,16 +140,16 @@ export async function getStudentAttendanceHistoryForViewer(params: {
     take: MAX_HISTORY_ROWS,
   })
 
-  const studentKeys = [normalizeParticipantKey(params.student.name), normalizeParticipantKey(params.student.email)].filter(Boolean)
+  const participantKeys = [normalizeParticipantKey(params.user.name), normalizeParticipantKey(params.user.email)].filter(Boolean)
 
-  const items: StudentAttendanceHistoryItem[] = rows.map((row) => {
+  const items: UserAttendanceHistoryItem[] = rows.map((row) => {
     const activeSet = new Set(
       (row.event.report?.activeParticipants || [])
         .map((item) => normalizeParticipantKey(item))
         .filter(Boolean)
     )
     const isConfirmed = row.status === ParticipantStatus.CONFIRMED
-    const isActive = isConfirmed && studentKeys.some((key) => activeSet.has(key))
+    const isActive = isConfirmed && participantKeys.some((key) => activeSet.has(key))
 
     return {
       eventId: row.event.id,
@@ -168,9 +169,9 @@ export async function getStudentAttendanceHistoryForViewer(params: {
   const { ip, userAgent } = buildAuditMeta()
   await logAuditEvent({
     actorId: params.viewer.id,
-    action: "STUDENT_ATTENDANCE_HISTORY_VIEW",
+    action: "USER_ATTENDANCE_HISTORY_VIEW",
     entityType: "User",
-    entityId: params.student.id,
+    entityId: params.user.id,
     metadata: {
       mode,
       periodDays: days,
@@ -199,4 +200,14 @@ export async function getStudentAttendanceHistoryForViewer(params: {
     },
     items,
   }
+}
+
+export async function getStudentAttendanceHistoryForViewer(params: {
+  viewer: Viewer
+  student: UserIdentity
+}): Promise<UserAttendanceHistory | null> {
+  return getUserAttendanceHistoryForViewer({
+    viewer: params.viewer,
+    user: params.student,
+  })
 }

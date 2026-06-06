@@ -15,6 +15,7 @@
 import bcrypt from "bcryptjs"
 import { EventCategory, Role } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { isModeratorRole } from "@/lib/roles"
 import {
   normalizeCategory,
   normalizeRole,
@@ -151,6 +152,7 @@ export const importUsersRows = async (rows: ImportRow[], mode: ImportMode): Prom
     }
 
     const groupChangeCount = row.groupChangeCount ? Number(row.groupChangeCount) || 0 : undefined
+    const admissionYear = row.admissionYear ? Number(row.admissionYear) || undefined : undefined
     const password = row.password ? String(row.password).trim() : ""
     const existingUser = existingByEmail.get(email)
 
@@ -165,6 +167,7 @@ export const importUsersRows = async (rows: ImportRow[], mode: ImportMode): Prom
         role?: Role
         department?: string | null
         group?: string | null
+        admissionYear?: number | null
         groupChangeCount?: number
         bio?: string | null
         privacyConsentAt?: Date | null
@@ -175,6 +178,7 @@ export const importUsersRows = async (rows: ImportRow[], mode: ImportMode): Prom
         role,
         department: row.department ? String(row.department).trim() : null,
         group: row.group ? String(row.group).trim() : null,
+        admissionYear: admissionYear ?? null,
         groupChangeCount,
         bio: row.bio ? String(row.bio).trim() : null,
         privacyConsentAt: privacyParsed.value,
@@ -204,6 +208,7 @@ export const importUsersRows = async (rows: ImportRow[], mode: ImportMode): Prom
       role: Role
       department: string | null
       group: string | null
+      admissionYear: number | null
       groupChangeCount: number
       bio: string | null
       privacyConsentAt?: Date | null
@@ -215,6 +220,7 @@ export const importUsersRows = async (rows: ImportRow[], mode: ImportMode): Prom
       role: role || Role.STUDENT,
       department: row.department ? String(row.department).trim() : null,
       group: row.group ? String(row.group).trim() : null,
+      admissionYear: admissionYear ?? null,
       groupChangeCount: groupChangeCount ?? 0,
       bio: row.bio ? String(row.bio).trim() : null,
       privacyConsentAt: privacyParsed.value,
@@ -317,9 +323,9 @@ export const importEventRows = async (
       continue
     }
 
-    const invalidModerators = moderatorUsers.filter((user) => user.role !== "TEACHER" && user.role !== "ADMIN")
+    const invalidModerators = moderatorUsers.filter((user) => !isModeratorRole(user.role))
     if (invalidModerators.length > 0) {
-      result.errors.push(`строка ${rowNumber}: модераторы должны быть TEACHER или ADMIN`)
+      result.errors.push(`строка ${rowNumber}: модераторы должны быть TEACHER, EDITOR или ADMIN`)
       continue
     }
 
@@ -333,6 +339,8 @@ export const importEventRows = async (
       location,
       description,
       maxParticipants: row.maxParticipants ? Number(row.maxParticipants) || 0 : 0,
+      requiresApproval: parseBooleanValue(row.requiresApproval) ?? true,
+      isPublic: parseBooleanValue(row.isPublic) ?? true,
       isPast: parseBooleanValue(row.isPast) ?? false,
       isNews: importIsNews ? true : parseBooleanValue(row.isNews) ?? false,
       removedFromCalendar: parseBooleanValue(row.removedFromCalendar) ?? false,
@@ -399,4 +407,3 @@ export const importEventRows = async (
 
   return result
 }
-

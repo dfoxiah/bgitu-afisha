@@ -34,6 +34,8 @@ export const USER_HEADER_ALIASES: Record<string, string> = {
   факультет: "department",
   group: "group",
   группа: "group",
+  admissionyear: "admissionYear",
+  "год поступления": "admissionYear",
   groupchangecount: "groupChangeCount",
   bio: "bio",
   "о себе": "bio",
@@ -62,6 +64,9 @@ export const EVENT_HEADER_ALIASES: Record<string, string> = {
   maxparticipants: "maxParticipants",
   max: "maxParticipants",
   ispast: "isPast",
+  ispublic: "isPublic",
+  public: "isPublic",
+  requiresapproval: "requiresApproval",
   isnews: "isNews",
   removedfromcalendar: "removedFromCalendar",
   images: "images",
@@ -262,12 +267,20 @@ export const normalizeRole = (value: unknown): Role | undefined => {
   if (!raw) return undefined
 
   const upper = raw.toUpperCase()
-  if (upper === "STUDENT" || upper === "TEACHER" || upper === "ADMIN") {
+  if (
+    upper === "STUDENT" ||
+    upper === "TEACHER" ||
+    upper === "MODERATOR" ||
+    upper === "EDITOR" ||
+    upper === "ADMIN"
+  ) {
     return upper
   }
 
   if (raw === "Студент") return Role.STUDENT
   if (raw === "Преподаватель") return Role.TEACHER
+  if (raw === "Модератор") return Role.MODERATOR
+  if (raw === "Редактор") return Role.EDITOR
   if (raw === "Администратор") return Role.ADMIN
 
   return undefined
@@ -284,4 +297,3 @@ export const normalizeCategory = (value: unknown): EventCategory | undefined => 
 
   return CategoryReverseMap[raw]
 }
-

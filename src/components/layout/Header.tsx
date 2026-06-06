@@ -20,6 +20,7 @@ import { usePathname, useRouter } from "next/navigation"
 import NotificationBell from "@/components/ui/NotificationBell"
 import SearchInput from "@/components/ui/SearchInput"
 import { useAppContext } from "@/contexts/AppContext"
+import { isContentManagerRole } from "@/lib/roles"
 
 type HeaderMenuItem = {
   href: string
@@ -28,11 +29,17 @@ type HeaderMenuItem = {
 }
 
 const BASE_NAV: HeaderMenuItem[] = [
-  { href: "/", label: "Главная", icon: "house" },
+  { href: "/dashboard", label: "Главная", icon: "house" },
   { href: "/events", label: "События", icon: "calendar-days" },
   { href: "/news", label: "Медиа", icon: "newspaper" },
   { href: "/calendar", label: "Календарь", icon: "table-cells-large" },
   { href: "/notifications", label: "Уведомления", icon: "bell" },
+]
+
+const PUBLIC_NAV: HeaderMenuItem[] = [
+  { href: "/afisha", label: "Афиша", icon: "calendar-days" },
+  { href: "/legal/privacy", label: "Политика", icon: "file-shield" },
+  { href: "/legal/terms", label: "Соглашение", icon: "file-contract" },
 ]
 
 export default function Header() {
@@ -53,11 +60,16 @@ export default function Header() {
     !pathname.startsWith("/register") &&
     !pathname.startsWith("/news")
   const shouldHideHeader = isHeaderHidden && !isHeaderHovered && !menuOpen
+  const homeHref = session ? "/dashboard" : "/afisha"
 
   const desktopNavItems = useMemo<HeaderMenuItem[]>(() => {
+    if (!session) {
+      return PUBLIC_NAV
+    }
+
     const items = [...BASE_NAV]
 
-    if (session?.user?.role === "TEACHER" || session?.user?.role === "ADMIN") {
+    if (isContentManagerRole(session?.user?.role)) {
       items.push({ href: "/events/create", label: "Создать", icon: "plus" })
     }
 
@@ -177,7 +189,7 @@ export default function Header() {
       )}
 
       <header
-        className={`sticky top-0 z-[920] border-b border-primary/12 bg-white/84 shadow-[0_10px_28px_rgba(17,39,74,0.1)] backdrop-blur-xl transition-transform duration-300 ease-out will-change-transform ${
+        className={`site-header sticky top-0 z-[920] border-b border-primary/12 bg-white/84 shadow-[0_10px_28px_rgba(17,39,74,0.1)] backdrop-blur-xl transition-transform duration-300 ease-out will-change-transform ${
           shouldHideHeader ? "-translate-y-full" : "translate-y-0"
         }`}
         onMouseEnter={() => setIsHeaderHovered(true)}
@@ -199,7 +211,7 @@ export default function Header() {
 
         <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
           <div className="flex items-center justify-between gap-4">
-            <Link href="/" className="group flex min-w-0 items-center gap-3" onClick={hardNavigate("/")}>
+            <Link href={homeHref} className="group flex min-w-0 items-center gap-3" onClick={hardNavigate(homeHref)}>
               <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent text-xs font-bold text-white shadow-lg">
                 БГ
               </span>

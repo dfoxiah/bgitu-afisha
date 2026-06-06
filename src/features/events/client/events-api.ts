@@ -49,9 +49,13 @@ const normalizeReport = (report: unknown) => {
 
 export const normalizeEventFromApi = (event: unknown): Event => {
   const value = event as Record<string, unknown>
+  const requiresApprovalRaw = value.requiresApproval
+  const requiresApproval =
+    typeof requiresApprovalRaw === "boolean" ? requiresApprovalRaw : true
 
   return {
     ...(value as unknown as Event),
+    requiresApproval,
     date: new Date(String(value.date)),
     createdAt: new Date(String(value.createdAt)),
     updatedAt: new Date(String(value.updatedAt)),
@@ -83,6 +87,43 @@ export const fetchEventsApi = async (
 
   const payload = (await response.json()) as unknown[]
   return payload.map(normalizeEventFromApi)
+}
+
+export const fetchPublicEventsApi = async (options: FetchEventsOptions = {}) => {
+  const buildUrl = (past: boolean) => {
+    const query = new URLSearchParams()
+    query.set("public", "true")
+    query.set(past ? "past" : "upcoming", "true")
+    query.set("limit", "200")
+    return `/api/events?${query.toString()}`
+  }
+
+  const [upcomingResponse, pastResponse] = await Promise.all([
+    fetch(buildUrl(false), { credentials: "include", signal: options.signal }),
+    fetch(buildUrl(true), { credentials: "include", signal: options.signal }),
+  ])
+
+  if (!upcomingResponse.ok) {
+    throw await toError(upcomingResponse, "Ошибка загрузки публичной афиши")
+  }
+  if (!pastResponse.ok) {
+    throw await toError(pastResponse, "Ошибка загрузки архива публичной афиши")
+  }
+
+  const [upcomingPayload, pastPayload] = await Promise.all([
+    upcomingResponse.json() as Promise<unknown[]>,
+    pastResponse.json() as Promise<unknown[]>,
+  ])
+
+  const unique = new Map<string, Event>()
+  ;[...upcomingPayload, ...pastPayload].forEach((item) => {
+    const event = normalizeEventFromApi(item)
+    unique.set(event.id, event)
+  })
+
+  return Array.from(unique.values()).sort(
+    (left, right) => new Date(left.date).getTime() - new Date(right.date).getTime()
+  )
 }
 
 export const fetchEventByIdApi = async (eventId: string) => {

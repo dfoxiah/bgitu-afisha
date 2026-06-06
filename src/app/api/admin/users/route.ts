@@ -14,15 +14,19 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import bcrypt from "bcryptjs"
-import { Role } from "@prisma/client"
 import { authOptions } from "@/lib/auth"
 import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
 import { prisma } from "@/lib/prisma"
 import { ensureAdminSession } from "@/server/admin/admin-session"
 import { errorJson } from "@/server/shared/http-response"
+import { isRoleValue } from "@/lib/roles"
 
-const isRole = (value: string): value is Role =>
-  value === "STUDENT" || value === "TEACHER" || value === "ADMIN"
+const normalizeAdmissionYear = (value: unknown) => {
+  if (value === undefined || value === null || String(value).trim() === "") return null
+  const year = Number(value)
+  const currentYear = new Date().getFullYear()
+  return Number.isInteger(year) && year >= 1990 && year <= currentYear + 1 ? year : null
+}
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -34,7 +38,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const search = searchParams.get("search")?.trim()
   const roleParam = searchParams.get("role")?.trim() || ""
-  const role = isRole(roleParam) ? roleParam : null
+  const role = isRoleValue(roleParam) ? roleParam : null
   const limit = Number(searchParams.get("limit") || 50)
   const offset = Number(searchParams.get("offset") || 0)
 
@@ -61,6 +65,7 @@ export async function GET(req: NextRequest) {
       role: true,
       department: true,
       group: true,
+      admissionYear: true,
       groupChangeCount: true,
       bio: true,
       privacyConsentAt: true,
@@ -101,7 +106,7 @@ export async function POST(req: NextRequest) {
     return errorJson(400, "VALIDATION_ERROR", "Заполните email, имя и пароль")
   }
 
-  if (!isRole(roleRaw)) {
+  if (!isRoleValue(roleRaw)) {
     return errorJson(400, "VALIDATION_ERROR", "Некорректная роль")
   }
 
@@ -125,6 +130,7 @@ export async function POST(req: NextRequest) {
       role: roleRaw,
       department: body.department ? String(body.department).trim() : null,
       group: body.group ? String(body.group).trim() : null,
+      admissionYear: normalizeAdmissionYear(body.admissionYear),
       bio: body.bio ? String(body.bio).trim() : null,
       privacyConsentAt: consentAt,
       termsConsentAt: consentAt,
@@ -136,9 +142,11 @@ export async function POST(req: NextRequest) {
       role: true,
       department: true,
       group: true,
+      admissionYear: true,
       groupChangeCount: true,
       bio: true,
       createdAt: true,
+      updatedAt: true,
     },
   })
 

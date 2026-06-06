@@ -23,6 +23,7 @@ type CreateEventInput = {
   location: string
   description: string
   maxParticipants: number
+  requiresApproval: boolean
   isNews: boolean
   images: string[]
   responsible: string
@@ -49,6 +50,7 @@ export const createEventWithRelations = async (input: CreateEventInput) => {
       description: input.description,
       maxParticipants: input.maxParticipants,
       currentParticipants: confirmedParticipants.length,
+      requiresApproval: input.requiresApproval,
       isPast: false,
       removedFromCalendar: false,
       isNews: input.isNews,
@@ -227,4 +229,3 @@ export const updateEventWithRelations = async (input: UpdateEventRelationsInput)
       },
     })
   })
-

@@ -4,7 +4,7 @@
  *
  * Main logic:
  * - Aggregate monthly/weekly popularity and activity statistics
- * - Build top active students/teachers rankings
+ * - Build top active students and content staff rankings
  * - Generate event attendance workbook for Excel export
  *
  * Integrations:
@@ -13,6 +13,7 @@
  */
 
 import { EventCategory, ParticipantStatus, Role } from "@prisma/client"
+import { ROLE_LABELS } from "@/lib/roles"
 import * as XLSX from "xlsx"
 import { prisma } from "@/lib/prisma"
 import { ServiceError } from "@/server/shared/service-error"
@@ -368,7 +369,7 @@ const buildAttendanceStats = async (params: { from: Date; to: Date }) => {
   let matchedActiveEntriesTotal = 0
   let unmatchedActiveEntriesTotal = 0
 
-  const byEvent: EventAttendanceMetric[] = events
+  const allEventMetrics: EventAttendanceMetric[] = events
     .map((event) => {
       const confirmedRows = event.eventParticipants.filter(
         (row) => row.status === ParticipantStatus.CONFIRMED
@@ -521,7 +522,7 @@ const buildAttendanceStats = async (params: { from: Date; to: Date }) => {
       if (right.total !== left.total) return right.total - left.total
       return new Date(left.date).getTime() - new Date(right.date).getTime()
     })
-    .slice(0, 25)
+  const byEvent = allEventMetrics.slice(0, 25)
 
   const byStudent = Array.from(byStudentMap.values())
     .map((student) => ({
@@ -594,7 +595,11 @@ const buildAttendanceStats = async (params: { from: Date; to: Date }) => {
   const activeParticipants = byRole.reduce((sum, row) => sum + row.active, 0)
   const uniqueStudents = uniqueStudentIds.size
   const activeStudents = activeStudentIds.size
-  const eventsCount = byEvent.length
+  const eventsCount = allEventMetrics.length
+  const totalActiveStudentsInEvents = allEventMetrics.reduce(
+    (sum, row) => sum + row.activeStudents,
+    0
+  )
 
   return {
     byEvent,
@@ -611,9 +616,11 @@ const buildAttendanceStats = async (params: { from: Date; to: Date }) => {
       uniqueStudents,
       activeStudents,
       activeStudentsRatePercent: safePercent(activeStudents, uniqueStudents),
-      averageFillRatePercent: averagePercent(byEvent.map((row) => row.fillRatePercent)),
+      averageFillRatePercent: averagePercent(
+        allEventMetrics.map((row) => row.fillRatePercent)
+      ),
       averageConfirmationRatePercent: averagePercent(
-        byEvent.map((row) => row.confirmedRatePercent)
+        allEventMetrics.map((row) => row.confirmedRatePercent)
       ),
       reportedActiveEntries: reportedActiveEntriesTotal,
       matchedActiveEntries: matchedActiveEntriesTotal,
@@ -624,7 +631,8 @@ const buildAttendanceStats = async (params: { from: Date; to: Date }) => {
       ),
       averageRegistrationsPerEvent: eventsCount > 0 ? Math.round((registrations / eventsCount) * 10) / 10 : 0,
       averageConfirmedPerEvent: eventsCount > 0 ? Math.round((confirmed / eventsCount) * 10) / 10 : 0,
-      averageActiveStudentsPerEvent: eventsCount > 0 ? Math.round((activeStudents / eventsCount) * 10) / 10 : 0,
+      averageActiveStudentsPerEvent:
+        eventsCount > 0 ? Math.round((totalActiveStudentsInEvents / eventsCount) * 10) / 10 : 0,
     },
   }
 }
@@ -734,13 +742,13 @@ const buildSiteTrafficMetrics = async (now: Date) => {
 }
 
 const buildActiveUsersByRole = async (
-  role: "STUDENT" | "TEACHER",
+  roles: Role[],
   monthStart: Date,
   now: Date,
   limit: number
 ) => {
   const users = await prisma.user.findMany({
-    where: { role },
+    where: { role: { in: roles } },
     select: { id: true, name: true, email: true, role: true },
   })
 
@@ -930,8 +938,8 @@ export const getAdminDashboardMetrics = async (
         OR: [{ contact: "" }, { responsible: "" }],
       },
     }),
-    buildActiveUsersByRole(Role.STUDENT, monthStart, now, 5),
-    buildActiveUsersByRole(Role.TEACHER, monthStart, now, 5),
+    buildActiveUsersByRole([Role.STUDENT], monthStart, now, 5),
+    buildActiveUsersByRole([Role.TEACHER, Role.EDITOR], monthStart, now, 5),
     prisma.event.count({
       where: {
         removedFromCalendar: false,
@@ -1112,27 +1120,49 @@ export const buildEventAttendanceExcel = async (
   const fillRatePercent =
     event.maxParticipants > 0 ? safePercent(confirmed, event.maxParticipants) : confirmed > 0 ? 100 : 0
   const confirmationRatePercent = safePercent(confirmed, registrations)
+  const roleLabelMap: Record<Role, string> = ROLE_LABELS
+  const statusLabelMap: Record<ParticipantStatus, string> = {
+    [ParticipantStatus.CONFIRMED]: "Подтверждено",
+    [ParticipantStatus.PENDING]: "Ожидает подтверждения",
+  }
+  const categoryLabelMap: Record<EventCategory, string> = {
+    [EventCategory.CONCERT]: "Концерт",
+    [EventCategory.INTERNAL_ACTIVITY]: "Внутривузовская активность",
+    [EventCategory.PUBLIC_EVENT]: "Общественное мероприятие",
+    [EventCategory.COMPETITION]: "Соревнование",
+    [EventCategory.LECTURE]: "Лекция",
+    [EventCategory.MASTERCLASS]: "Мастер-класс",
+    [EventCategory.VOLUNTEER]: "Волонтерская активность",
+    [EventCategory.NEWS]: "Новость",
+  }
+  const toYesNo = (value: boolean) => (value ? "Да" : "Нет")
+  const qualityLevel = (value: number) => {
+    if (value >= 90) return "Отлично"
+    if (value >= 75) return "Хорошо"
+    if (value >= 50) return "Средне"
+    return "Требует внимания"
+  }
 
   const overviewRows = [
-    { Metric: "Event ID", Value: event.id },
-    { Metric: "Title", Value: event.title },
-    { Metric: "Category", Value: event.category },
-    { Metric: "Date", Value: formatDateTime(event.date) },
-    { Metric: "Time", Value: event.time },
-    { Metric: "Duration", Value: event.duration },
-    { Metric: "Location", Value: event.location },
-    { Metric: "Responsible", Value: event.responsible },
-    { Metric: "Contact", Value: event.contact },
-    { Metric: "Creator", Value: event.creator.name || event.creator.email },
-    { Metric: "Max Participants", Value: event.maxParticipants },
-    { Metric: "Current Participants", Value: event.currentParticipants },
-    { Metric: "Confirmed Participants", Value: confirmed },
-    { Metric: "Pending Participants", Value: pending },
-    { Metric: "Registrations", Value: registrations },
-    { Metric: "Confirmation Rate, %", Value: confirmationRatePercent },
-    { Metric: "Fill Rate, %", Value: fillRatePercent },
-    { Metric: "Is Past", Value: event.isPast ? "Yes" : "No" },
-    { Metric: "Is News", Value: event.isNews ? "Yes" : "No" },
+    { Показатель: "ID мероприятия", Значение: event.id },
+    { Показатель: "Название", Значение: event.title },
+    { Показатель: "Категория", Значение: categoryLabelMap[event.category] || event.category },
+    { Показатель: "Дата проведения", Значение: formatDateTime(event.date) },
+    { Показатель: "Время", Значение: event.time },
+    { Показатель: "Длительность", Значение: event.duration },
+    { Показатель: "Локация", Значение: event.location },
+    { Показатель: "Руководитель", Значение: event.responsible },
+    { Показатель: "Контакт", Значение: event.contact },
+    { Показатель: "Создатель", Значение: event.creator.name || event.creator.email },
+    { Показатель: "Максимум участников", Значение: event.maxParticipants },
+    { Показатель: "Текущий счетчик участников", Значение: event.currentParticipants },
+    { Показатель: "Подтверждено", Значение: confirmed },
+    { Показатель: "Ожидают подтверждения", Значение: pending },
+    { Показатель: "Всего регистраций", Значение: registrations },
+    { Показатель: "Конверсия подтверждения, %", Значение: confirmationRatePercent },
+    { Показатель: "Заполнение мест, %", Значение: fillRatePercent },
+    { Показатель: "Прошедшее мероприятие", Значение: toYesNo(event.isPast) },
+    { Показатель: "Новостной материал", Значение: toYesNo(event.isNews) },
   ]
 
   const participantByKey = new Map<
@@ -1160,70 +1190,119 @@ export const buildEventAttendanceExcel = async (
     }
 
     return {
-      No: index + 1,
-      NameFromReport: name,
-      Matched: matched ? "Yes" : "No",
-      MatchedName: matched?.user.name || "",
-      MatchedEmail: matched?.user.email || "",
-      MatchedRole: matched?.user.role || "",
-      MatchedGroup: matched?.user.group || "",
-      MatchedDepartment: matched?.user.department || "",
+      "№": index + 1,
+      "ФИО из отчета": name,
+      "Сопоставлено": toYesNo(Boolean(matched)),
+      "ФИО в системе": matched?.user.name || "",
+      "Эл. почта в системе": matched?.user.email || "",
+      "Роль": matched ? roleLabelMap[matched.user.role] : "",
+      "Группа": matched?.user.group || "",
+      "Факультет/кафедра": matched?.user.department || "",
     }
   })
 
   const activeParticipants = activeParticipantsSet.size
   const activeStudents = activeStudentsSet.size
   const activeStudentsRatePercent = safePercent(activeStudents, confirmedStudents)
-  const activeUnmatched = activeParticipantRows.filter((row) => row.Matched === "No").length
+  const activeUnmatched = activeParticipantRows.filter((row) => row["Сопоставлено"] === "Нет").length
   const reportedActiveCount = activeParticipantRows.length
-  const matchedActiveEntries = activeParticipantRows.filter((row) => row.Matched === "Yes").length
+  const matchedActiveEntries = activeParticipantRows.filter((row) => row["Сопоставлено"] === "Да").length
   const activeMatchRatePercent = safePercent(matchedActiveEntries, reportedActiveCount)
   const activePendingParticipants = event.eventParticipants.filter(
     (participant) =>
       participant.status === ParticipantStatus.PENDING && activeParticipantsSet.has(participant.user.id)
   ).length
+  const activeFromConfirmedPercent = safePercent(activeParticipants, confirmed)
+  const pendingFromRegistrationsPercent = safePercent(pending, registrations)
+  const studentSharePercent = safePercent(allStudents, registrations)
+  const firstRegistrationAt = event.eventParticipants.at(0)?.createdAt || null
+  const lastRegistrationAt = event.eventParticipants.at(-1)?.createdAt || null
+  const lastParticipantUpdateAt = event.eventParticipants.reduce<Date | null>(
+    (latest, participant) => {
+      if (!latest) return participant.updatedAt
+      return participant.updatedAt > latest ? participant.updatedAt : latest
+    },
+    null
+  )
+  const registrationWindowDays =
+    firstRegistrationAt && lastRegistrationAt
+      ? Math.max(
+          1,
+          Math.ceil(
+            (lastRegistrationAt.getTime() - firstRegistrationAt.getTime() + 1) /
+              (24 * 60 * 60 * 1000)
+          )
+        )
+      : 0
+  const avgRegistrationsPerDay =
+    registrationWindowDays > 0
+      ? Math.round((registrations / registrationWindowDays) * 100) / 100
+      : 0
+
+  overviewRows.push(
+    {
+      Показатель: "Первая регистрация",
+      Значение: firstRegistrationAt ? formatDateTime(firstRegistrationAt) : "Нет регистраций",
+    },
+    {
+      Показатель: "Последняя регистрация",
+      Значение: lastRegistrationAt ? formatDateTime(lastRegistrationAt) : "Нет регистраций",
+    },
+    {
+      Показатель: "Последнее изменение статуса",
+      Значение: lastParticipantUpdateAt ? formatDateTime(lastParticipantUpdateAt) : "Нет данных",
+    },
+    {
+      Показатель: "Окно регистрации, дней",
+      Значение: registrationWindowDays || 0,
+    },
+    {
+      Показатель: "Среднее регистраций в день",
+      Значение: avgRegistrationsPerDay,
+    }
+  )
 
   const attendeesRows = event.eventParticipants.map((participant) => ({
-    Status: participant.status,
-    Name: participant.user.name || "",
-    Email: participant.user.email,
-    Role: participant.user.role,
-    Department: participant.user.department || "",
-    Group: participant.user.group || "",
-    RegisteredAt: formatDateTime(participant.createdAt),
-    UpdatedAt: formatDateTime(participant.updatedAt),
-    ActiveInReport: activeParticipantsSet.has(participant.user.id) ? "Yes" : "No",
+    "Статус заявки": statusLabelMap[participant.status],
+    "ФИО": participant.user.name || "",
+    "Эл. почта": participant.user.email,
+    "Роль": roleLabelMap[participant.user.role],
+    "Факультет/кафедра": participant.user.department || "",
+    "Группа": participant.user.group || "",
+    "Дата регистрации": formatDateTime(participant.createdAt),
+    "Дата обновления статуса": formatDateTime(participant.updatedAt),
+    "Отмечен активным в отчете": toYesNo(activeParticipantsSet.has(participant.user.id)),
   }))
 
   const activeStudentsRows = event.eventParticipants
     .filter((participant) => participant.user.role === Role.STUDENT && activeStudentsSet.has(participant.user.id))
     .map((participant, index) => ({
-      No: index + 1,
-      Name: participant.user.name || "",
-      Email: participant.user.email,
-      Group: participant.user.group || "",
-      Department: participant.user.department || "",
-      Status: participant.status,
+      "№": index + 1,
+      "ФИО": participant.user.name || "",
+      "Эл. почта": participant.user.email,
+      "Группа": participant.user.group || "",
+      "Факультет/кафедра": participant.user.department || "",
+      "Статус заявки": statusLabelMap[participant.status],
     }))
 
   const studentsMatrixRows = event.eventParticipants
     .filter((participant) => participant.user.role === Role.STUDENT)
     .map((participant, index) => ({
-      No: index + 1,
-      Name: participant.user.name || "",
-      Email: participant.user.email,
-      Group: participant.user.group || "",
-      Department: participant.user.department || "",
-      Status: participant.status,
-      Confirmed: participant.status === ParticipantStatus.CONFIRMED ? "Yes" : "No",
-      Pending: participant.status === ParticipantStatus.PENDING ? "Yes" : "No",
-      ActiveInReport: activeParticipantsSet.has(participant.user.id) ? "Yes" : "No",
+      "№": index + 1,
+      "ФИО": participant.user.name || "",
+      "Эл. почта": participant.user.email,
+      "Группа": participant.user.group || "",
+      "Факультет/кафедра": participant.user.department || "",
+      "Статус заявки": statusLabelMap[participant.status],
+      "Подтверждено": toYesNo(participant.status === ParticipantStatus.CONFIRMED),
+      "Ожидает подтверждения": toYesNo(participant.status === ParticipantStatus.PENDING),
+      "Активен по отчету": toYesNo(activeParticipantsSet.has(participant.user.id)),
     }))
 
   const moderatorsRows = event.moderators.map((row) => ({
-    Name: row.user.name || "",
-    Email: row.user.email,
-    Role: row.user.role,
+    "ФИО": row.user.name || "",
+    "Эл. почта": row.user.email,
+    "Роль": roleLabelMap[row.user.role],
   }))
 
   const groupMap = new Map<
@@ -1297,47 +1376,50 @@ export const buildEventAttendanceExcel = async (
 
   const groupRows = Array.from(groupMap.values())
     .map((row) => ({
-      Group: row.group,
-      Confirmed: row.confirmed,
-      Pending: row.pending,
-      Registrations: row.confirmed + row.pending,
-      ActiveStudents: row.active,
-      UniqueStudents: row.studentIds.size,
-      ConfirmationRatePercent: safePercent(row.confirmed, row.confirmed + row.pending),
-      ActivityRatePercent: safePercent(row.active, row.confirmed),
+      "Группа": row.group,
+      "Подтверждено": row.confirmed,
+      "Ожидают подтверждения": row.pending,
+      "Регистраций": row.confirmed + row.pending,
+      "Активные студенты": row.active,
+      "Уникальные студенты": row.studentIds.size,
+      "Конверсия подтверждения, %": safePercent(row.confirmed, row.confirmed + row.pending),
+      "Активность среди подтвержденных, %": safePercent(row.active, row.confirmed),
+      "Доля от студенческих регистраций, %": safePercent(row.confirmed + row.pending, allStudents),
     }))
     .sort((left, right) => {
-      if (right.Confirmed !== left.Confirmed) return right.Confirmed - left.Confirmed
-      return right.Registrations - left.Registrations
+      if (right["Подтверждено"] !== left["Подтверждено"]) return right["Подтверждено"] - left["Подтверждено"]
+      return right["Регистраций"] - left["Регистраций"]
     })
 
   const departmentRows = Array.from(departmentMap.values())
     .map((row) => ({
-      Department: row.department,
-      Confirmed: row.confirmed,
-      Pending: row.pending,
-      Registrations: row.confirmed + row.pending,
-      ActiveStudents: row.active,
-      UniqueStudents: row.studentIds.size,
-      ConfirmationRatePercent: safePercent(row.confirmed, row.confirmed + row.pending),
-      ActivityRatePercent: safePercent(row.active, row.confirmed),
+      "Факультет/кафедра": row.department,
+      "Подтверждено": row.confirmed,
+      "Ожидают подтверждения": row.pending,
+      "Регистраций": row.confirmed + row.pending,
+      "Активные студенты": row.active,
+      "Уникальные студенты": row.studentIds.size,
+      "Конверсия подтверждения, %": safePercent(row.confirmed, row.confirmed + row.pending),
+      "Активность среди подтвержденных, %": safePercent(row.active, row.confirmed),
+      "Доля от студенческих регистраций, %": safePercent(row.confirmed + row.pending, allStudents),
     }))
     .sort((left, right) => {
-      if (right.Confirmed !== left.Confirmed) return right.Confirmed - left.Confirmed
-      return right.Registrations - left.Registrations
+      if (right["Подтверждено"] !== left["Подтверждено"]) return right["Подтверждено"] - left["Подтверждено"]
+      return right["Регистраций"] - left["Регистраций"]
     })
 
   const roleRows = Array.from(roleMap.values())
     .map((row) => ({
-      Role: row.role,
-      Confirmed: row.confirmed,
-      Pending: row.pending,
-      Registrations: row.confirmed + row.pending,
-      Active: row.active,
-      ConfirmationRatePercent: safePercent(row.confirmed, row.confirmed + row.pending),
-      ActivityRatePercent: safePercent(row.active, row.confirmed),
+      "Роль": roleLabelMap[row.role],
+      "Подтверждено": row.confirmed,
+      "Ожидают подтверждения": row.pending,
+      "Регистраций": row.confirmed + row.pending,
+      "Активных участников": row.active,
+      "Конверсия подтверждения, %": safePercent(row.confirmed, row.confirmed + row.pending),
+      "Активность среди подтвержденных, %": safePercent(row.active, row.confirmed),
+      "Доля от всех регистраций, %": safePercent(row.confirmed + row.pending, registrations),
     }))
-    .sort((left, right) => right.Registrations - left.Registrations)
+    .sort((left, right) => right["Регистраций"] - left["Регистраций"])
 
   let cumulativeRegistrations = 0
   let cumulativeConfirmed = 0
@@ -1349,86 +1431,141 @@ export const buildEventAttendanceExcel = async (
       cumulativeConfirmed += row.confirmed
       cumulativePending += row.pending
       return {
-        Date: row.date,
-        Registrations: row.registrations,
-        Confirmed: row.confirmed,
-        Pending: row.pending,
-        ConfirmationRatePercent: safePercent(row.confirmed, row.registrations),
-        CumulativeRegistrations: cumulativeRegistrations,
-        CumulativeConfirmed: cumulativeConfirmed,
-        CumulativePending: cumulativePending,
+        "Дата": row.date,
+        "Регистраций за день": row.registrations,
+        "Подтверждено за день": row.confirmed,
+        "Ожидают за день": row.pending,
+        "Конверсия подтверждения за день, %": safePercent(row.confirmed, row.registrations),
+        "Накопительно регистраций": cumulativeRegistrations,
+        "Накопительно подтверждено": cumulativeConfirmed,
+        "Накопительно ожидают": cumulativePending,
+        "Накопительная конверсия, %": safePercent(cumulativeConfirmed, cumulativeRegistrations),
       }
     })
 
   const kpiRows = [
-    { KPI: "Registrations", Value: registrations },
-    { KPI: "Confirmed", Value: confirmed },
-    { KPI: "Pending", Value: pending },
-    { KPI: "Confirmation Rate, %", Value: confirmationRatePercent },
-    { KPI: "Fill Rate, %", Value: fillRatePercent },
-    { KPI: "Students (all)", Value: allStudents },
-    { KPI: "Students (confirmed)", Value: confirmedStudents },
-    { KPI: "Active Participants (matched)", Value: activeParticipants },
-    { KPI: "Active entries in report", Value: reportedActiveCount },
-    { KPI: "Matched active entries", Value: matchedActiveEntries },
-    { KPI: "Active matching quality, %", Value: activeMatchRatePercent },
-    { KPI: "Active Students (matched)", Value: activeStudents },
-    { KPI: "Active Students / Confirmed Students, %", Value: activeStudentsRatePercent },
-    { KPI: "Active Pending Participants", Value: activePendingParticipants },
-    { KPI: "Active names not matched to attendees", Value: activeUnmatched },
+    { "Показатель": "Всего регистраций", "Значение": registrations, "Интерпретация": "Общее число заявок" },
+    { "Показатель": "Подтверждено", "Значение": confirmed, "Интерпретация": "Заявки со статусом подтверждено" },
+    { "Показатель": "Ожидают подтверждения", "Значение": pending, "Интерпретация": "Заявки в ожидании" },
+    { "Показатель": "Конверсия подтверждения, %", "Значение": confirmationRatePercent, "Интерпретация": qualityLevel(confirmationRatePercent) },
+    { "Показатель": "Заполнение мест, %", "Значение": fillRatePercent, "Интерпретация": qualityLevel(fillRatePercent) },
+    { "Показатель": "Студенты среди всех регистраций, %", "Значение": studentSharePercent, "Интерпретация": "Доля студенческой аудитории" },
+    { "Показатель": "Студентов (все статусы)", "Значение": allStudents, "Интерпретация": "Количество студентов в заявках" },
+    { "Показатель": "Студентов (подтверждено)", "Значение": confirmedStudents, "Интерпретация": "Подтвержденные студенты" },
+    { "Показатель": "Активные участники (сопоставлено)", "Значение": activeParticipants, "Интерпретация": "По данным отчета" },
+    { "Показатель": "Активные записи в отчете", "Значение": reportedActiveCount, "Интерпретация": "Сколько имен указано в activeParticipants" },
+    { "Показатель": "Сопоставленные active-записи", "Значение": matchedActiveEntries, "Интерпретация": "Совпали с участниками мероприятия" },
+    { "Показатель": "Качество сопоставления active, %", "Значение": activeMatchRatePercent, "Интерпретация": qualityLevel(activeMatchRatePercent) },
+    { "Показатель": "Активные студенты", "Значение": activeStudents, "Интерпретация": "Студенты с подтверждением и активностью" },
+    { "Показатель": "Активные студенты / подтвержденные студенты, %", "Значение": activeStudentsRatePercent, "Интерпретация": qualityLevel(activeStudentsRatePercent) },
+    { "Показатель": "Активные среди подтвержденных, %", "Значение": activeFromConfirmedPercent, "Интерпретация": "Доля активных участников среди подтвержденных" },
+    { "Показатель": "Ожидают от всех регистраций, %", "Значение": pendingFromRegistrationsPercent, "Интерпретация": "Доля заявок в ожидании подтверждения" },
+    { "Показатель": "Активных со статусом ожидания", "Значение": activePendingParticipants, "Интерпретация": "Нужна сверка статусов участников" },
+    { "Показатель": "Несопоставленных имен из активности", "Значение": activeUnmatched, "Интерпретация": "Имена из отчета не найдены среди участников" },
+  ]
+
+  const funnelRows = [
+    {
+      "Этап": "Регистрации",
+      "Количество": registrations,
+      "Конверсия к предыдущему этапу, %": 100,
+      "Доля от регистраций, %": 100,
+    },
+    {
+      "Этап": "Подтверждено",
+      "Количество": confirmed,
+      "Конверсия к предыдущему этапу, %": safePercent(confirmed, registrations),
+      "Доля от регистраций, %": safePercent(confirmed, registrations),
+    },
+    {
+      "Этап": "Активные участники",
+      "Количество": activeParticipants,
+      "Конверсия к предыдущему этапу, %": safePercent(activeParticipants, confirmed),
+      "Доля от регистраций, %": safePercent(activeParticipants, registrations),
+    },
+    {
+      "Этап": "Активные студенты",
+      "Количество": activeStudents,
+      "Конверсия к предыдущему этапу, %": safePercent(activeStudents, activeParticipants),
+      "Доля от регистраций, %": safePercent(activeStudents, registrations),
+    },
   ]
 
   const qualityRows = [
     {
-      Check: "Active entries in report",
-      Value: reportedActiveCount,
-      Comment: "Сколько активных участников указано в отчете",
+      "Проверка": "Active-записей в отчете",
+      "Значение": reportedActiveCount,
+      "Комментарий": "Сколько активных участников указано в отчете",
     },
     {
-      Check: "Matched active entries",
-      Value: matchedActiveEntries,
-      Comment: "Сколько активных удалось сопоставить с участниками",
+      "Проверка": "Сопоставленных active-записей",
+      "Значение": matchedActiveEntries,
+      "Комментарий": "Сколько активных удалось сопоставить с участниками",
     },
     {
-      Check: "Unmatched active entries",
-      Value: activeUnmatched,
-      Comment: "Сколько записей из отчета не удалось сопоставить",
+      "Проверка": "Несопоставленных active-записей",
+      "Значение": activeUnmatched,
+      "Комментарий": "Сколько записей из отчета не удалось сопоставить",
     },
     {
-      Check: "Matching quality, %",
-      Value: activeMatchRatePercent,
-      Comment: "Доля совпадений active-записей отчета",
+      "Проверка": "Качество сопоставления, %",
+      "Значение": activeMatchRatePercent,
+      "Комментарий": "Доля совпадений active-записей отчета",
     },
     {
-      Check: "Active students / confirmed students, %",
-      Value: activeStudentsRatePercent,
-      Comment: "Доля активных студентов среди подтвержденных",
+      "Проверка": "Активные студенты / подтвержденные студенты, %",
+      "Значение": activeStudentsRatePercent,
+      "Комментарий": "Доля активных студентов среди подтвержденных",
+    },
+    {
+      "Проверка": "Конверсия подтверждения, %",
+      "Значение": confirmationRatePercent,
+      "Комментарий": "Доля confirmed среди всех регистраций",
+    },
+    {
+      "Проверка": "Заполнение мест, %",
+      "Значение": fillRatePercent,
+      "Комментарий": "Доля занятых мест от лимита мероприятия",
     },
   ]
 
   const unmatchedActiveRows = activeParticipantRows
-    .filter((row) => row.Matched === "No")
+    .filter((row) => row["Сопоставлено"] === "Нет")
     .map((row, index) => ({
-      No: index + 1,
-      NameFromReport: row.NameFromReport,
+      "№": index + 1,
+      "ФИО из отчета": row["ФИО из отчета"],
     }))
 
   const reportRows = event.report
     ? [
-        { Field: "Summary", Value: event.report.summary },
-        { Field: "Report Date", Value: formatDateTime(event.report.reportDate) },
-        { Field: "Tasks Count", Value: event.report.tasks.length },
-        { Field: "Images Count", Value: event.report.images.length },
-        { Field: "Active Participants Count", Value: event.report.activeParticipants.length },
-        { Field: "Comment", Value: event.report.comment || "" },
+        { "Поле": "Сводка отчета", "Значение": event.report.summary },
+        { "Поле": "Дата отчета", "Значение": formatDateTime(event.report.reportDate) },
+        { "Поле": "Количество задач", "Значение": event.report.tasks.length },
+        { "Поле": "Количество медиа", "Значение": event.report.images.length },
+        { "Поле": "Количество active-участников", "Значение": event.report.activeParticipants.length },
+        { "Поле": "Комментарий", "Значение": event.report.comment || "" },
       ]
-    : [{ Field: "Report", Value: "No report attached" }]
+    : [{ "Поле": "Отчет", "Значение": "Отчет не прикреплен" }]
+
+  const reportTasksRows = event.report?.tasks?.length
+    ? event.report.tasks.map((task, index) => ({
+        "№": index + 1,
+        "Задача": task,
+      }))
+    : [{ "Задача": "Нет задач в отчете" }]
+
+  const reportMediaRows = event.report?.images?.length
+    ? event.report.images.map((image, index) => ({
+        "№": index + 1,
+        "Медиа/ссылка": image,
+      }))
+    : [{ "Медиа/ссылка": "Нет медиа в отчете" }]
 
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(
     workbook,
     XLSX.utils.json_to_sheet(overviewRows),
-    "Event Overview"
+    "Обзор"
   )
   XLSX.utils.book_append_sheet(
     workbook,
@@ -1437,83 +1574,108 @@ export const buildEventAttendanceExcel = async (
   )
   XLSX.utils.book_append_sheet(
     workbook,
-    XLSX.utils.json_to_sheet(attendeesRows.length ? attendeesRows : [{ Status: "No attendees" }]),
-    "Attendees"
+    XLSX.utils.json_to_sheet(funnelRows),
+    "Воронка"
+  )
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(
+      attendeesRows.length ? attendeesRows : [{ "Статус заявки": "Нет участников" }]
+    ),
+    "Участники"
   )
   XLSX.utils.book_append_sheet(
     workbook,
     XLSX.utils.json_to_sheet(
       activeParticipantRows.length
         ? activeParticipantRows
-        : [{ Name: "No active participants in report" }]
+        : [{ "ФИО из отчета": "В отчете нет активных участников" }]
     ),
-    "Active Participants"
+    "Активность отчета"
   )
   XLSX.utils.book_append_sheet(
     workbook,
     XLSX.utils.json_to_sheet(
       activeStudentsRows.length
         ? activeStudentsRows
-        : [{ Name: "No active students found in report" }]
+        : [{ "ФИО": "В отчете не найдены активные студенты" }]
     ),
-    "Active Students"
+    "Активные студенты"
   )
   XLSX.utils.book_append_sheet(
     workbook,
     XLSX.utils.json_to_sheet(
       studentsMatrixRows.length
         ? studentsMatrixRows
-        : [{ Name: "No students in attendees list" }]
+        : [{ "ФИО": "В списке участников нет студентов" }]
     ),
-    "Students Matrix"
-  )
-  XLSX.utils.book_append_sheet(
-    workbook,
-    XLSX.utils.json_to_sheet(groupRows.length ? groupRows : [{ Group: "No student groups data" }]),
-    "Group Stats"
+    "Матрица студентов"
   )
   XLSX.utils.book_append_sheet(
     workbook,
     XLSX.utils.json_to_sheet(
-      departmentRows.length ? departmentRows : [{ Department: "No department data" }]
+      groupRows.length ? groupRows : [{ "Группа": "Нет данных по группам" }]
     ),
-    "Department Stats"
-  )
-  XLSX.utils.book_append_sheet(
-    workbook,
-    XLSX.utils.json_to_sheet(roleRows.length ? roleRows : [{ Role: "No role data" }]),
-    "Role Stats"
+    "По группам"
   )
   XLSX.utils.book_append_sheet(
     workbook,
     XLSX.utils.json_to_sheet(
-      timelineRows.length ? timelineRows : [{ Date: "No registration timeline data" }]
+      departmentRows.length
+        ? departmentRows
+        : [{ "Факультет/кафедра": "Нет данных по факультетам/кафедрам" }]
     ),
-    "Reg Timeline"
+    "По факультетам"
+  )
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(roleRows.length ? roleRows : [{ "Роль": "Нет данных по ролям" }]),
+    "По ролям"
+  )
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(
+      timelineRows.length
+        ? timelineRows
+        : [{ "Дата": "Нет данных по динамике регистраций" }]
+    ),
+    "Динамика регистрации"
   )
   XLSX.utils.book_append_sheet(
     workbook,
     XLSX.utils.json_to_sheet(qualityRows),
-    "Quality Checks"
+    "Качество данных"
   )
   XLSX.utils.book_append_sheet(
     workbook,
     XLSX.utils.json_to_sheet(
       unmatchedActiveRows.length
         ? unmatchedActiveRows
-        : [{ NameFromReport: "No unmatched active entries" }]
+        : [{ "ФИО из отчета": "Нет несопоставленных active-записей" }]
     ),
-    "Unmatched Active"
+    "Несопоставленные"
   )
   XLSX.utils.book_append_sheet(
     workbook,
-    XLSX.utils.json_to_sheet(moderatorsRows.length ? moderatorsRows : [{ Name: "No moderators" }]),
-    "Moderators"
+    XLSX.utils.json_to_sheet(
+      moderatorsRows.length ? moderatorsRows : [{ "ФИО": "Модераторы не назначены" }]
+    ),
+    "Модераторы"
   )
   XLSX.utils.book_append_sheet(
     workbook,
     XLSX.utils.json_to_sheet(reportRows),
-    "Report"
+    "Отчет сводка"
+  )
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(reportTasksRows),
+    "Отчет задачи"
+  )
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(reportMediaRows),
+    "Отчет медиа"
   )
 
   const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" }) as Buffer

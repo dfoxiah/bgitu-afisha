@@ -16,6 +16,9 @@ type ProfileNotificationsInput = {
   newEvents?: boolean
   changes?: boolean
   news?: boolean
+  inApp?: boolean
+  email?: boolean
+  vk?: boolean
   categories?: unknown
 }
 
@@ -24,10 +27,15 @@ type ProfileUpdateInput = {
   image?: unknown
   department?: unknown
   group?: unknown
+  admissionYear?: unknown
   bio?: unknown
   notifyNewEvents?: unknown
   notifyChanges?: unknown
   notifyNews?: unknown
+  notifyInApp?: unknown
+  notifyEmail?: unknown
+  notifyVk?: unknown
+  vkUserId?: unknown
   notificationCategories?: unknown
   notifications?: ProfileNotificationsInput
 }
@@ -48,14 +56,24 @@ export const toProfileResponse = (user: User) => ({
   image: user.image,
   department: user.department,
   group: user.group,
+  admissionYear: user.admissionYear,
   groupChangeCount: user.groupChangeCount,
   bio: user.bio,
   notifyNewEvents: user.notifyNewEvents,
   notifyChanges: user.notifyChanges,
   notifyNews: user.notifyNews,
   notificationCategories: user.notificationCategories,
+  notifyInApp: user.notifyInApp,
+  notifyEmail: user.notifyEmail,
+  notifyVk: user.notifyVk,
+  vkUserId: user.vkUserId,
+  yandexEmail: user.yandexEmail,
   privacyConsentAt: user.privacyConsentAt,
+  privacyConsentVersion: user.privacyConsentVersion,
   termsConsentAt: user.termsConsentAt,
+  termsConsentVersion: user.termsConsentVersion,
+  consentSource: user.consentSource,
+  profileCompletedAt: user.profileCompletedAt,
 })
 
 const normalizeCategories = (raw: unknown, validCategories: EventCategory[]) => {
@@ -67,6 +85,19 @@ const normalizeCategories = (raw: unknown, validCategories: EventCategory[]) => 
     .filter((value): value is EventCategory => allowed.has(value as EventCategory))
 
   return Array.from(new Set(values))
+}
+
+const normalizeAdmissionYear = (value: unknown) => {
+  if (value === undefined) return undefined
+  if (value === null || String(value).trim() === "") return null
+
+  const year = Number(value)
+  const currentYear = new Date().getFullYear()
+  if (!Number.isInteger(year) || year < 1990 || year > currentYear + 1) {
+    return "invalid" as const
+  }
+
+  return year
 }
 
 type BuildUpdatesParams = {
@@ -97,9 +128,23 @@ export const buildProfileUpdates = (params: BuildUpdatesParams) => {
   assignString("group", body.group)
   assignString("bio", body.bio)
 
+  const admissionYear = normalizeAdmissionYear(body.admissionYear)
+  if (admissionYear === "invalid") {
+    validationError = "Год поступления должен быть целым годом в разумном диапазоне"
+  } else if (admissionYear !== undefined) {
+    updates.admissionYear = admissionYear
+  }
+
   if (body.notifyNewEvents !== undefined) updates.notifyNewEvents = Boolean(body.notifyNewEvents)
   if (body.notifyChanges !== undefined) updates.notifyChanges = Boolean(body.notifyChanges)
   if (body.notifyNews !== undefined) updates.notifyNews = Boolean(body.notifyNews)
+  if (body.notifyInApp !== undefined) updates.notifyInApp = Boolean(body.notifyInApp)
+  if (body.notifyEmail !== undefined) updates.notifyEmail = Boolean(body.notifyEmail)
+  if (body.notifyVk !== undefined) updates.notifyVk = Boolean(body.notifyVk)
+  if (body.vkUserId !== undefined) {
+    const nextVkUserId = toOptionalString(body.vkUserId)
+    updates.vkUserId = nextVkUserId && nextVkUserId.length > 0 ? nextVkUserId : null
+  }
 
   const directCategories = normalizeCategories(body.notificationCategories, validCategories)
   if (directCategories) updates.notificationCategories = directCategories
@@ -109,6 +154,9 @@ export const buildProfileUpdates = (params: BuildUpdatesParams) => {
     if (typeof notifications.newEvents === "boolean") updates.notifyNewEvents = notifications.newEvents
     if (typeof notifications.changes === "boolean") updates.notifyChanges = notifications.changes
     if (typeof notifications.news === "boolean") updates.notifyNews = notifications.news
+    if (typeof notifications.inApp === "boolean") updates.notifyInApp = notifications.inApp
+    if (typeof notifications.email === "boolean") updates.notifyEmail = notifications.email
+    if (typeof notifications.vk === "boolean") updates.notifyVk = notifications.vk
 
     const nestedCategories = normalizeCategories(notifications.categories, validCategories)
     if (nestedCategories) updates.notificationCategories = nestedCategories
@@ -130,4 +178,3 @@ export const buildProfileUpdates = (params: BuildUpdatesParams) => {
 
   return { updates, validationError }
 }
-

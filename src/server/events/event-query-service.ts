@@ -22,6 +22,7 @@ type EventListParams = {
   past?: string | null
   limit?: number
   includePastForAuthorized: boolean
+  publicOnly?: boolean
 }
 
 type EventListFetchOptions = {
@@ -30,6 +31,10 @@ type EventListFetchOptions = {
 
 export const buildEventListWhere = (params: EventListParams): Prisma.EventWhereInput => {
   const where: Prisma.EventWhereInput = { removedFromCalendar: false }
+
+  if (params.publicOnly) {
+    where.isPublic = true
+  }
 
   if (params.category) {
     where.category = params.category as EventCategory
@@ -193,6 +198,7 @@ export const findEventByIdForEdit = (eventId: string) =>
       time: true,
       maxParticipants: true,
       currentParticipants: true,
+      requiresApproval: true,
       isNews: true,
       removedFromCalendar: true,
       images: true,

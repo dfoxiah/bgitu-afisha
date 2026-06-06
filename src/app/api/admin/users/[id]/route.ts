@@ -14,19 +14,24 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import bcrypt from "bcryptjs"
-import { Role } from "@prisma/client"
 import { authOptions } from "@/lib/auth"
 import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
 import { prisma } from "@/lib/prisma"
 import { ensureAdminSession } from "@/server/admin/admin-session"
 import { errorJson } from "@/server/shared/http-response"
+import { isRoleValue } from "@/lib/roles"
 
 type RouteParams = {
   params: Promise<{ id: string }>
 }
 
-const isRole = (value: string): value is Role =>
-  value === "STUDENT" || value === "TEACHER" || value === "ADMIN"
+const normalizeAdmissionYear = (value: unknown) => {
+  if (value === undefined) return undefined
+  if (value === null || String(value).trim() === "") return null
+  const year = Number(value)
+  const currentYear = new Date().getFullYear()
+  return Number.isInteger(year) && year >= 1990 && year <= currentYear + 1 ? year : "invalid"
+}
 
 export async function GET(_req: NextRequest, { params }: RouteParams) {
   const session = await getServerSession(authOptions)
@@ -44,6 +49,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       role: true,
       department: true,
       group: true,
+      admissionYear: true,
       groupChangeCount: true,
       bio: true,
       privacyConsentAt: true,
@@ -89,12 +95,19 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     updates.department = body.department ? String(body.department).trim() : null
   }
   if (body.group !== undefined) updates.group = body.group ? String(body.group).trim() : null
+  if (body.admissionYear !== undefined) {
+    const admissionYear = normalizeAdmissionYear(body.admissionYear)
+    if (admissionYear === "invalid") {
+      return errorJson(400, "VALIDATION_ERROR", "Некорректный год поступления")
+    }
+    updates.admissionYear = admissionYear
+  }
   if (body.groupChangeCount !== undefined) updates.groupChangeCount = Number(body.groupChangeCount) || 0
   if (body.bio !== undefined) updates.bio = body.bio ? String(body.bio).trim() : null
 
   if (body.role !== undefined) {
     const roleRaw = String(body.role).trim()
-    if (!isRole(roleRaw)) {
+    if (!isRoleValue(roleRaw)) {
       return errorJson(400, "VALIDATION_ERROR", "Некорректная роль")
     }
     updates.role = roleRaw
@@ -129,10 +142,12 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       role: true,
       department: true,
       group: true,
+      admissionYear: true,
       groupChangeCount: true,
       bio: true,
       privacyConsentAt: true,
       termsConsentAt: true,
+      createdAt: true,
       updatedAt: true,
     },
   })

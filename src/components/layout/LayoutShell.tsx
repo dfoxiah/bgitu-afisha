@@ -16,7 +16,6 @@ import { usePathname } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import Footer from '@/components/layout/Footer'
 import ToastProvider from '@/components/ui/ToastProvider'
-import DebuggerInitializer from '@/components/dev/DebuggerInitializer'
 
 type LayoutShellProps = {
   children: React.ReactNode
@@ -29,10 +28,9 @@ export default function LayoutShell({ children }: LayoutShellProps) {
   return (
     <div className="relative min-h-screen overflow-x-clip">
       <div className="pointer-events-none fixed inset-0 -z-20">
-        <div className="absolute -left-56 -top-28 h-[34rem] w-[34rem] rounded-full bg-primary/14 blur-3xl" />
-        <div className="absolute right-[-12rem] top-24 h-[34rem] w-[34rem] rounded-full bg-accent/14 blur-3xl" />
-        <div className="absolute bottom-[-14rem] left-1/3 h-[30rem] w-[30rem] rounded-full bg-secondary/18 blur-3xl" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(31,52,86,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(31,52,86,0.04)_1px,transparent_1px)] bg-[size:32px_32px] opacity-50" />
+        <div className="absolute inset-0 bg-[linear-gradient(128deg,rgba(218,238,255,0.72),rgba(248,252,255,0.44)_42%,rgba(219,248,249,0.64))]" />
+        <div className="absolute inset-x-0 top-0 h-72 bg-[linear-gradient(180deg,rgba(255,255,255,0.68),rgba(255,255,255,0))]" />
+        <div className="absolute inset-y-0 right-0 w-1/2 bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(123,211,225,0.16))]" />
       </div>
 
       <div className="relative z-10 flex min-h-screen flex-col">
@@ -42,7 +40,6 @@ export default function LayoutShell({ children }: LayoutShellProps) {
         </main>
         {!hideChrome && <Footer />}
         <ToastProvider />
-        <DebuggerInitializer />
       </div>
     </div>
   )

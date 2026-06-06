@@ -17,6 +17,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Button from "@/components/ui/Button"
+import { toRoleLabel } from "@/lib/roles"
 import type {
   AdminActiveUserMetric,
   AdminDashboardMetrics,
@@ -27,6 +28,8 @@ import type {
 type AdminMetricsDashboardProps = {
   metrics: AdminDashboardMetrics | null
   isLoading: boolean
+  errorMessage?: string | null
+  liveIntervalMs: number
   exportEvents: AdminEvent[]
   exportingEventId: string | null
   period: {
@@ -36,7 +39,12 @@ type AdminMetricsDashboardProps = {
   onPeriodChange: (next: { from: string; to: string }) => void
   onRefresh: () => void
   onExportEvent: (eventId: string) => void
+  onOpenDiagnostics?: () => void
 }
+
+type MetricsView = "summary" | "attendance" | "activity" | "export"
+
+const normalizeSearch = (value: string) => value.trim().toLowerCase()
 
 const formatDate = (value?: string | null) => {
   if (!value) return "-"
@@ -124,24 +132,49 @@ const renderActivityRows = (users: AdminActiveUserMetric[], emptyLabel: string) 
 export default function AdminMetricsDashboard({
   metrics,
   isLoading,
+  errorMessage,
+  liveIntervalMs,
   exportEvents,
   exportingEventId,
   period,
   onPeriodChange,
   onRefresh,
   onExportEvent,
+  onOpenDiagnostics,
 }: AdminMetricsDashboardProps) {
   const [selectedEventId, setSelectedEventId] = useState("")
+  const [activeView, setActiveView] = useState<MetricsView>("summary")
+  const [attendanceSearch, setAttendanceSearch] = useState("")
+  const [exportEventSearch, setExportEventSearch] = useState("")
 
   const handlePeriodFieldChange = (field: "from" | "to", value: string) => {
     onPeriodChange({ ...period, [field]: value })
   }
 
+  const filteredExportEvents = useMemo(() => {
+    const query = normalizeSearch(exportEventSearch)
+    if (!query) return exportEvents
+
+    return exportEvents.filter((event) => {
+      const day = formatDate(event.date)
+      return [event.title, event.id, event.responsible || "", day]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    })
+  }, [exportEventSearch, exportEvents])
+
   useEffect(() => {
-    if (!selectedEventId && exportEvents.length > 0) {
-      setSelectedEventId(exportEvents[0].id)
+    if (filteredExportEvents.length === 0) {
+      if (selectedEventId) setSelectedEventId("")
+      return
     }
-  }, [selectedEventId, exportEvents])
+
+    const currentExists = filteredExportEvents.some((event) => event.id === selectedEventId)
+    if (!selectedEventId || !currentExists) {
+      setSelectedEventId(filteredExportEvents[0].id)
+    }
+  }, [filteredExportEvents, selectedEventId])
 
   const traffic = useMemo(() => {
     if (!metrics?.siteTraffic.dailyActivity) return []
@@ -222,7 +255,7 @@ export default function AdminMetricsDashboard({
     }
 
     const width = 100
-    const height = 44
+    const height = 28
     const maxActions = Math.max(1, ...recentTraffic.map((point) => point.actions))
 
     const points = recentTraffic.map((point, index) => {
@@ -234,7 +267,7 @@ export default function AdminMetricsDashboard({
 
     return {
       linePoints: points.map((point) => `${point.x},${point.y}`).join(" "),
-      areaPoints: `0,44 ${points.map((point) => `${point.x},${point.y}`).join(" ")} 100,44`,
+      areaPoints: `0,${height} ${points.map((point) => `${point.x},${point.y}`).join(" ")} 100,${height}`,
       labels: recentTraffic.map((point) => formatDayLabel(point.date)),
     }
   }, [recentTraffic])
@@ -247,7 +280,7 @@ export default function AdminMetricsDashboard({
       { label: "Завершенные", value: metrics.eventStats.completedEvents, tone: "orange" as const },
       { label: "Новости", value: metrics.eventStats.newsMaterials, tone: "cyan" as const },
       {
-        label: "Pending-заявки",
+        label: "Заявки в ожидании",
         value: metrics.eventStats.pendingApprovals,
         tone: "red" as const,
       },
@@ -313,31 +346,97 @@ export default function AdminMetricsDashboard({
     downloadTextFile(`site_traffic_${token}.csv`, `\uFEFF${lines.join("\n")}`, "text/csv;charset=utf-8")
   }
 
+  const attendanceByEvent = useMemo(
+    () => metrics?.attendanceStats.byEvent || [],
+    [metrics?.attendanceStats.byEvent]
+  )
+  const attendanceByStudent = useMemo(
+    () => metrics?.attendanceStats.byStudent || [],
+    [metrics?.attendanceStats.byStudent]
+  )
+
+  const attendanceEventRows = useMemo(() => {
+    const query = normalizeSearch(attendanceSearch)
+    if (!query) return attendanceByEvent
+
+    return attendanceByEvent.filter((row) => {
+      const dateLabel = formatDate(row.date)
+      return `${row.title} ${row.eventId} ${dateLabel}`.toLowerCase().includes(query)
+    })
+  }, [attendanceByEvent, attendanceSearch])
+
+  const attendanceStudentRows = useMemo(() => {
+    const query = normalizeSearch(attendanceSearch)
+    if (!query) return attendanceByStudent
+
+    return attendanceByStudent.filter((row) =>
+      `${row.name} ${row.email} ${row.group} ${row.department} ${row.userId}`
+        .toLowerCase()
+        .includes(query)
+    )
+  }, [attendanceByStudent, attendanceSearch])
+
+  const handleExportFromAttendance = (eventId: string, eventTitle: string) => {
+    setSelectedEventId(eventId)
+    setExportEventSearch(eventTitle)
+    setActiveView("export")
+  }
+
   if (isLoading && !metrics) {
     return (
-      <div className="admin-panel p-8 text-center">
-        <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-[#0ea5a4] border-t-transparent" />
-        <div className="text-sm text-slate-600">Загрузка метрик...</div>
+      <div className="space-y-3">
+        <div className="admin-panel p-5 animate-pulse">
+          <div className="h-4 w-48 rounded bg-slate-200" />
+          <div className="mt-3 grid gap-2 sm:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={`metrics-skeleton-kpi-${index}`} className="h-14 rounded-xl bg-slate-200/80" />
+            ))}
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={`metrics-skeleton-card-${index}`} className="admin-panel p-4 animate-pulse">
+              <div className="h-4 w-40 rounded bg-slate-200" />
+              <div className="mt-2 h-20 rounded bg-slate-200/80" />
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
 
   if (!metrics) {
     return (
-      <div className="admin-panel space-y-4 p-6">
-        <h3 className="text-lg font-semibold text-slate-900">Метрики недоступны</h3>
-        <p className="text-sm text-slate-500">
-          Не удалось загрузить аналитические данные. Повторите попытку.
-        </p>
-        <Button variant="secondary" onClick={onRefresh}>
-          Обновить
-        </Button>
+      <div className="admin-panel flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-slate-900">Метрики недоступны</h3>
+          <p className="text-sm text-slate-500">
+            {errorMessage || "Не удалось загрузить аналитические данные. Повторите попытку."}
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button className="w-full sm:w-auto" variant="secondary" onClick={onRefresh} loading={isLoading}>
+            Обновить
+          </Button>
+          {onOpenDiagnostics && (
+            <Button className="w-full sm:w-auto" variant="secondary" onClick={onOpenDiagnostics}>
+              Диагностика
+            </Button>
+          )}
+        </div>
       </div>
     )
   }
 
+  const metricsViews: Array<{ id: MetricsView; label: string }> = [
+    { id: "summary", label: "Сводка" },
+    { id: "attendance", label: "Посещаемость" },
+    { id: "activity", label: "Активность" },
+    { id: "export", label: "Экспорт" },
+  ]
+
   return (
-    <div className="admin-metrics space-y-6">
+    <div className="admin-metrics space-y-4">
       <section className="admin-metrics-hero admin-panel p-5 sm:p-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
@@ -352,7 +451,9 @@ export default function AdminMetricsDashboard({
               <span className="admin-pill">
                 Месяц: {formatDate(metrics.periods.monthStart)} - {formatDate(metrics.periods.monthEnd)}
               </span>
-              <span className="admin-pill admin-pill-live">Live: данные каждые 15 сек</span>
+              <span className="admin-pill admin-pill-live">
+                Live: данные каждые {Math.max(Math.floor(liveIntervalMs / 1000), 1)} сек
+              </span>
             </div>
           </div>
 
@@ -385,6 +486,32 @@ export default function AdminMetricsDashboard({
         </div>
       </section>
 
+      <section className="admin-panel p-3">
+        <div className="flex flex-wrap gap-2">
+          {metricsViews.map((view) => (
+            <Button
+              key={view.id}
+              variant={activeView === view.id ? "primary" : "secondary"}
+              onClick={() => setActiveView(view.id)}
+              className="px-3 py-1.5 text-xs sm:text-sm"
+            >
+              {view.label}
+            </Button>
+          ))}
+        </div>
+      </section>
+
+      <section className="admin-panel p-4 text-xs text-slate-600">
+        <div className="font-semibold text-slate-900">Как читать метрики</div>
+        <div className="mt-2 grid gap-2 md:grid-cols-3">
+          <p>Посещаемость считается от подтвержденных регистраций и активных участников из отчета мероприятия.</p>
+          <p>“Ожидают” — это текущий хвост заявок на модерацию, а не отдельный статус завершенного мероприятия.</p>
+          <p>Качество active-данных показывает, сколько строк отчета удалось сопоставить с реальными пользователями.</p>
+        </div>
+      </section>
+
+      {activeView === "summary" && (
+        <>
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {kpiCards.map((card) => (
           <article key={card.title} className="admin-panel p-4">
@@ -476,14 +603,14 @@ export default function AdminMetricsDashboard({
               metrics.attendanceStats.byRole.map((item) => (
                 <div key={item.role} className="rounded-xl border border-slate-200/70 bg-white/[0.85] p-3 text-sm">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-slate-800">{item.role}</span>
+                    <span className="font-semibold text-slate-800">{toRoleLabel(item.role)}</span>
                     <span className="text-slate-600">Всего: {item.total}</span>
                   </div>
                   <div className="mt-1 text-xs text-slate-500">
-                    Confirmed: {item.confirmed} | Pending: {item.pending} | Active: {item.active}
+                    Подтверждено: {item.confirmed} | Ожидают: {item.pending} | Активны: {item.active}
                   </div>
                   <div className="mt-1 text-xs text-slate-500">
-                    Confirmation: {item.confirmationRatePercent}% | Activity: {item.activityRatePercent}%
+                    Подтверждение: {item.confirmationRatePercent}% | Активность: {item.activityRatePercent}%
                   </div>
                 </div>
               ))
@@ -493,7 +620,7 @@ export default function AdminMetricsDashboard({
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.7fr_1fr]">
-        <article className="admin-panel p-5">
+        <article className="admin-panel p-4">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-slate-900">Тренд активности (14 дней)</div>
@@ -505,13 +632,13 @@ export default function AdminMetricsDashboard({
           </div>
 
           {recentTraffic.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-7 text-center text-sm text-slate-500">
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-5 text-center text-sm text-slate-500">
               Нет данных для диаграммы.
             </div>
           ) : (
             <>
-              <div className="rounded-3xl border border-white/80 bg-white/[0.82] p-4">
-                <svg viewBox="0 0 100 44" className="h-44 w-full" preserveAspectRatio="none" role="img">
+              <div className="rounded-2xl border border-white/80 bg-white/[0.82] p-3">
+                <svg viewBox="0 0 100 28" className="h-28 w-full" preserveAspectRatio="none" role="img">
                   <defs>
                     <linearGradient id="adminArea" x1="0" x2="0" y1="0" y2="1">
                       <stop offset="0%" stopColor="#f97316" stopOpacity="0.4" />
@@ -523,7 +650,7 @@ export default function AdminMetricsDashboard({
                     </linearGradient>
                   </defs>
 
-                  {[8, 18, 28, 38].map((lineY) => (
+                  {[4, 10, 16, 22].map((lineY) => (
                     <line
                       key={lineY}
                       x1="0"
@@ -555,10 +682,10 @@ export default function AdminMetricsDashboard({
                 </div>
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <div className="mt-2 flex flex-wrap gap-2 text-xs">
                 <span className="admin-pill">Авторизации: {metrics.siteTraffic.signInsLast7Days}</span>
                 <span className="admin-pill">Уникальные: {metrics.siteTraffic.uniqueUsersLast7Days}</span>
-                <span className="admin-pill">Pending: {metrics.eventStats.pendingApprovals}</span>
+                <span className="admin-pill">Ожидают: {metrics.eventStats.pendingApprovals}</span>
               </div>
             </>
           )}
@@ -698,7 +825,10 @@ export default function AdminMetricsDashboard({
           </div>
         </article>
       </section>
+        </>
+      )}
 
+      {activeView === "activity" && (
       <section className="grid gap-4 lg:grid-cols-2">
         <article className="admin-panel p-5">
           <div className="mb-3 text-sm font-semibold text-slate-900">Самые активные студенты</div>
@@ -706,39 +836,58 @@ export default function AdminMetricsDashboard({
         </article>
 
         <article className="admin-panel p-5">
-          <div className="mb-3 text-sm font-semibold text-slate-900">Самые активные преподаватели</div>
-          {renderActivityRows(metrics.topActive.teachers, "Нет данных по преподавателям.")}
+          <div className="mb-3 text-sm font-semibold text-slate-900">Самые активные преподаватели и редакторы</div>
+          {renderActivityRows(metrics.topActive.teachers, "Нет данных по преподавателям и редакторам.")}
         </article>
       </section>
+      )}
 
+      {activeView === "attendance" && (
       <section className="grid gap-4 xl:grid-cols-2">
-        <article className="admin-panel p-5">
-          <div className="mb-3 text-sm font-semibold text-slate-900">
-            Посещаемость по мероприятиям (топ)
+        <article className="admin-panel p-4">
+          <div className="mb-3 flex flex-col gap-2">
+            <div className="text-sm font-semibold text-slate-900">
+              Посещаемость: поиск по студенту или мероприятию
+            </div>
+            <input
+              type="text"
+              value={attendanceSearch}
+              onChange={(event) => setAttendanceSearch(event.target.value)}
+              placeholder="ФИО студента, email, группа, факультет или название мероприятия"
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
+            />
+            <div className="text-xs text-slate-500">
+              Мероприятий: {attendanceEventRows.length} | Студентов: {attendanceStudentRows.length}
+            </div>
           </div>
-          {metrics.attendanceStats.byEvent.length === 0 ? (
-            <div className="text-sm text-slate-500">Нет данных за выбранный период.</div>
+          {attendanceEventRows.length === 0 ? (
+            <div className="text-sm text-slate-500">
+              {attendanceSearch.trim()
+                ? "По вашему запросу мероприятия не найдены."
+                : "Нет данных за выбранный период."}
+            </div>
           ) : (
-            <div className="max-h-80 overflow-auto rounded-xl border border-slate-200/70">
-              <table className="min-w-[860px] w-full text-sm">
+            <div className="max-h-64 overflow-auto rounded-xl border border-slate-200/70">
+              <table className="min-w-[920px] w-full text-sm">
                 <thead className="bg-slate-50 text-left text-slate-600">
                   <tr>
                     <th className="px-3 py-2">Мероприятие</th>
                     <th className="px-3 py-2">Дата</th>
                     <th className="px-3 py-2">Рег.</th>
-                    <th className="px-3 py-2">Confirmed</th>
-                    <th className="px-3 py-2">Pending</th>
-                    <th className="px-3 py-2">Confirm%</th>
+                    <th className="px-3 py-2">Подтв.</th>
+                    <th className="px-3 py-2">Ожид.</th>
+                    <th className="px-3 py-2">Подтв.%</th>
                     <th className="px-3 py-2">Актив. студ.</th>
-                    <th className="px-3 py-2">Activity%</th>
-                    <th className="px-3 py-2">Active (отчет)</th>
-                    <th className="px-3 py-2">Match%</th>
-                    <th className="px-3 py-2">Unmatched</th>
+                    <th className="px-3 py-2">Актив.%</th>
+                    <th className="px-3 py-2">Актив. (отчет)</th>
+                    <th className="px-3 py-2">Совп.%</th>
+                    <th className="px-3 py-2">Несовп.</th>
                     <th className="px-3 py-2">Заполн.</th>
+                    <th className="px-3 py-2">Выгрузка</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {metrics.attendanceStats.byEvent.map((row) => (
+                  {attendanceEventRows.map((row) => (
                     <tr key={row.eventId} className="border-t border-slate-100">
                       <td className="px-3 py-2">{row.title}</td>
                       <td className="px-3 py-2">{formatDate(row.date)}</td>
@@ -752,6 +901,15 @@ export default function AdminMetricsDashboard({
                       <td className="px-3 py-2">{row.activeMatchRatePercent}%</td>
                       <td className="px-3 py-2">{row.activeUnmatched}</td>
                       <td className="px-3 py-2">{row.fillRatePercent}%</td>
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                          onClick={() => handleExportFromAttendance(row.eventId, row.title)}
+                        >
+                          Excel
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -760,7 +918,7 @@ export default function AdminMetricsDashboard({
           )}
         </article>
 
-        <article className="admin-panel p-5">
+        <article className="admin-panel p-4">
           <div className="mb-3 text-sm font-semibold text-slate-900">
             Посещаемость: студенты / группы / факультеты
           </div>
@@ -770,20 +928,23 @@ export default function AdminMetricsDashboard({
                 Студенты (топ)
               </div>
               <div className="space-y-2 text-xs">
-                {metrics.attendanceStats.byStudent.slice(0, 8).map((row) => (
+                {attendanceStudentRows.slice(0, 12).map((row) => (
                     <div key={row.userId} className="rounded-lg border border-slate-200/70 bg-white px-2 py-1.5">
                       <div className="font-semibold text-slate-800">{row.name}</div>
+                      <div className="text-slate-500">{row.email}</div>
                       <div className="text-slate-500">{row.group} | {row.department}</div>
                       <div className="text-slate-600">
-                        OK: {row.confirmed} | Pending: {row.pending} | Active: {row.active}
+                        Подтв.: {row.confirmed} | Ожид.: {row.pending} | Актив.: {row.active}
                       </div>
                       <div className="text-slate-500">
-                        Confirm: {row.confirmationRatePercent}% | Activity: {row.activityRatePercent}%
+                        Подтв.%: {row.confirmationRatePercent}% | Актив.%: {row.activityRatePercent}%
                       </div>
                     </div>
                   ))}
-                  {metrics.attendanceStats.byStudent.length === 0 && (
-                  <div className="text-slate-500">Нет данных.</div>
+                  {attendanceStudentRows.length === 0 && (
+                  <div className="text-slate-500">
+                    {attendanceSearch.trim() ? "По вашему запросу студентов не найдено." : "Нет данных."}
+                  </div>
                 )}
               </div>
             </div>
@@ -830,7 +991,9 @@ export default function AdminMetricsDashboard({
           </div>
         </article>
       </section>
+      )}
 
+      {activeView === "export" && (
       <section className="admin-panel space-y-4 p-5">
         <div className="text-sm font-semibold text-slate-900">Экспорт данных</div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -856,21 +1019,31 @@ export default function AdminMetricsDashboard({
               KPI, посещаемость, активные студенты, группы/факультеты, динамика регистраций.
             </p>
             <div className="mt-3 flex flex-col gap-2">
+              <input
+                type="text"
+                value={exportEventSearch}
+                onChange={(event) => setExportEventSearch(event.target.value)}
+                placeholder="Поиск мероприятия для выгрузки"
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
+              />
               <select
                 className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
                 value={selectedEventId}
                 onChange={(event) => setSelectedEventId(event.target.value)}
               >
-                {exportEvents.length === 0 ? (
+                {filteredExportEvents.length === 0 ? (
                   <option value="">Нет мероприятий для выгрузки</option>
                 ) : (
-                  exportEvents.map((event) => (
+                  filteredExportEvents.map((event) => (
                     <option key={event.id} value={event.id}>
                       {event.title} ({formatDate(event.date)})
                     </option>
                   ))
                 )}
               </select>
+              <div className="text-xs text-slate-500">
+                Найдено для выгрузки: {filteredExportEvents.length}
+              </div>
 
               <Button
                 className="w-full"
@@ -885,6 +1058,7 @@ export default function AdminMetricsDashboard({
           </div>
         </div>
       </section>
+      )}
     </div>
   )
 }

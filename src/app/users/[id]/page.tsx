@@ -4,7 +4,7 @@
  *
  * Main logic:
  * - Enforce profile access policy by role and context
- * - Show attendance history for student with bounded scope
+ * - Show attendance history for student/teacher with bounded scope
  * - Avoid exposing sensitive data in teacher-context view
  *
  * Integrations:
@@ -19,7 +19,9 @@ import { notFound, redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { CategoryDisplayMap } from "@/types"
-import { getStudentAttendanceHistoryForViewer } from "@/server/events/student-attendance-history-service"
+import { getUserAttendanceHistoryForViewer } from "@/server/events/student-attendance-history-service"
+import { buildProfileStats } from "@/server/auth/profile-stats-service"
+import { isAdminRole, isContentManagerRole, toRoleLabel } from "@/lib/roles"
 
 type UserProfilePageProps = {
   params: Promise<{
@@ -67,9 +69,11 @@ export default async function UserProfilePage({ params }: UserProfilePageProps) 
       role: true,
       department: true,
       group: true,
+      admissionYear: true,
       image: true,
       bio: true,
       createdAt: true,
+      updatedAt: true,
     },
   })
 
@@ -78,19 +82,19 @@ export default async function UserProfilePage({ params }: UserProfilePageProps) 
   }
 
   const isSelf = viewer.id === user.id
-  const isAdminViewer = viewer.role === Role.ADMIN
-  const isTeacherViewer = viewer.role === Role.TEACHER
-  const isTeacherContextView = !isSelf && isTeacherViewer && user.role === Role.STUDENT
+  const isAdminViewer = isAdminRole(viewer.role)
+  const isStaffViewer = isContentManagerRole(viewer.role) && !isAdminViewer
+  const isStaffContextView = !isSelf && isStaffViewer && user.role === Role.STUDENT
 
-  if (!isSelf && !isAdminViewer && !isTeacherContextView) {
+  if (!isSelf && !isAdminViewer && !isStaffContextView) {
     notFound()
   }
 
   const attendanceHistory =
-    user.role === Role.STUDENT
-      ? await getStudentAttendanceHistoryForViewer({
+    user.role === Role.STUDENT || (isContentManagerRole(user.role) && !isAdminRole(user.role))
+      ? await getUserAttendanceHistoryForViewer({
           viewer,
-          student: {
+          user: {
             id: user.id,
             role: user.role,
             name: user.name,
@@ -99,11 +103,29 @@ export default async function UserProfilePage({ params }: UserProfilePageProps) 
         })
       : null
 
-  if (isTeacherContextView && !attendanceHistory) {
+  if (isStaffContextView && !attendanceHistory) {
     notFound()
   }
 
-  const canSeeExtendedActivity = !isTeacherContextView
+  const attendanceHistorySubjectLabel =
+    user.role === Role.TEACHER
+      ? "преподавателя"
+      : user.role === "EDITOR"
+        ? "редактора"
+        : "студента"
+  const isStaffProfile = isContentManagerRole(user.role) && !isAdminRole(user.role)
+  const isStudentProfile = user.role === Role.STUDENT
+  const profileStats = await buildProfileStats({
+    id: user.id,
+    role: user.role,
+    name: user.name,
+    email: user.email,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  })
+  const visitedEventsCount = attendanceHistory?.summary.confirmed || 0
+
+  const canSeeExtendedActivity = !isStaffContextView
   const canViewSensitiveContact = isSelf || isAdminViewer
 
   let createdEvents: CompactEvent[] = []
@@ -183,7 +205,7 @@ export default async function UserProfilePage({ params }: UserProfilePageProps) 
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
               <div className="rounded-lg border-2 border-primary/16 bg-white px-3 py-2 text-sm text-primary/74">
                 <p className="text-xs uppercase tracking-[0.08em] text-primary/58">Роль</p>
-                <p className="mt-1 font-semibold text-primary">{user.role}</p>
+                <p className="mt-1 font-semibold text-primary">{toRoleLabel(user.role)}</p>
               </div>
               <div className="rounded-lg border-2 border-primary/16 bg-white px-3 py-2 text-sm text-primary/74">
                 <p className="text-xs uppercase tracking-[0.08em] text-primary/58">С нами с</p>
@@ -193,7 +215,7 @@ export default async function UserProfilePage({ params }: UserProfilePageProps) 
           </div>
         </section>
 
-        {isTeacherContextView && attendanceHistory && (
+        {isStaffContextView && attendanceHistory && (
           <section className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900">
             <p className="font-semibold">Режим ограниченного доступа к истории посещений</p>
             <p className="mt-1 text-amber-900/85">
@@ -219,7 +241,7 @@ export default async function UserProfilePage({ params }: UserProfilePageProps) 
             {attendanceHistory && (
               <article className="liquid-card p-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-base font-semibold text-primary">История посещений студента</h3>
+                  <h3 className="text-base font-semibold text-primary">{`\u0418\u0441\u0442\u043e\u0440\u0438\u044f \u043f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u0439 ${attendanceHistorySubjectLabel}`}</h3>
                   <span className="rounded-full border border-primary/20 bg-white px-3 py-1 text-xs text-primary/68">
                     {formatDate(attendanceHistory.period.from)} - {formatDate(attendanceHistory.period.to)}
                   </span>
@@ -342,39 +364,97 @@ export default async function UserProfilePage({ params }: UserProfilePageProps) 
                   <p className="text-xs uppercase tracking-[0.08em] text-primary/56">Группа</p>
                   <p className="mt-1 font-semibold text-primary">{user.group || "Не указано"}</p>
                 </div>
+                {isStudentProfile && (
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.08em] text-primary/56">Год поступления</p>
+                    <p className="mt-1 font-semibold text-primary">{user.admissionYear || "Не указан"}</p>
+                  </div>
+                )}
+                {(isSelf || isAdminViewer) && (
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.08em] text-primary/56">Последняя активность</p>
+                    <p className="mt-1 font-semibold text-primary">
+                      {profileStats.lastActivityAt
+                        ? new Date(profileStats.lastActivityAt).toLocaleString("ru-RU")
+                        : "Нет данных"}
+                    </p>
+                  </div>
+                )}
               </div>
             </article>
 
             <article className="liquid-card p-5">
               <h3 className="text-sm font-semibold uppercase tracking-[0.1em] text-primary/58">Активность</h3>
               <div className="mt-4 space-y-3 text-sm text-primary/74">
-                {attendanceHistory ? (
+                {isStaffProfile ? (
                   <>
                     <div className="flex items-center justify-between">
-                      <span>Подтверждено</span>
-                      <span className="font-semibold text-primary">{attendanceHistory.summary.confirmed}</span>
+                      <span>{"\u0421\u043e\u0437\u0434\u0430\u043d\u043e \u0441\u043e\u0431\u044b\u0442\u0438\u0439"}</span>
+                      <span className="font-semibold text-primary">{createdCount}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span>Ожидает подтверждения</span>
+                      <span>{"\u0423\u0447\u0430\u0441\u0442\u0438\u0439 \u0432 \u0441\u043e\u0431\u044b\u0442\u0438\u044f\u0445"}</span>
+                      <span className="font-semibold text-primary">{participatedCount}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>{"\u041f\u043e\u0441\u0435\u0449\u0435\u043d\u043e (\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u043e)"}</span>
+                      <span className="font-semibold text-primary">
+                        {attendanceHistory ? attendanceHistory.summary.confirmed : 0}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>{"\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0435 \u0443\u0447\u0430\u0441\u0442\u0438\u044f"}</span>
+                      <span className="font-semibold text-primary">
+                        {attendanceHistory ? attendanceHistory.summary.active : 0}
+                      </span>
+                    </div>
+                  </>
+                ) : isStudentProfile && attendanceHistory ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span>{"\u041f\u043e\u0441\u0435\u0442\u0438\u043b \u043c\u0435\u0440\u043e\u043f\u0440\u0438\u044f\u0442\u0438\u0439"}</span>
+                      <span className="font-semibold text-primary">{visitedEventsCount}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>{"\u0412\u0441\u0435\u0433\u043e \u0437\u0430\u043f\u0438\u0441\u0435\u0439 \u0432 \u0438\u0441\u0442\u043e\u0440\u0438\u0438"}</span>
+                      <span className="font-semibold text-primary">{attendanceHistory.summary.total}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>{"\u041e\u0436\u0438\u0434\u0430\u0435\u0442 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u044f"}</span>
                       <span className="font-semibold text-primary">{attendanceHistory.summary.pending}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span>Активные участия</span>
+                      <span>{"\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0435 \u0443\u0447\u0430\u0441\u0442\u0438\u044f"}</span>
+                      <span className="font-semibold text-primary">{attendanceHistory.summary.active}</span>
+                    </div>
+                  </>
+                ) : attendanceHistory ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span>{"\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u043e"}</span>
+                      <span className="font-semibold text-primary">{attendanceHistory.summary.confirmed}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>{"\u041e\u0436\u0438\u0434\u0430\u0435\u0442 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u044f"}</span>
+                      <span className="font-semibold text-primary">{attendanceHistory.summary.pending}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>{"\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0435 \u0443\u0447\u0430\u0441\u0442\u0438\u044f"}</span>
                       <span className="font-semibold text-primary">{attendanceHistory.summary.active}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span>Подтверждение заявок</span>
+                      <span>{"\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 \u0437\u0430\u044f\u0432\u043e\u043a"}</span>
                       <span className="font-semibold text-primary">{attendanceHistory.summary.confirmationRatePercent}%</span>
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="flex items-center justify-between">
-                      <span>Создано событий</span>
+                      <span>{"\u0421\u043e\u0437\u0434\u0430\u043d\u043e \u0441\u043e\u0431\u044b\u0442\u0438\u0439"}</span>
                       <span className="font-semibold text-primary">{createdCount}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span>Участий в событиях</span>
+                      <span>{"\u0423\u0447\u0430\u0441\u0442\u0438\u0439 \u0432 \u0441\u043e\u0431\u044b\u0442\u0438\u044f\u0445"}</span>
                       <span className="font-semibold text-primary">{participatedCount}</span>
                     </div>
                   </>

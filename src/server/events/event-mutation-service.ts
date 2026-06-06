@@ -27,6 +27,12 @@ import { formatLocalDate, parseLocalDateTime } from "@/server/shared/date-time"
 import { ServiceError } from "@/server/shared/service-error"
 import { canModerateEventByRole } from "@/server/shared/session"
 import type { CreateEventBodyInput, UpdateEventBodyInput } from "@/server/shared/schemas/event-api-schema"
+import { isAdminRole, isModeratorRole } from "@/lib/roles"
+import {
+  buildEventLink,
+  createNotifications,
+  type NotificationInput,
+} from "@/server/notifications/notification-service"
 
 type EventActor = {
   id: string
@@ -58,6 +64,7 @@ const buildEventAuditInfo = (
     description?: string | null
     duration?: string | null
     maxParticipants: number
+    requiresApproval?: boolean
     isNews?: boolean
     removedFromCalendar?: boolean
     images?: string[]
@@ -78,6 +85,7 @@ const buildEventAuditInfo = (
   currentParticipants: participantsCount,
   moderatorsCount,
   imagesCount: Array.isArray(event.images) ? event.images.length : 0,
+  requiresApproval: event.requiresApproval !== false,
   isNews: Boolean(event.isNews),
   removedFromCalendar: Boolean(event.removedFromCalendar),
   responsible: event.responsible || "",
@@ -95,6 +103,7 @@ type EventWithRelations = {
   description: string
   maxParticipants: number
   currentParticipants?: number
+  requiresApproval: boolean
   isPast: boolean
   removedFromCalendar: boolean
   isNews: boolean
@@ -118,11 +127,11 @@ const resolveResponsibleAssignee = async (responsibleId?: string) => {
     select: { id: true, name: true, email: true, role: true },
   })
 
-  if (!user || (user.role !== "TEACHER" && user.role !== "ADMIN")) {
+  if (!user || !isModeratorRole(user.role)) {
     throw new ServiceError(
       400,
       "VALIDATION_ERROR",
-      "Руководитель должен быть преподавателем или администратором"
+      "Руководитель должен быть преподавателем, редактором или администратором"
     )
   }
 
@@ -184,12 +193,20 @@ export const createEventFromApi = async (params: {
     )
   }
 
-  const participantResolution = await resolveParticipantUsers(dto.participants)
-  if (participantResolution.missingEmails.length > 0) {
+  const participantResolution = await resolveParticipantUsers(dto.participants, dto.participantGroups)
+  if (participantResolution.missingEmails.length > 0 || participantResolution.missingGroups.length > 0) {
+    const missingParts = [
+      participantResolution.missingEmails.length > 0
+        ? `email: ${participantResolution.missingEmails.join(", ")}`
+        : "",
+      participantResolution.missingGroups.length > 0
+        ? `группы: ${participantResolution.missingGroups.join(", ")}`
+        : "",
+    ].filter(Boolean)
     throw new ServiceError(
       400,
       "VALIDATION_ERROR",
-      `Не найдены участники: ${participantResolution.missingEmails.join(", ")}`
+      `Не найдены участники: ${missingParts.join("; ")}`
     )
   }
 
@@ -203,7 +220,7 @@ export const createEventFromApi = async (params: {
     throw new ServiceError(
       400,
       "VALIDATION_ERROR",
-      `Не найдены преподаватели: ${moderatorResolution.missingEmails.join(", ")}`
+      `Не найдены преподаватели/редакторы: ${moderatorResolution.missingEmails.join(", ")}`
     )
   }
 
@@ -218,6 +235,7 @@ export const createEventFromApi = async (params: {
     location: dto.location,
     description: dto.description,
     maxParticipants,
+    requiresApproval: dto.requiresApproval !== false,
     isNews: Boolean(dto.isNews),
     images: Array.isArray(dto.images) ? dto.images : [],
     responsible:
@@ -272,7 +290,7 @@ export const createEventFromApi = async (params: {
     const participantIds = participantResolution.users.map((user) => user.id)
     const moderatorIds = moderatorResolution.users.map((user) => user.id)
 
-    const notifications: Prisma.NotificationCreateManyInput[] = []
+    const notifications: NotificationInput[] = []
 
     const changeRecipients = await prisma.user.findMany({
       where: {
@@ -289,7 +307,8 @@ export const createEventFromApi = async (params: {
         userId,
         title: "Добавление в мероприятие",
         content: `Вас добавили в мероприятие «${created.title}». Дата: ${eventDateText}${timeText}${locationText}`,
-        type: NotificationType.EVENT,
+        type: NotificationType.PARTICIPANT_ADDED,
+        link: buildEventLink(created.id),
         read: false,
         metadata: { eventId: created.id, action: "participant_added" },
       })
@@ -301,7 +320,8 @@ export const createEventFromApi = async (params: {
         userId,
         title: "Назначение модератором",
         content: `Вас назначили модератором мероприятия «${created.title}». Дата: ${eventDateText}${timeText}${locationText}`,
-        type: NotificationType.EVENT,
+        type: NotificationType.ROLE_ASSIGNED,
+        link: buildEventLink(created.id),
         read: false,
         metadata: { eventId: created.id, action: "moderator_added" },
       })
@@ -339,13 +359,14 @@ export const createEventFromApi = async (params: {
         title,
         content,
         type: NotificationType.NEW,
+        link: buildEventLink(created.id),
         read: false,
         metadata: { eventId: created.id, action: "event_new" },
       })
     })
 
     if (notifications.length > 0) {
-      await prisma.notification.createMany({ data: notifications })
+      await createNotifications(notifications)
     }
   } catch (notificationError) {
     console.error("createEventFromApi notifications error", notificationError)
@@ -421,6 +442,10 @@ export const updateEventFromApi = async (params: {
     updateData.maxParticipants = Number(body.maxParticipants) || 0
   }
 
+  if (body.requiresApproval !== undefined) {
+    updateData.requiresApproval = body.requiresApproval
+  }
+
   if (Array.isArray(body.images)) {
     updateData.images = body.images.map((value) => String(value))
   }
@@ -444,13 +469,21 @@ export const updateEventFromApi = async (params: {
     }
   }
 
-  if (Array.isArray(body.participants)) {
-    const participantResolution = await resolveParticipantUsers(body.participants)
-    if (participantResolution.missingEmails.length > 0) {
+  if (Array.isArray(body.participants) || Array.isArray(body.participantGroups)) {
+    const participantResolution = await resolveParticipantUsers(body.participants, body.participantGroups)
+    if (participantResolution.missingEmails.length > 0 || participantResolution.missingGroups.length > 0) {
+      const missingParts = [
+        participantResolution.missingEmails.length > 0
+          ? `email: ${participantResolution.missingEmails.join(", ")}`
+          : "",
+        participantResolution.missingGroups.length > 0
+          ? `группы: ${participantResolution.missingGroups.join(", ")}`
+          : "",
+      ].filter(Boolean)
       throw new ServiceError(
         400,
         "VALIDATION_ERROR",
-        `Не найдены участники: ${participantResolution.missingEmails.join(", ")}`
+        `Не найдены участники: ${missingParts.join("; ")}`
       )
     }
 
@@ -465,7 +498,7 @@ export const updateEventFromApi = async (params: {
 
   if (Array.isArray(body.moderators)) {
     const isOwner = event.creatorId === actor.id
-    if (actor.role !== "ADMIN" && !isOwner) {
+    if (!isAdminRole(actor.role) && !isOwner) {
       throw new ServiceError(
         403,
         "FORBIDDEN",
@@ -478,11 +511,39 @@ export const updateEventFromApi = async (params: {
       throw new ServiceError(
         400,
         "VALIDATION_ERROR",
-        `Не найдены преподаватели: ${moderatorResolution.missingEmails.join(", ")}`
+        `Не найдены преподаватели/редакторы: ${moderatorResolution.missingEmails.join(", ")}`
       )
     }
 
     moderatorIds = moderatorResolution.users.map((user) => user.id)
+  }
+
+  if (body.requiresApproval === false && event.requiresApproval) {
+    const pendingParticipantIds = event.eventParticipants
+      .filter((participant) => participant.status === ParticipantStatus.PENDING)
+      .map((participant) => participant.userId)
+
+    if (pendingParticipantIds.length > 0) {
+      const baseConfirmedIds =
+        confirmedParticipantIds ??
+        event.eventParticipants
+          .filter((participant) => participant.status === ParticipantStatus.CONFIRMED)
+          .map((participant) => participant.userId)
+
+      const nextConfirmedIds = Array.from(new Set([...baseConfirmedIds, ...pendingParticipantIds]))
+      const maxAllowed =
+        updateData.maxParticipants !== undefined ? Number(updateData.maxParticipants) : event.maxParticipants
+
+      if (maxAllowed > 0 && nextConfirmedIds.length > maxAllowed) {
+        throw new ServiceError(
+          400,
+          "VALIDATION_ERROR",
+          "Невозможно отключить подтверждение: превышен лимит участников. Увеличьте лимит или обработайте заявки."
+        )
+      }
+
+      confirmedParticipantIds = nextConfirmedIds
+    }
   }
 
   const updated = await updateEventWithRelations({
@@ -517,7 +578,7 @@ export const updateEventFromApi = async (params: {
     const timeText = updated.time ? ` ${updated.time}` : ""
     const locationText = updated.location ? `, место: ${updated.location}` : ""
 
-    const notifications: Prisma.NotificationCreateManyInput[] = []
+    const notifications: NotificationInput[] = []
 
     const loadRecipients = async (ids: string[]) => {
       if (ids.length === 0) return new Set<string>()
@@ -540,7 +601,8 @@ export const updateEventFromApi = async (params: {
         userId,
         title: "Добавление в мероприятие",
         content: `Вас добавили в мероприятие «${updated.title}». Дата: ${eventDateText}${timeText}${locationText}`,
-        type: NotificationType.EVENT,
+        type: NotificationType.PARTICIPANT_ADDED,
+        link: buildEventLink(updated.id),
         read: false,
         metadata: { eventId: updated.id, action: "participant_added" },
       })
@@ -552,7 +614,8 @@ export const updateEventFromApi = async (params: {
         userId,
         title: "Участие подтверждено",
         content: `Ваше участие в мероприятии «${updated.title}» подтверждено. Дата: ${eventDateText}${timeText}${locationText}`,
-        type: NotificationType.CHANGE,
+        type: NotificationType.PARTICIPATION_STATUS_CHANGED,
+        link: buildEventLink(updated.id),
         read: false,
         metadata: { eventId: updated.id, action: "participant_confirmed" },
       })
@@ -564,7 +627,8 @@ export const updateEventFromApi = async (params: {
         userId,
         title: "Назначение модератором",
         content: `Вас назначили модератором мероприятия «${updated.title}». Дата: ${eventDateText}${timeText}${locationText}`,
-        type: NotificationType.EVENT,
+        type: NotificationType.ROLE_ASSIGNED,
+        link: buildEventLink(updated.id),
         read: false,
         metadata: { eventId: updated.id, action: "moderator_added" },
       })
@@ -581,6 +645,7 @@ export const updateEventFromApi = async (params: {
         contact: "контакт",
         category: "категория",
         maxParticipants: "лимит участников",
+        requiresApproval: "подтверждение участников",
         images: "фотографии",
         date: "дата",
         time: "время",
@@ -610,6 +675,7 @@ export const updateEventFromApi = async (params: {
           title: "Изменение мероприятия",
           content: `Мероприятие «${updated.title}» было обновлено. ${changeSummary} Дата: ${eventDateText}${timeText}${locationText}`,
           type: NotificationType.CHANGE,
+          link: buildEventLink(updated.id),
           read: false,
           metadata: { eventId: updated.id, action: "event_updated" },
         })
@@ -617,7 +683,7 @@ export const updateEventFromApi = async (params: {
     }
 
     if (notifications.length > 0) {
-      await prisma.notification.createMany({ data: notifications })
+      await createNotifications(notifications)
     }
   } catch (notificationError) {
     console.error("updateEventFromApi notifications error", notificationError)
@@ -649,6 +715,7 @@ export const updateEventFromApi = async (params: {
       contact: event.contact,
       category: event.category,
       maxParticipants: event.maxParticipants,
+      requiresApproval: event.requiresApproval,
       images: event.images,
       date: event.date,
       time: event.time,
@@ -664,6 +731,7 @@ export const updateEventFromApi = async (params: {
       contact: updated.contact,
       category: updated.category,
       maxParticipants: updated.maxParticipants,
+      requiresApproval: updated.requiresApproval,
       images: updated.images,
       date: updated.date,
       time: updated.time,

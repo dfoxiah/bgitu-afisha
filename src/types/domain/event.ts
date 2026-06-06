@@ -11,18 +11,20 @@
  * - events UI/pages/context
  */
 
-import type { EventCategory, ParticipantStatus } from "@prisma/client"
+import type { EventCategory, ParticipantStatus, ReportStatus } from "@prisma/client"
 import type { User } from "./user"
 
 export interface EventReport {
   id: string
   eventId: string
+  status?: ReportStatus
   summary: string
   tasks: string[]
   comment?: string
   reportDate: Date
   activeParticipants: string[]
   images: string[]
+  publishedAt?: Date | null
   createdAt: Date
   updatedAt: Date
 }
@@ -38,6 +40,8 @@ export interface Event {
   description: string
   maxParticipants: number
   currentParticipants: number
+  requiresApproval?: boolean
+  isPublic?: boolean
   isPast: boolean
   removedFromCalendar: boolean
   isNews: boolean
@@ -55,5 +59,6 @@ export interface Event {
   creatorId: string
   creator: User
   createdAt: Date
+  completedAt?: Date | string | null
   updatedAt: Date
 }

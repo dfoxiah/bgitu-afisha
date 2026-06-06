@@ -20,6 +20,8 @@ import { prisma } from "@/lib/prisma"
 import { revalidateEventsCache } from "@/server/events/event-cache"
 import { canModerateEventByRole } from "@/server/shared/session"
 import { errorJson } from "@/server/shared/http-response"
+import { isContentManagerRole } from "@/lib/roles"
+import { buildEventLink, createNotification } from "@/server/notifications/notification-service"
 
 type RouteParams = {
   params: Promise<{ id: string }>
@@ -34,7 +36,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
-    if (session.user.role !== "TEACHER" && session.user.role !== "ADMIN") {
+    if (!isContentManagerRole(session.user.role)) {
       return errorJson(403, "FORBIDDEN", "Недостаточно прав")
     }
 
@@ -74,6 +76,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       userId: session.user.id,
       creatorId: event.creatorId,
       moderatorIds: event.moderators.map((moderator) => moderator.userId),
+      permission: "events.manageParticipants",
     })
 
     if (!canModerate) {
@@ -97,6 +100,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const prevStatus = participant.status
     let nextStatus: ParticipantStatus | "REMOVED" = prevStatus
     let delta = 0
+    let notificationPayload: Parameters<typeof createNotification>[0] | null = null
 
     if (action === "confirm") {
       if (prevStatus !== ParticipantStatus.CONFIRMED) {
@@ -144,22 +148,24 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
               ).toLocaleDateString("ru-RU")} ${event.time || ""}`
             : `Ваша заявка на участие в мероприятии «${event.title}» отклонена.`
 
-        await tx.notification.create({
-          data: {
-            userId,
-            title,
-            content,
-            type: NotificationType.CHANGE,
-            read: false,
-            metadata: {
-              eventId,
-              action,
-              approvedBy: session.user.email || session.user.name,
-            },
+        notificationPayload = {
+          userId,
+          title,
+          content,
+          type: NotificationType.PARTICIPATION_STATUS_CHANGED,
+          link: buildEventLink(eventId),
+          metadata: {
+            eventId,
+            action,
+            approvedBy: session.user.email || session.user.name,
           },
-        })
+        }
       }
     })
+
+    if (notificationPayload) {
+      await createNotification(notificationPayload)
+    }
 
     const { ip, userAgent } = buildAuditMeta(req)
     await logAuditEvent({

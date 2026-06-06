@@ -142,6 +142,12 @@ export default function DashboardPage() {
     [events.length, upcomingEvents.length, pastEvents, monthEventsCount]
   )
 
+  const nextEvent = useMemo(() => {
+    return [...upcomingEvents].sort(
+      (left, right) => new Date(left.date).getTime() - new Date(right.date).getTime()
+    )[0]
+  }, [upcomingEvents])
+
   if (status === "loading") {
     return (
       <div className="status-screen">
@@ -168,177 +174,139 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="dashboard-page page-shell pb-10">
-      <div className="mx-auto max-w-[1320px] px-4 py-4 sm:px-6">
-        <section className="grid items-start gap-4 xl:grid-cols-[1.35fr_0.65fr]">
-          <article className="page-hero p-4 sm:p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary/58">Командный центр</p>
-            <h1 className="mt-2 text-2xl font-semibold leading-tight text-primary sm:text-3xl">
-              Панель управления афишей, {session.user?.name || "пользователь"}
-            </h1>
-            <p className="mt-4 max-w-3xl text-base leading-relaxed text-primary/72">
-              Следите за расписанием, публикуйте материалы и быстро переключайтесь между календарем, лентой и карточками событий. Мы вынесли ключевые действия на первый экран, чтобы не искать их по разделам.
+    <div className="dashboard-page dashboard-redesign pb-10">
+      <div className="mx-auto max-w-[1440px] px-4 py-3 sm:px-6">
+        <section className="dashboard-hero-strip">
+          <div className="dashboard-hero-copy">
+            <p className="dashboard-kicker">БГИТУ Афиша</p>
+            <h1>Главная</h1>
+            <p>
+              События, отчеты, календарь и публикации собраны в одном рабочем экране без лишней витрины.
             </p>
-
-            <div className="mt-6 flex flex-wrap gap-2.5">
-              <Link href="/events" className="btn btn-primary px-4 py-2.5 text-sm">
+            <div className="dashboard-actions">
+              <Link href="/events" className="btn btn-primary px-4 py-2 text-sm">
                 Открыть события
               </Link>
-              <Link href="/events/create" className="btn btn-secondary px-4 py-2.5 text-sm">
+              <Link href="/events/create" className="btn btn-secondary px-4 py-2 text-sm">
                 Создать мероприятие
               </Link>
-              <Link href="/calendar" className="btn btn-outline px-4 py-2.5 text-sm">
-                Календарь месяца
+              <Link href="/calendar" className="btn btn-outline px-4 py-2 text-sm">
+                Календарь
               </Link>
             </div>
+          </div>
 
-            <div className="mt-5 grid gap-2 sm:grid-cols-3">
-              <div className="liquid-card px-3 py-2.5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary/58">Поток задач</p>
-                <p className="mt-1 text-sm text-primary/72">Проверка материалов и модерация заявок</p>
-              </div>
-              <div className="liquid-card px-3 py-2.5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary/58">Календарная сетка</p>
-                <p className="mt-1 text-sm text-primary/72">Контроль дат и пересечений активности</p>
-              </div>
-              <div className="liquid-card px-3 py-2.5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary/58">Публикации</p>
-                <p className="mt-1 text-sm text-primary/72">Новости и отчеты по прошедшим событиям</p>
-              </div>
-            </div>
-          </article>
+          <div className="dashboard-next-card">
+            <span className="dashboard-kicker">Ближайшее</span>
+            {nextEvent ? (
+              <>
+                <strong>{nextEvent.title}</strong>
+                <span>
+                  {new Date(nextEvent.date).toLocaleDateString("ru-RU")} • {nextEvent.time} • {nextEvent.location}
+                </span>
+              </>
+            ) : (
+              <>
+                <strong>Нет ближайших событий</strong>
+                <span>Календарь свободен для новых публикаций.</span>
+              </>
+            )}
+          </div>
+        </section>
 
-          <aside className="liquid-section p-4">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary/58">Оперативные метрики</h2>
-            <div className="mt-4 grid gap-2.5">
-              {stats.map((item) => (
-                <article key={item.label} className="liquid-card flex items-center justify-between px-3.5 py-3">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary/56">{item.label}</p>
-                    <p className="mt-0.5 text-2xl font-semibold text-primary">{item.value}</p>
-                    <p className="text-[11px] text-primary/55">{item.hint}</p>
-                  </div>
-                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-primary/16 bg-white text-primary">
-                    <i className={`fas fa-${item.icon} text-sm`} />
-                  </span>
-                </article>
-              ))}
-            </div>
-
-            <div className="mt-4 rounded-xl border border-primary/12 bg-white/75 p-3 text-sm text-primary/68">
-              Метрики обновляются автоматически после изменения событий, публикации отчета или настройки категорий.
-            </div>
-          </aside>
+        <section className="dashboard-stat-strip" aria-label="Оперативные метрики">
+          {stats.map((item) => (
+            <article key={item.label} className="dashboard-stat">
+              <i className={`fas fa-${item.icon}`} />
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              <small>{item.hint}</small>
+            </article>
+          ))}
         </section>
 
         {upcomingEvents.length > 0 && (
-          <section className="mt-4">
+          <section className="dashboard-banner">
             <Banner events={upcomingEvents.slice(0, 5)} />
           </section>
         )}
 
-        <section className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="space-y-5">
-            <section className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-              <aside className="space-y-4">
-                <div className="liquid-section p-4">
-                  <CategoryFilter />
-                  <h3 className="mt-4 text-sm font-semibold uppercase tracking-[0.12em] text-primary/65">Параметры ленты</h3>
-                  <div className="mt-3 space-y-3 border-t border-primary/12 pt-3">
-                    <div>
-                      <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-primary/56">Сортировка</label>
-                      <select
-                        value={sortBy}
-                        onChange={(event) => {
-                          const nextSort = event.target.value
-                          if (isSortBy(nextSort)) setSortBy(nextSort)
-                        }}
-                        className="liquid-input w-full px-3 py-2 text-sm"
-                      >
-                        <option value="date_desc">Сначала новые</option>
-                        <option value="date_asc">Сначала старые</option>
-                        <option value="title_asc">Название А-Я</option>
-                        <option value="title_desc">Название Я-А</option>
-                      </select>
-                    </div>
+        <section className="dashboard-workbench">
+          <aside className="dashboard-filter-panel">
+            <CategoryFilter />
+            <div className="dashboard-controls">
+              <label>
+                <span>Сортировка</span>
+                <select
+                  value={sortBy}
+                  onChange={(event) => {
+                    const nextSort = event.target.value
+                    if (isSortBy(nextSort)) setSortBy(nextSort)
+                  }}
+                >
+                  <option value="date_desc">Сначала новые</option>
+                  <option value="date_asc">Сначала старые</option>
+                  <option value="title_asc">Название А-Я</option>
+                  <option value="title_desc">Название Я-А</option>
+                </select>
+              </label>
 
-                    <div>
-                      <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-primary/56">Статус</label>
-                      <select
-                        value={statusFilter}
-                        onChange={(event) => {
-                          const nextStatus = event.target.value
-                          if (isStatusFilter(nextStatus)) setStatusFilter(nextStatus)
-                        }}
-                        className="liquid-input w-full px-3 py-2 text-sm"
-                      >
-                        <option value="all">Все</option>
-                        <option value="active">Активные</option>
-                        <option value="past">Прошедшие</option>
-                      </select>
-                    </div>
+              <label>
+                <span>Статус</span>
+                <select
+                  value={statusFilter}
+                  onChange={(event) => {
+                    const nextStatus = event.target.value
+                    if (isStatusFilter(nextStatus)) setStatusFilter(nextStatus)
+                  }}
+                >
+                  <option value="all">Все</option>
+                  <option value="active">Активные</option>
+                  <option value="past">Прошедшие</option>
+                </select>
+              </label>
+            </div>
+          </aside>
+
+          <main className="dashboard-feed-panel">
+            {searchQuery.trim() && (
+              <section className="dashboard-module">
+                <div className="dashboard-module-head">
+                  <div>
+                    <h2>Поиск</h2>
+                    <p>Найдено: {searchResults.length}</p>
                   </div>
+                  <span>{searchQuery}</span>
                 </div>
-              </aside>
 
-              <main className="space-y-5">
-                {searchQuery.trim() && (
-                  <section className="liquid-section p-4 sm:p-5">
-                    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <h2 className="text-lg font-semibold text-primary">Поиск по событиям</h2>
-                        <p className="text-sm text-primary/62">Найдено: {searchResults.length}</p>
-                      </div>
-                      <span className="liquid-chip px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-primary/62">
-                        Запрос: {searchQuery}
-                      </span>
-                    </div>
-
-                    {searchResults.length === 0 ? (
-                      <div className="liquid-card p-6 text-sm text-primary/62">По вашему запросу ничего не найдено.</div>
-                    ) : (
-                      <div className="overflow-hidden rounded-xl border border-primary/12 bg-white/80">
-                        {searchResults.slice(0, 20).map((event, index) => (
-                          <Link
-                            key={event.id}
-                            href={`/events/${event.id}`}
-                            className={`block px-3 py-3 transition-colors hover:bg-primary/5 ${index !== Math.min(searchResults.length, 20) - 1 ? "border-b border-primary/12" : ""}`}
-                          >
-                            <p className="line-clamp-1 text-sm font-semibold text-primary sm:text-base">{event.title}</p>
-                            <p className="mt-1 line-clamp-1 text-xs text-primary/62 sm:text-sm">
-                              {new Date(event.date).toLocaleDateString("ru-RU")} • {event.time} • {event.location}
-                            </p>
-                          </Link>
-                        ))}
-                      </div>
-                    )}
-                  </section>
+                {searchResults.length === 0 ? (
+                  <div className="dashboard-empty">По вашему запросу ничего не найдено.</div>
+                ) : (
+                  <div className="dashboard-list">
+                    {searchResults.slice(0, 20).map((event) => (
+                      <Link key={event.id} href={`/events/${event.id}`} className="dashboard-row">
+                        <strong>{event.title}</strong>
+                        <span>
+                          {new Date(event.date).toLocaleDateString("ru-RU")} • {event.time} • {event.location}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
                 )}
+              </section>
+            )}
 
-                <section className="liquid-section p-4 sm:p-5">
-                  <UpcomingEvents events={upcomingEvents} plain />
-                </section>
-
-                <section className="liquid-section p-4 sm:p-5">
-                  <NewsSection events={pastEvents} plain />
-                </section>
-              </main>
-            </section>
-          </div>
-
-          <aside className="space-y-5">
-            <section className="liquid-section p-4 sm:p-5">
-              <CalendarSection events={events} compact plain />
+            <section className="dashboard-module">
+              <UpcomingEvents events={upcomingEvents} plain />
             </section>
 
-            <section className="liquid-section p-4">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-primary/64">Как работать быстрее</h3>
-              <ul className="mt-3 space-y-2 text-sm text-primary/70">
-                <li className="rounded-lg border border-primary/12 bg-white/78 px-3 py-2">1. Настройте фильтр категории слева.</li>
-                <li className="rounded-lg border border-primary/12 bg-white/78 px-3 py-2">2. Проверяйте пересечения по календарю справа.</li>
-                <li className="rounded-lg border border-primary/12 bg-white/78 px-3 py-2">3. Завершайте события отчётом в карточках.</li>
-              </ul>
+            <section className="dashboard-module">
+              <NewsSection events={pastEvents} plain />
             </section>
+          </main>
+
+          <aside className="dashboard-calendar-panel">
+            <CalendarSection events={events} compact plain />
           </aside>
         </section>
       </div>

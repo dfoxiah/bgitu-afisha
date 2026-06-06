@@ -13,7 +13,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useOptimistic, useRef, useState } from "react"
+import { startTransition, useEffect, useMemo, useOptimistic, useRef, useState } from "react"
 import Button from "@/components/ui/Button"
 import { useAppContext } from "@/contexts/AppContext"
 import type { Notification } from "@/types"
@@ -104,14 +104,18 @@ export default function NotificationsPage() {
   }).length
 
   const handleMarkRead = (id: string) => {
-    setOptimisticNotifications({ type: "markRead", id })
+    startTransition(() => {
+      setOptimisticNotifications({ type: "markRead", id })
+    })
     markNotificationAsRead(id)
   }
 
   const handleClearAll = () => {
     if (!window.confirm("Очистить историю уведомлений?")) return
 
-    setOptimisticNotifications({ type: "clearAll" })
+    startTransition(() => {
+      setOptimisticNotifications({ type: "clearAll" })
+    })
     clearAllNotifications()
   }
 
@@ -204,7 +208,7 @@ export default function NotificationsPage() {
                 const eventId = typeof notification.metadata?.eventId === "string" ? notification.metadata.eventId : null
 
                 return (
-                  <article key={notification.id} className={`liquid-card liquid-card-hover space-y-4 p-4 sm:p-5 ${notification.read ? "opacity-90" : "ring-2 ring-secondary/40"}`}>
+                  <article key={notification.id} className={`notification-stream-row space-y-4 p-4 sm:p-5 ${notification.read ? "opacity-90" : "is-unread"}`}>
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex items-start gap-3 sm:gap-4">
                         <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-primary/18 bg-[#fff8e8] text-primary">

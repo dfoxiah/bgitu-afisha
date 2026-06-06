@@ -13,21 +13,21 @@
  */
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/contexts/AppContext'
 import EventForm from '@/components/events/EventForm'
 import { showToast } from '@/lib/toast'
 import type { CreateEventDto } from '@/types/dto'
+import { isContentManagerRole } from '@/lib/roles'
 
 export default function CreateEventPage() {
   const router = useRouter()
   const { data: session, status } = useSession()
   const { createEvent } = useAppContext()
-  const [isEditorOpen, setIsEditorOpen] = useState(true)
 
-  const isTeacher = session?.user?.role === 'TEACHER' || session?.user?.role === 'ADMIN'
+  const isTeacher = isContentManagerRole(session?.user?.role)
 
   useEffect(() => {
     if (status === 'loading') return
@@ -56,28 +56,25 @@ export default function CreateEventPage() {
   const handleSubmit = async (formData: CreateEventDto) => {
     try {
       await createEvent(formData)
+      showToast('Мероприятие создано', 'success')
       router.replace('/events')
     } catch (error) {
-      console.error('Event create error:', error)
-      showToast('Произошла ошибка при создании мероприятия', 'error')
+      showToast(error instanceof Error ? error.message : 'Произошла ошибка при создании мероприятия', 'error')
     }
   }
 
   return (
-    <div className="page-shell min-h-screen px-4 py-8 md:px-[5%]">
-      <div className="mx-auto max-w-7xl space-y-4">
-        <section className="grid items-start gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+    <div className="create-event-page page-shell min-h-screen px-4 py-8 md:px-[5%]">
+      <div className="mx-auto max-w-7xl space-y-5">
+        <section className="grid items-start gap-4 xl:grid-cols-[1.1fr_0.9fr]">
           <article className="page-hero p-4 sm:p-5 md:p-6">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary/58">Events Builder</p>
             <h1 className="page-title mt-2 text-2xl font-semibold sm:text-4xl">Создание мероприятия</h1>
             <p className="mt-3 text-sm text-primary/66 sm:text-base">
-              Используйте редактор для публикации события, настройки модераторов, участников и медиа. После сохранения запись сразу появится в разделе мероприятий.
+              Заполните карточку события, назначьте руководителя, участников, группы и медиа. После сохранения мероприятие появится в общем списке.
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2.5">
-              <button type="button" className="btn btn-primary px-4 py-2.5 text-sm" onClick={() => setIsEditorOpen(true)}>
-                Открыть редактор
-              </button>
               <button type="button" className="btn btn-secondary px-4 py-2.5 text-sm" onClick={() => router.push('/events')}>
                 К списку событий
               </button>
@@ -94,15 +91,14 @@ export default function CreateEventPage() {
             </ul>
           </aside>
         </section>
-      </div>
 
-      {isEditorOpen && (
         <EventForm
+          variant="page"
           event={null}
-          onClose={() => setIsEditorOpen(false)}
+          onClose={() => router.push('/events')}
           onSubmit={handleSubmit}
         />
-      )}
+      </div>
     </div>
   )
 }

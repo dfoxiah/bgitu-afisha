@@ -20,7 +20,7 @@ export interface Notification {
   content: string
   type: NotificationType
   read: boolean
+  link?: string | null
   metadata?: Record<string, unknown>
   createdAt: Date
 }
-

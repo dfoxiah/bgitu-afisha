@@ -23,12 +23,14 @@ export interface CreateEventDto {
   description: string
   maxParticipants?: number
   participants?: string[]
+  participantGroups?: string[]
   moderators?: string[]
   images?: string[]
   responsible?: string
   responsibleId?: string
   contact?: string
   isNews?: boolean
+  requiresApproval?: boolean
 }
 
 export type UpdateEventDto = Partial<CreateEventDto>

@@ -82,8 +82,8 @@ export default function CalendarPage() {
                 <p className="mt-1 text-sm font-semibold text-primary">По дням и месяцам</p>
               </div>
               <div className="liquid-card px-3 py-2.5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary/58">Модальные окна</p>
-                <p className="mt-1 text-sm font-semibold text-primary">Список за день/месяц</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary/58">Фокус</p>
+                <p className="mt-1 text-sm font-semibold text-primary">Расписание кампуса</p>
               </div>
             </div>
           </article>
@@ -113,9 +113,9 @@ export default function CalendarPage() {
               {nearestEvents.length === 0 ? (
                 <p className="mt-3 text-sm text-primary/62">Ближайших событий пока нет.</p>
               ) : (
-                <div className="mt-3 overflow-hidden rounded-xl border border-primary/12 bg-white/82">
-                  {nearestEvents.map((event, index) => (
-                    <div key={event.id} className={`px-3 py-2.5 ${index !== nearestEvents.length - 1 ? 'border-b border-primary/12' : ''}`}>
+                <div className="mt-3 divide-y divide-primary/12 border-y border-primary/12">
+                  {nearestEvents.map((event) => (
+                    <div key={event.id} className="px-0 py-2.5">
                       <p className="line-clamp-1 text-sm font-semibold text-primary">{event.title}</p>
                       <p className="mt-1 text-xs text-primary/62">
                         {new Date(event.date).toLocaleDateString('ru-RU')} • {event.time}

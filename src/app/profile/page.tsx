@@ -19,16 +19,18 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { useAppContext } from '@/contexts/AppContext'
 import Button from '@/components/ui/Button'
-import { useDebugger } from '@/lib/debugger'
 import { showToast } from '@/lib/toast'
+import { getProfileStatsApi, type ProfileStatsResponse } from '@/features/profile/client/profile-api'
 import { CategoryDisplayMap } from '@/types'
 import { EventCategory } from '@prisma/client'
+import { toRoleLabel } from '@/lib/roles'
 
 interface ProfileFormData {
   name: string
   email: string
   department: string
   group: string
+  admissionYear: string
   bio: string
   notifications: {
     newEvents: boolean
@@ -42,7 +44,6 @@ export default function ProfilePage() {
   const router = useRouter()
   const { data: session, status, update: updateSession } = useSession()
   const { updateProfile } = useAppContext()
-  const debug = useDebugger('ProfilePage')
   const allCategories = useMemo(() => Object.values(EventCategory) as EventCategory[], [])
   const categoryOptions = useMemo(
     () => allCategories.map(category => ({
@@ -57,6 +58,7 @@ export default function ProfilePage() {
     email: '',
     department: '',
     group: '',
+    admissionYear: '',
     bio: '',
     notifications: {
       newEvents: true,
@@ -74,6 +76,9 @@ export default function ProfilePage() {
   const [sessionStuck, setSessionStuck] = useState(false)
   const [saveEffect, setSaveEffect] = useState(false)
   const [groupChangeCount, setGroupChangeCount] = useState(0)
+  const [profileStats, setProfileStats] = useState<ProfileStatsResponse | null>(null)
+  const [profileStatsLoading, setProfileStatsLoading] = useState(false)
+  const [profileStatsError, setProfileStatsError] = useState<string | null>(null)
   const saveEffectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const loadingTimerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -95,17 +100,25 @@ export default function ProfilePage() {
 
   const groupChangeLocked = session?.user?.role === 'STUDENT' && groupChangeCount >= 1
 
+  const loadProfileStats = useCallback(async () => {
+    if (status !== 'authenticated') return
+
+    setProfileStatsLoading(true)
+    setProfileStatsError(null)
+
+    try {
+      const nextStats = await getProfileStatsApi()
+      setProfileStats(nextStats)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Ошибка загрузки статистики профиля'
+      setProfileStatsError(message)
+    } finally {
+      setProfileStatsLoading(false)
+    }
+  }, [status])
+
   useEffect(() => {
     if (session?.user) {
-      debug.info('profile', 'Session data loaded', {
-        userId: session.user.id,
-        userEmail: session.user.email,
-        userRole: session.user.role,
-        hasName: !!session.user.name,
-        hasDepartment: !!session.user.department,
-        hasGroup: !!session.user.group
-      })
-
       const savedCategories = Array.isArray(session.user.notificationCategories)
         ? session.user.notificationCategories
         : []
@@ -116,6 +129,7 @@ export default function ProfilePage() {
         email: session.user.email || '',
         department: session.user.department || '',
         group: session.user.group || '',
+        admissionYear: session.user.admissionYear ? String(session.user.admissionYear) : '',
         bio: session.user.bio || '',
         notifications: {
           newEvents: session.user.notifyNewEvents ?? true,
@@ -129,7 +143,20 @@ export default function ProfilePage() {
       setFormData(newFormData)
       setOriginalData(newFormData)
     }
-  }, [session, debug, allCategories])
+  }, [session, allCategories])
+
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user?.id) {
+      void loadProfileStats()
+      return
+    }
+
+    if (status === 'unauthenticated') {
+      setProfileStats(null)
+      setProfileStatsError(null)
+      setProfileStatsLoading(false)
+    }
+  }, [status, session?.user?.id, loadProfileStats])
 
   useEffect(() => {
     if (status === 'loading') {
@@ -169,13 +196,10 @@ export default function ProfilePage() {
         if (!active) return
 
         if (response.status === 401 || response.status === 404) {
-          debug.warn('auth', 'Profile access revoked, signing out', {
-            status: response.status
-          })
           await signOut({ redirect: true, callbackUrl: '/login' })
         }
-      } catch (error) {
-        debug.error('auth', 'Failed to verify profile session', error)
+      } catch {
+        // Session verification is best-effort; the next auth refresh will correct the state.
       }
     }
 
@@ -189,7 +213,7 @@ export default function ProfilePage() {
       active = false
       window.removeEventListener('focus', handleFocus)
     }
-  }, [status, debug])
+  }, [status])
 
   useEffect(() => {
     if (status !== 'loading') return
@@ -205,93 +229,92 @@ export default function ProfilePage() {
     return () => clearTimeout(timer)
   }, [status, router])
 
-  const getChangedFields = useCallback(() => {
-    if (!originalData) return []
-    
-    const changed: string[] = []
-    Object.keys(formData).forEach(key => {
-      if (key === 'notifications') {
-        Object.keys(formData.notifications).forEach(subKey => {
-          if (subKey === 'categories') {
-            const current = [...formData.notifications.categories].sort().join('|')
-            const original = [...originalData.notifications.categories].sort().join('|')
-            if (current !== original) {
-              changed.push('notifications.categories')
-            }
-            return
-          }
-
-          if (
-            formData.notifications[subKey as keyof typeof formData.notifications] !== 
-            originalData.notifications[subKey as keyof typeof originalData.notifications]
-          ) {
-            changed.push(`notifications.${subKey}`)
-          }
-        })
-      } else if (formData[key as keyof ProfileFormData] !== originalData[key as keyof ProfileFormData]) {
-        changed.push(key)
-      }
-    })
-    return changed
-  }, [formData, originalData])
-
   useEffect(() => {
     if (originalData) {
       const dirty = JSON.stringify(formData) !== JSON.stringify(originalData)
       setIsDirty(dirty)
-      debug.debug('ui', `Form dirty state: ${dirty}`, {
-        changedFields: dirty ? getChangedFields() : []
-      })
     }
-  }, [formData, originalData, debug, getChangedFields])
+  }, [formData, originalData])
+
+  const profileStatsRows = useMemo(() => {
+    if (!profileStats) return []
+
+    const baseRows = [
+      {
+        label: 'Роль',
+        value: toRoleLabel(profileStats.role)
+      },
+      {
+        label: 'Регистрация',
+        value: new Date(profileStats.registeredAt).toLocaleDateString('ru-RU')
+      },
+      {
+        label: 'Последняя активность',
+        value: profileStats.lastActivityAt
+          ? new Date(profileStats.lastActivityAt).toLocaleString('ru-RU')
+          : 'Нет данных'
+      }
+    ]
+
+    if (profileStats.role === 'STUDENT') {
+      return [
+        ...baseRows,
+        { label: 'Посетил мероприятий', value: String(profileStats.visitedEventsCount) },
+        { label: 'Активных участий', value: String(profileStats.activeParticipationsCount) },
+        { label: 'Ожидают подтверждения', value: String(profileStats.participationsPending) },
+        { label: 'Конверсия подтверждения', value: `${profileStats.confirmationRatePercent}%` }
+      ]
+    }
+
+    if (profileStats.role === 'TEACHER' || profileStats.role === 'EDITOR') {
+      return [
+        ...baseRows,
+        { label: 'Создано мероприятий', value: String(profileStats.createdEventsCount) },
+        { label: 'Модерирует мероприятий', value: String(profileStats.moderatedEventsCount) },
+        { label: 'Посетил мероприятий', value: String(profileStats.visitedEventsCount) },
+        { label: 'Активных участий', value: String(profileStats.activeParticipationsCount) },
+        { label: 'Конверсия подтверждения', value: `${profileStats.confirmationRatePercent}%` }
+      ]
+    }
+
+    return [
+      ...baseRows,
+      { label: 'Создано мероприятий', value: String(profileStats.createdEventsCount) },
+      { label: 'Создано новостей', value: String(profileStats.createdNewsCount) },
+      { label: 'Модерирует мероприятий', value: String(profileStats.moderatedEventsCount) },
+      { label: 'Подтверждено участий', value: String(profileStats.participationsConfirmed) },
+      { label: 'Активных участий', value: String(profileStats.activeParticipationsCount) }
+    ]
+  }, [profileStats])
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {}
     
     if (!formData.name.trim()) {
       errors.name = 'Имя обязательно'
-      debug.warn('validation', 'Name validation failed')
     } else if (formData.name.length < 2) {
       errors.name = 'Имя должно быть не менее 2 символов'
-      debug.warn('validation', 'Name length validation failed', {
-        length: formData.name.length
-      })
     }
     
     if (!formData.email.trim()) {
       errors.email = 'Email обязателен'
-      debug.warn('validation', 'Email validation failed')
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       errors.email = 'Неверный формат email'
-      debug.warn('validation', 'Email format validation failed', {
-        email: formData.email
-      })
     }
     
     setValidationErrors(errors)
-    debug.debug('validation', 'Form validation completed', {
-      hasErrors: Object.keys(errors).length > 0,
-      errors: Object.keys(errors)
-    })
     
     return Object.keys(errors).length === 0
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target
+    const { name, value } = e.target
     const checked = e.target instanceof HTMLInputElement ? e.target.checked : false
 
     if (name === 'group' && session?.user?.role === 'STUDENT' && groupChangeCount >= 1) {
       showToast('Группу можно изменить только один раз. Обратитесь к администрации.', 'error')
       return
     }
-    
-    debug.debug('ui', `Input changed: ${name}`, {
-      name,
-      value: name.includes('password') ? '***' : value,
-      type,
-      checked: type === 'checkbox' ? checked : undefined
-    })
     
     if (name.startsWith('notifications.')) {
       const notificationKey = name.split('.')[1] as keyof typeof formData.notifications
@@ -346,42 +369,21 @@ export default function ProfilePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    debug.trackClick('Save profile button', e as React.MouseEvent)
     
     if (!validateForm()) {
-      debug.error('validation', 'Form validation failed, aborting submit')
       return
     }
     
     setIsSaving(true)
     setMessage(null)
-    
-    const changedFields = getChangedFields()
-    debug.info('profile', 'Starting profile update', {
-      changedFields,
-      formData: {
-        name: formData.name,
-        email: formData.email,
-        department: formData.department,
-        group: formData.group,
-        notifications: formData.notifications
-      }
-    })
 
     try {
-      const endTimer = debug.time('updateProfile API call')
-      debug.trackApi('/api/auth/profile', 'PUT', {
-        name: formData.name,
-        email: formData.email,
-        department: formData.department,
-        group: formData.group
-      })
-      
       const response = await updateProfile({
         name: formData.name,
         email: formData.email,
         department: formData.department,
         group: formData.group,
+        admissionYear: formData.admissionYear ? Number(formData.admissionYear) : null,
         bio: formData.bio,
         notifications: {
           newEvents: formData.notifications.newEvents,
@@ -389,14 +391,6 @@ export default function ProfilePage() {
           news: formData.notifications.news,
           categories: formData.notifications.categories
         }
-      })
-      
-      const duration = endTimer()
-      
-      debug.info('profile', 'Profile updated successfully', {
-        response,
-        duration: `${duration}ms`,
-        changedFields
       })
       
       await updateSession({
@@ -407,6 +401,7 @@ export default function ProfilePage() {
           email: formData.email,
           department: formData.department,
           group: formData.group,
+          admissionYear: response?.user?.admissionYear ?? (formData.admissionYear ? Number(formData.admissionYear) : null),
           bio: formData.bio,
           groupChangeCount: response?.user?.groupChangeCount ?? groupChangeCount,
           notifyNewEvents: formData.notifications.newEvents,
@@ -428,82 +423,54 @@ export default function ProfilePage() {
         text: 'Профиль успешно обновлен!'
       })
       triggerSaveEffect()
+      void loadProfileStats()
       
       window.dispatchEvent(new CustomEvent('profile:updated', {
         detail: { userId: session?.user?.id }
       }))
       
       setTimeout(() => {
-        debug.debug('ui', 'Success message timeout cleared')
         setMessage(null)
       }, 5000)
     } catch (error) {
-      debug.error('profile', 'Profile update failed', {
-        error: error instanceof Error ? {
-          name: error.name,
-          message: error.message,
-          stack: error.stack
-        } : error,
-        timestamp: new Date().toISOString()
-      })
-      
       setMessage({
         type: 'error',
         text: `Ошибка при сохранении: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`
       })
     } finally {
       setIsSaving(false)
-      debug.debug('profile', 'Profile update process completed', {
-        isSaving: false,
-        hasError: message?.type === 'error',
-        isDirty
-      })
     }
   }
 
   const handleReset = () => {
-    debug.trackClick('Reset form button', {} as React.MouseEvent)
-    
     if (originalData) {
       setFormData(originalData)
       setValidationErrors({})
       setMessage(null)
       setIsDirty(false)
-      debug.info('ui', 'Form reset to original values')
     }
   }
 
   const handleLogout = async () => {
-    debug.trackClick('Logout button', {} as React.MouseEvent)
-    
     const confirmed = window.confirm('Вы уверены, что хотите выйти?')
     
     if (confirmed) {
-      debug.info('auth', 'User confirmed logout, starting sign out')
-      
       try {
         await signOut({ 
           redirect: true,
           callbackUrl: '/login' 
         })
-        
-        debug.info('auth', 'Sign out successful')
-        
+
         window.dispatchEvent(new CustomEvent('auth:logout', {
           detail: { userId: session?.user?.id }
         }))
-      } catch (error) {
-        debug.error('auth', 'Sign out failed', error)
+      } catch {
         showToast('Ошибка при выходе из системы', 'error')
       }
-    } else {
-      debug.debug('auth', 'User cancelled logout')
     }
   }
 
   const handleExportData = () => {
-    debug.trackClick('Export data button', {} as React.MouseEvent)
-    
     const exportData = {
       profile: formData,
       session: {
@@ -523,15 +490,9 @@ export default function ProfilePage() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-    
-    debug.info('profile', 'Profile data exported', {
-      exportData,
-      timestamp: new Date().toISOString()
-    })
   }
 
   if (!session) {
-    debug.warn('auth', 'No session, showing loading state')
     return (
       <div className="status-screen">
         <div className="status-card space-y-4">
@@ -564,15 +525,13 @@ export default function ProfilePage() {
                 window.location.href = '/dashboard'
               }}
               icon="arrow-left"
-              debugContext="ProfilePage"
               className="w-full sm:w-auto text-sm sm:text-base"
             >
               На главную
             </Button>
             <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-gray-500">
               <span className="bg-accent/10 text-accent px-3 py-1 rounded-full">
-                {session.user.role === 'TEACHER' ? 'Преподаватель' : 
-                 session.user.role === 'ADMIN' ? 'Администратор' : 'Студент'}
+                {toRoleLabel(session.user.role)}
               </span>
               {isDirty && (
                 <span className="bg-sky-100 text-sky-700 px-3 py-1 rounded-full animate-pulse">
@@ -653,16 +612,34 @@ export default function ProfilePage() {
                 <i className="fas fa-chart-bar"></i>
                 Статистика
               </h4>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Роль</span>
-                  <span className="font-medium">{session.user.role}</span>
+              {profileStatsLoading && (
+                <p className="text-sm text-gray-500">Загрузка статистики...</p>
+              )}
+
+              {!profileStatsLoading && profileStatsError && (
+                <div className="space-y-2">
+                  <p className="text-sm text-red-600">{profileStatsError}</p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => void loadProfileStats()}
+                    className="w-full sm:w-auto"
+                  >
+                    Повторить
+                  </Button>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Активность</span>
-                  <span className="font-medium">Сегодня</span>
+              )}
+
+              {!profileStatsLoading && !profileStatsError && profileStatsRows.length > 0 && (
+                <div className="space-y-3">
+                  {profileStatsRows.map((row) => (
+                    <div key={row.label} className="flex justify-between items-center gap-3">
+                      <span className="text-gray-600 text-sm">{row.label}</span>
+                      <span className="font-medium text-right">{row.value}</span>
+                    </div>
+                  ))}
                 </div>
-              </div>
+              )}
             </div>
           </div>
           
@@ -748,6 +725,26 @@ export default function ProfilePage() {
                         Группу можно изменить только один раз. Для повторного изменения обратитесь к администрации.
                       </p>
                     )}
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="admissionYear" className="form-label">
+                      Год поступления
+                    </label>
+                    <input
+                      id="admissionYear"
+                      type="number"
+                      name="admissionYear"
+                      min={1990}
+                      max={new Date().getFullYear() + 1}
+                      value={formData.admissionYear}
+                      onChange={handleChange}
+                      className="form-control"
+                      placeholder="Например: 2023"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Используется в характеристике профиля студента и при сверке учебной группы.
+                    </p>
                   </div>
                 </div>
 
@@ -862,7 +859,6 @@ export default function ProfilePage() {
                         disabled={!isDirty || isSaving}
                         icon="save"
                         className={`w-full sm:w-auto ${saveEffect ? 'btn-celebrate' : ''}`}
-                        debugContext="ProfilePage"
                       >
                         {isSaving ? 'Сохранение...' : 'Сохранить изменения'}
                       </Button>
@@ -874,7 +870,6 @@ export default function ProfilePage() {
                         disabled={!isDirty || isSaving}
                         icon="undo"
                         className="w-full sm:w-auto"
-                        debugContext="ProfilePage"
                       >
                         Отменить
                       </Button>
@@ -885,7 +880,6 @@ export default function ProfilePage() {
                         onClick={handleExportData}
                         icon="download"
                         className="w-full sm:w-auto"
-                        debugContext="ProfilePage"
                       >
                         Экспорт данных
                       </Button>
@@ -898,7 +892,6 @@ export default function ProfilePage() {
                         onClick={handleLogout}
                         icon="sign-out-alt"
                         className="w-full sm:w-auto"
-                        debugContext="ProfilePage"
                       >
                         Выйти
                       </Button>
@@ -916,45 +909,6 @@ export default function ProfilePage() {
                 </div>
               </form>
             </div>
-            
-            {process.env.NODE_ENV === 'development' && (
-              <div className="mt-8 bg-gray-900 text-gray-100 rounded-lg shadow-md p-6">
-                <h4 className="font-semibold mb-4 flex items-center gap-2">
-                  <i className="fas fa-bug"></i>
-                  Отладочная информация
-                </h4>
-                <div className="space-y-3 text-sm font-mono">
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <span className="text-gray-400">User ID:</span>
-                      <div className="truncate">{session.user.id}</div>
-                    </div>
-                    <div>
-                      <span className="text-gray-400">Role:</span>
-                      <div>{session.user.role}</div>
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Changed Fields:</span>
-                    <div className="text-green-400">
-                      {getChangedFields().join(', ') || 'Нет изменений'}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Form Dirty:</span>
-                    <span className={isDirty ? 'text-yellow-400' : 'text-gray-400'}>
-                      {isDirty ? 'Да' : 'Нет'}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => debug.clearLogs()}
-                    className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors"
-                  >
-                    Очистить логи дебаггера
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>

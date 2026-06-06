@@ -18,13 +18,13 @@ export default function CategoryFilter() {
   const { categories, selectedCategory, setSelectedCategory } = useAppContext()
 
   return (
-    <section>
+    <section className="category-filter">
       <div className="mb-3">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-primary/65">Категории</h2>
+        <h2 className="text-sm font-semibold text-primary/78">Категории</h2>
         <p className="mt-1 text-xs text-primary/55">Быстрый фильтр по типу мероприятия.</p>
       </div>
 
-      <div className="border border-primary/14 bg-white">
+      <div className="category-filter-list">
         {categories.map((category, index) => {
           const active = selectedCategory === category
 
@@ -32,12 +32,12 @@ export default function CategoryFilter() {
             <button
               key={category}
               type="button"
-              className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-[0.06em] transition-all ${
-                active ? "bg-primary text-white" : "text-primary/76 hover:bg-primary/5"
+              className={`category-filter-button ${
+                active ? "category-filter-button-active" : "text-primary/76 hover:bg-primary/5"
               } ${index !== categories.length - 1 ? "border-b border-primary/12" : ""}`}
               onClick={() => setSelectedCategory(category)}
             >
-              <span className="line-clamp-1">{category}</span>
+              <span>{category}</span>
               <i className={`fas ${active ? "fa-check" : "fa-chevron-right"} text-[10px]`} />
             </button>
           )

@@ -12,7 +12,6 @@
  */
 import { ButtonHTMLAttributes, ReactNode } from 'react'
 import classNames from 'classnames'
-import { debuggerInstance } from '@/lib/debugger'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode
@@ -21,7 +20,6 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   badge?: number
   fullWidth?: boolean
   loading?: boolean
-  debugContext?: string
 }
 
 export default function Button({
@@ -34,7 +32,6 @@ export default function Button({
   disabled,
   className,
   onClick,
-  debugContext = 'Button',
   ...props
 }: ButtonProps) {
   const baseClasses =
@@ -59,18 +56,6 @@ export default function Button({
   )
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (process.env.NODE_ENV === 'development') {
-      debuggerInstance.trackClick(debugContext, typeof children === 'string' ? children : 'Button', e)
-
-      debuggerInstance.debug('ui', debugContext, 'Button clicked', {
-        variant,
-        disabled,
-        loading,
-        badge,
-        coordinates: { x: e.clientX, y: e.clientY },
-      })
-    }
-
     if (onClick) {
       onClick(e)
     }
@@ -81,16 +66,6 @@ export default function Button({
       className={classes}
       disabled={disabled || loading}
       onClick={handleClick}
-      onMouseEnter={() => {
-        if (process.env.NODE_ENV === 'development') {
-          debuggerInstance.debug('ui', debugContext, 'Button hover start')
-        }
-      }}
-      onMouseLeave={() => {
-        if (process.env.NODE_ENV === 'development') {
-          debuggerInstance.debug('ui', debugContext, 'Button hover end')
-        }
-      }}
       {...props}
     >
       {loading ? (

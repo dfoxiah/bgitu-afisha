@@ -41,12 +41,13 @@ interface CompletionFormState {
 }
 
 interface CompleteEventModalProps {
+  isOpen?: boolean
   event: Event
   onClose: () => void
   onSubmit: (reportData: CompleteEventDto) => void
 }
 
-const CompleteEventModal = ({ event, onClose, onSubmit }: CompleteEventModalProps) => {
+const CompleteEventModal = ({ isOpen = false, event, onClose, onSubmit }: CompleteEventModalProps) => {
   const [formData, setFormData] = useState<CompletionFormState>({
     title: `Отчет: ${event?.title || 'Мероприятие'}`,
     summary: '',
@@ -148,7 +149,7 @@ const CompleteEventModal = ({ event, onClose, onSubmit }: CompleteEventModalProp
   const categoryDisplayName = CategoryDisplayMap[event?.category as EventCategory] || event?.category
 
   return (
-    <Modal isOpen={true} onClose={onClose} title="Завершение мероприятия" size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title="Завершение мероприятия" size="lg">
       <form onSubmit={handleSubmit}>
         <div className="liquid-card mb-4 border-l-4 border-accent p-3.5">
           <p className="font-semibold text-primary">Завершаем: {event?.title}</p>

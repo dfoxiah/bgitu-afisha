@@ -19,6 +19,7 @@ import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
 import { prisma } from "@/lib/prisma"
 import { canModerateEventByRole } from "@/server/shared/session"
 import { errorJson } from "@/server/shared/http-response"
+import { isAdminRole, isContentManagerRole } from "@/lib/roles"
 
 type RouteParams = {
   params: Promise<{ broadcastId: string }>
@@ -47,7 +48,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
       return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
-    if (session.user.role !== "TEACHER" && session.user.role !== "ADMIN") {
+    if (!isContentManagerRole(session.user.role)) {
       return errorJson(403, "FORBIDDEN", "Недостаточно прав")
     }
 
@@ -75,7 +76,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
       return errorJson(400, "VALIDATION_ERROR", "Невозможно определить мероприятие рассылки")
     }
 
-    if (session.user.role !== "ADMIN") {
+    if (!isAdminRole(session.user.role)) {
       if (sentById && sentById !== session.user.id) {
         return errorJson(403, "FORBIDDEN", "Можно отменять только свои рассылки")
       }
@@ -97,6 +98,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
         userId: session.user.id,
         creatorId: event.creatorId,
         moderatorIds: event.moderators.map((moderator) => moderator.userId),
+        permission: "events.manageParticipants",
       })
 
       if (!canModerate) {
@@ -133,4 +135,3 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     return errorJson(500, "SERVER_ERROR", "Ошибка сервера")
   }
 }
-

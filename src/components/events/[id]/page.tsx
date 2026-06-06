@@ -23,6 +23,8 @@ import ImageGalleryModal from '@/components/ui/ImageGalleryModal'
 import { Event, CategoryDisplayMap } from '@/types'
 import { EventCategory } from '@prisma/client'
 import { showToast } from '@/lib/toast'
+import { isAdminRole, isContentManagerRole } from '@/lib/roles'
+import { fetchEventByIdApi } from '@/features/events/client/events-api'
 
 export default function EventDetailsPage() {
   const params = useParams()
@@ -40,23 +42,38 @@ export default function EventDetailsPage() {
   const joinTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+
     if (params.id && events.length > 0) {
       const eventId = params.id as string
       const foundEvent = events.find((item) => item.id === eventId)
-      setEvent(foundEvent || null)
-      setLoading(false)
-      return
+      if (foundEvent) {
+        setEvent(foundEvent)
+        setLoading(false)
+        return () => {
+          cancelled = true
+        }
+      }
     }
 
-    if (params.id && events.length === 0) {
-      const timer = setTimeout(() => {
-        const eventId = params.id as string
-        const foundEvent = events.find((item) => item.id === eventId)
-        setEvent(foundEvent || null)
-        setLoading(false)
-      }, 1000)
+    if (params.id) {
+      const eventId = params.id as string
+      setLoading(true)
+      fetchEventByIdApi(eventId)
+        .then((data) => {
+          if (!cancelled) setEvent(data)
+        })
+        .catch((error) => {
+          console.error('Event direct load error:', error)
+          if (!cancelled) setEvent(null)
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
 
-      return () => clearTimeout(timer)
+      return () => {
+        cancelled = true
+      }
     }
   }, [params.id, events])
 
@@ -125,24 +142,39 @@ export default function EventDetailsPage() {
   const isParticipant = viewerStatus === 'CONFIRMED'
   const isPending = viewerStatus === 'PENDING'
   const isPast = event.isPast || eventDate < new Date()
-  const isTeacher = session?.user?.role === 'TEACHER' || session?.user?.role === 'ADMIN'
-  const canViewParticipants = isTeacher && (event.canViewParticipants ?? true)
+  const isTeacher = isContentManagerRole(session?.user?.role)
+  const canOpenParticipantProfiles = isAdminRole(session?.user?.role)
+  const canViewParticipants = Boolean(session?.user?.id) && (event.canViewParticipants ?? true)
+  const canViewPendingParticipants = isTeacher && !isPast
   const confirmedParticipants = event.participants || []
   const pendingParticipants = event.pendingParticipants || []
   const pendingCount = event.pendingParticipantsCount ?? pendingParticipants.length
+  const normalizeParticipantKey = (value: string | null | undefined) =>
+    String(value || '').trim().replace(/\s+/g, ' ').toLowerCase()
+  const activeParticipantRows =
+    event.report?.activeParticipants?.map((participantName) => {
+      const key = normalizeParticipantKey(participantName)
+      const matched = confirmedParticipants.find(
+        (participant) =>
+          normalizeParticipantKey(participant.name) === key ||
+          normalizeParticipantKey(participant.email) === key
+      )
+      return { participantName, matched }
+    }) || []
   const isFull = event.maxParticipants > 0 && event.currentParticipants >= event.maxParticipants
   const categoryDisplayName = CategoryDisplayMap[event.category as EventCategory] || event.category
+  const confirmedParticipantsLabel = isPast ? 'Посетили' : 'Подтверждено'
 
   const handleRegister = async () => {
     if (!session) {
-      router.push('/login')
+      router.push(`/login?callbackUrl=${encodeURIComponent(`/events/${event.id}`)}`)
       return
     }
 
     setIsRegistering(true)
     try {
-      await registerForEvent(event.id)
-      showToast('Вы успешно зарегистрированы на мероприятие!', 'success')
+      const result = await registerForEvent(event.id)
+      showToast(result.message, result.status === 'PENDING' ? 'info' : 'success')
       triggerJoinEffect()
     } catch (error) {
       console.error('Registration error:', error)
@@ -262,14 +294,24 @@ export default function EventDetailsPage() {
                     </>
                   )}
 
-                  {event.report.activeParticipants && event.report.activeParticipants.length > 0 && (
+                  {activeParticipantRows.length > 0 && (
                     <>
-                      <h4 className="mt-5 text-sm font-semibold uppercase tracking-[0.08em] text-primary/65">Активные участники</h4>
+                      <h4 className="mt-5 text-sm font-semibold uppercase tracking-[0.08em] text-primary/65">Кто посетил по итогу</h4>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {event.report.activeParticipants.map((participant, index) => (
-                          <span key={index} className="rounded-full border border-primary/15 bg-white px-3 py-1 text-sm text-primary/75">
-                            {participant}
-                          </span>
+                        {activeParticipantRows.map((row, index) => (
+                          row.matched?.id && canOpenParticipantProfiles ? (
+                            <Link
+                              key={`${row.participantName}-${index}`}
+                              href={`/users/${row.matched.id}`}
+                              className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700 hover:border-emerald-300"
+                            >
+                              {row.matched.name || row.matched.email}
+                            </Link>
+                          ) : (
+                            <span key={`${row.participantName}-${index}`} className="rounded-full border border-primary/15 bg-white px-3 py-1 text-sm text-primary/75">
+                              {row.participantName}
+                            </span>
+                          )
                         ))}
                       </div>
                     </>
@@ -309,18 +351,22 @@ export default function EventDetailsPage() {
                     <h3 className="text-lg font-semibold text-primary">Участники мероприятия</h3>
                     <div className="flex flex-wrap gap-2 text-xs">
                       <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">
-                        Подтверждено: {confirmedParticipants.length}
+                        {confirmedParticipantsLabel}: {confirmedParticipants.length}
                       </span>
-                      <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700">
-                        Pending: {pendingParticipants.length}
-                      </span>
+                      {canViewPendingParticipants && (
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700">
+                          Ожидают: {pendingParticipants.length}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <p className="mt-2 text-xs text-primary/58">
-                    Нажмите на ФИО, чтобы открыть профиль и историю посещений (для студентов в рамках ваших прав доступа).
+                    {canOpenParticipantProfiles
+                      ? 'Администратор может открыть профиль участника из списка.'
+                      : 'Список доступен для просмотра без перехода в профили участников.'}
                   </p>
 
-                  {confirmedParticipants.length === 0 && pendingParticipants.length === 0 ? (
+                  {confirmedParticipants.length === 0 && (!canViewPendingParticipants || pendingParticipants.length === 0) ? (
                     <p className="mt-3 text-sm text-primary/62">Пока нет зарегистрированных участников.</p>
                   ) : (
                     <div className="mt-4 space-y-4">
@@ -339,8 +385,7 @@ export default function EventDetailsPage() {
                               {confirmedParticipants.map((participant) => (
                                 <tr key={participant.id} className="border-t border-primary/10">
                                   <td className="px-3 py-2">
-                                    {participant.id &&
-                                    (session?.user?.role === "ADMIN" || participant.role === "STUDENT") ? (
+                                    {participant.id && canOpenParticipantProfiles ? (
                                       <Link
                                         href={`/users/${participant.id}`}
                                         className="font-medium text-primary hover:underline"
@@ -361,7 +406,7 @@ export default function EventDetailsPage() {
                         </div>
                       )}
 
-                      {pendingParticipants.length > 0 && (
+                      {canViewPendingParticipants && pendingParticipants.length > 0 && (
                         <div>
                           <h4 className="text-sm font-semibold uppercase tracking-[0.08em] text-primary/62">
                             Заявки на подтверждение
@@ -373,8 +418,7 @@ export default function EventDetailsPage() {
                                 className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/12 bg-white/80 px-3 py-2"
                               >
                                 <span className="text-sm text-primary/78">
-                                  {participant.id &&
-                                  (session?.user?.role === "ADMIN" || participant.role === "STUDENT") ? (
+                                  {participant.id && canOpenParticipantProfiles ? (
                                     <Link
                                       href={`/users/${participant.id}`}
                                       className="font-medium text-primary hover:underline"
@@ -429,7 +473,7 @@ export default function EventDetailsPage() {
                   </div>
                 )}
 
-                {pendingCount > 0 && (
+                {canViewPendingParticipants && pendingCount > 0 && (
                   <p className="mt-3 text-xs text-primary/62">{pendingCount} заявок ожидают подтверждения</p>
                 )}
               </article>
@@ -450,6 +494,11 @@ export default function EventDetailsPage() {
                 <article className={`liquid-card p-4 sm:p-5 ${joinEffect ? 'join-portal is-celebrating' : 'join-portal'}`}>
                   <span className="join-sparkles" aria-hidden="true" />
                   <h3 className="text-sm font-semibold uppercase tracking-[0.1em] text-primary/60">Регистрация</h3>
+                  <p className="mt-2 text-xs text-primary/62">
+                    {event.requiresApproval !== false
+                      ? 'После регистрации заявка уйдёт на подтверждение модератору.'
+                      : 'Подтверждение не требуется, вы добавляетесь сразу.'}
+                  </p>
                   <div className="mt-3">
                     <Button
                       variant="primary"
@@ -477,7 +526,7 @@ export default function EventDetailsPage() {
                       ) : (
                         <>
                           <i className="fas fa-user-plus mr-2" />
-                          Зарегистрироваться
+                          {event.requiresApproval !== false ? 'Подать заявку' : 'Зарегистрироваться'}
                         </>
                       )}
                     </Button>

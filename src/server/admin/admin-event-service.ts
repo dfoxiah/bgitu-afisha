@@ -26,6 +26,7 @@ import { parseLocalDateTime } from "@/server/shared/date-time"
 import { buildFieldChanges, toAuditValue } from "@/server/shared/audit-diff"
 import { ServiceError } from "@/server/shared/service-error"
 import type { NextRequest } from "next/server"
+import { isModeratorRole } from "@/lib/roles"
 
 type EventListQuery = {
   search?: string | null
@@ -242,7 +243,7 @@ const parseModerators = async (value: unknown) => {
   const users = await prisma.user.findMany({
     where: {
       email: { in: uniqueEmails },
-      role: { in: ["TEACHER", "ADMIN"] },
+      role: { in: ["TEACHER", "EDITOR", "ADMIN"] },
     },
     select: { id: true, email: true },
   })
@@ -250,7 +251,7 @@ const parseModerators = async (value: unknown) => {
   const found = new Set(users.map((user) => user.email.toLowerCase()))
   const missing = uniqueEmails.filter((email) => !found.has(email))
   if (missing.length) {
-    throw new ServiceError(400, "VALIDATION_ERROR", `Не найдены преподаватели: ${missing.join(", ")}`)
+    throw new ServiceError(400, "VALIDATION_ERROR", `Не найдены преподаватели/редакторы: ${missing.join(", ")}`)
   }
 
   return users.map((user) => user.id)
@@ -266,11 +267,11 @@ const resolveResponsibleById = async (value: unknown) => {
     select: { id: true, name: true, email: true, role: true },
   })
 
-  if (!user || (user.role !== "TEACHER" && user.role !== "ADMIN")) {
+  if (!user || !isModeratorRole(user.role)) {
     throw new ServiceError(
       400,
       "VALIDATION_ERROR",
-      "Руководитель должен быть преподавателем или администратором"
+      "Руководитель должен быть преподавателем, редактором или администратором"
     )
   }
 

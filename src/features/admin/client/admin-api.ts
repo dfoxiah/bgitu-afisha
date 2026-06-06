@@ -16,12 +16,21 @@ import type { EventCategory, Role } from "@prisma/client"
 import type {
   AdminDashboardMetrics,
   AdminAuditLog,
+  AdminDiagnostics,
   AdminEvent,
   AdminEventDetails,
   AdminEventUpdateInput,
   AdminImportMode,
+  AdminImportJob,
   AdminImportResult,
+  AdminGroupPromotionResult,
   AdminNewsCreateInput,
+  AdminNewsDraftResult,
+  AdminNewsTemplate,
+  AdminNewsTemplateInput,
+  AdminStructureSnapshot,
+  AdminStructureUpdateInput,
+  AdminStructureUpdateResult,
   AdminUser,
   AdminUserCreateInput,
   AdminUserUpdateInput,
@@ -87,6 +96,18 @@ export const updateAdminUser = (id: string, payload: AdminUserUpdateInput) =>
 export const deleteAdminUser = (id: string) =>
   request<{ success: true }>(`/api/admin/users/${id}`, { method: "DELETE" })
 
+export const getAdminStructure = () =>
+  request<AdminStructureSnapshot>("/api/admin/structure")
+
+export const updateAdminStructure = (payload: AdminStructureUpdateInput) =>
+  request<AdminStructureUpdateResult>("/api/admin/structure", { method: "PUT", body: payload })
+
+export const promoteAdminGroupsAfterSummer = (dryRun = false) =>
+  request<AdminGroupPromotionResult>("/api/admin/structure", {
+    method: "POST",
+    body: { dryRun },
+  })
+
 export type AdminEventsQuery = {
   search?: string
   category?: EventCategory | "ALL"
@@ -129,6 +150,24 @@ export const createAdminNews = (payload: AdminNewsCreateInput) =>
     },
   })
 
+export const getAdminNewsTemplates = () =>
+  request<AdminNewsTemplate[]>("/api/news-templates")
+
+export const createAdminNewsTemplate = (payload: AdminNewsTemplateInput) =>
+  request<AdminNewsTemplate>("/api/news-templates", { method: "POST", body: payload })
+
+export const updateAdminNewsTemplate = (id: string, payload: AdminNewsTemplateInput) =>
+  request<AdminNewsTemplate>(`/api/news-templates/${id}`, { method: "PUT", body: payload })
+
+export const deleteAdminNewsTemplate = (id: string) =>
+  request<{ success: true }>(`/api/news-templates/${id}`, { method: "DELETE" })
+
+export const generateAdminNewsDraft = (templateId: string, eventId: string, title?: string) =>
+  request<AdminNewsDraftResult>(`/api/news-templates/${templateId}/generate`, {
+    method: "POST",
+    body: { eventId, title },
+  })
+
 export type AdminLogsQuery = {
   action?: string
   entityType?: string
@@ -156,6 +195,9 @@ export const getAdminMetrics = (query: AdminMetricsQuery = {}) => {
   return request<AdminDashboardMetrics>(`/api/admin/metrics${suffix ? `?${suffix}` : ""}`)
 }
 
+export const getAdminDiagnostics = () =>
+  request<AdminDiagnostics>("/api/admin/diagnostics")
+
 const extractFileName = (response: Response, fallback: string) => {
   const contentDisposition = response.headers.get("content-disposition") || ""
   const match =
@@ -180,6 +222,31 @@ export const downloadAdminEventExcel = async (eventId: string) => {
   }
 
   const fileName = extractFileName(response, `event_attendance_${eventId}.xlsx`)
+  const blob = await response.blob()
+  const objectUrl = window.URL.createObjectURL(blob)
+  const anchor = document.createElement("a")
+  anchor.href = objectUrl
+  anchor.download = fileName
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.URL.revokeObjectURL(objectUrl)
+}
+
+export const getAdminImportHistory = () =>
+  request<AdminImportJob[]>("/api/admin/import")
+
+export const downloadAdminImportTemplate = async (type: "users" | "events" | "news") => {
+  const response = await fetch(`/api/admin/import?template=${type}`, {
+    method: "GET",
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+
+  const fileName = extractFileName(response, `bgitu_${type}_import_template.csv`)
   const blob = await response.blob()
   const objectUrl = window.URL.createObjectURL(blob)
   const anchor = document.createElement("a")

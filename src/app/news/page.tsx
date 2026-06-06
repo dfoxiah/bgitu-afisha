@@ -190,9 +190,9 @@ export default function NewsPage() {
             <section className="liquid-section p-4">
               <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-primary/64">Как читать ленту</h3>
               <ul className="mt-3 space-y-2 text-sm text-primary/68">
-                <li className="rounded-lg border border-primary/12 bg-white/78 px-3 py-2">Открывайте карточку, чтобы увидеть полный отчет.</li>
-                <li className="rounded-lg border border-primary/12 bg-white/78 px-3 py-2">Кнопка «Фото» открывает галерею без перехода на другую страницу.</li>
-                <li className="rounded-lg border border-primary/12 bg-white/78 px-3 py-2">Для навигации по темам используйте фильтр категории.</li>
+                <li className="border-b border-primary/12 px-0 py-2 last:border-b-0">Открывайте карточку, чтобы увидеть полный отчет.</li>
+                <li className="border-b border-primary/12 px-0 py-2 last:border-b-0">Кнопка «Фото» открывает галерею без перехода на другую страницу.</li>
+                <li className="border-b border-primary/12 px-0 py-2 last:border-b-0">Для навигации по темам используйте фильтр категории.</li>
               </ul>
             </section>
           </aside>

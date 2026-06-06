@@ -48,20 +48,19 @@ export default function LegalDocumentPage({
   return (
     <main className="relative isolate overflow-hidden px-4 py-8 md:px-[5%] md:py-10">
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -left-36 top-8 h-80 w-80 rounded-full bg-accent/25 blur-3xl" />
-        <div className="absolute -right-24 top-32 h-96 w-96 rounded-full bg-primary/18 blur-3xl" />
-        <div className="absolute bottom-[-6rem] left-1/3 h-72 w-72 rounded-full bg-secondary/18 blur-3xl" />
+        <div className="absolute inset-x-0 top-0 h-80 bg-[linear-gradient(125deg,rgba(219,239,255,0.72),rgba(255,255,255,0)_62%)]" />
+        <div className="absolute inset-y-0 right-0 w-1/2 bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(190,240,245,0.22))]" />
       </div>
 
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 md:gap-6">
         <section className="relative overflow-hidden rounded-[1.3rem] border border-white/80 bg-white/[0.72] p-4 shadow-[0_16px_34px_rgba(31,73,131,0.16)] backdrop-blur-2xl md:p-6">
           <div className="absolute inset-x-0 top-0 h-1 bg-gradient-primary" />
-          <div className="absolute -right-20 -top-20 h-60 w-60 rounded-full bg-primary/20 blur-3xl" />
+          <div className="absolute inset-y-0 right-0 w-1/3 bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(62,148,226,0.12))]" />
 
           <div className="relative flex flex-col gap-6">
             <div className="flex flex-wrap items-center gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-primary/80">
               <span className="rounded-full border border-primary/25 bg-white/75 px-3 py-1">{badge}</span>
-              <span className="rounded-full border border-primary/25 bg-white/75 px-3 py-1">РћР±РЅРѕРІР»РµРЅРѕ: {updatedAt}</span>
+              <span className="rounded-full border border-primary/25 bg-white/75 px-3 py-1">Обновлено: {updatedAt}</span>
             </div>
 
             <div className="max-w-[76ch]">
@@ -84,8 +83,8 @@ export default function LegalDocumentPage({
         </section>
 
         <section className="rounded-[1.2rem] border border-white/80 bg-white/[0.72] p-4 shadow-[0_14px_28px_rgba(32,88,148,0.13)] backdrop-blur-xl md:p-5">
-          <h2 className="text-lg font-semibold text-primary">Р‘С‹СЃС‚СЂР°СЏ РЅР°РІРёРіР°С†РёСЏ</h2>
-          <nav aria-label="РќР°РІРёРіР°С†РёСЏ РїРѕ РґРѕРєСѓРјРµРЅС‚Сѓ" className="mt-4 flex flex-wrap gap-2">
+          <h2 className="text-lg font-semibold text-primary">Быстрая навигация</h2>
+          <nav aria-label="Навигация по документу" className="mt-4 flex flex-wrap gap-2">
             {sections.map((section) => (
               <a
                 key={section.id}
@@ -138,20 +137,20 @@ export default function LegalDocumentPage({
         </section>
 
         <section className="rounded-[1.15rem] border border-white/80 bg-white/75 p-4 shadow-[0_12px_24px_rgba(31,73,131,0.13)] backdrop-blur-xl md:p-5">
-          <h2 className="text-lg font-semibold text-primary">РЎРІСЏР·Р°РЅРЅС‹Рµ РґРѕРєСѓРјРµРЅС‚С‹</h2>
-          <p className="mt-2 text-sm leading-7 text-slate-700">{contactText || "Р•СЃР»Рё Сѓ РІР°СЃ РµСЃС‚СЊ РІРѕРїСЂРѕСЃС‹ РїРѕ РґРѕРєСѓРјРµРЅС‚Р°Рј, РѕР±СЂР°С‚РёС‚РµСЃСЊ РІ Р°РґРјРёРЅРёСЃС‚СЂР°С†РёСЋ Р‘Р“РРўРЈ."}</p>
+          <h2 className="text-lg font-semibold text-primary">Связанные документы</h2>
+          <p className="mt-2 text-sm leading-7 text-slate-700">{contactText || "Если у вас есть вопросы по документам, обратитесь в администрацию БГИТУ."}</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
               href="/legal/terms"
               className="rounded-full border border-white/80 bg-white/80 px-3 py-1.5 text-sm font-medium text-slate-700 transition-all hover:border-primary/40 hover:text-primary"
             >
-              РџРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРѕРµ СЃРѕРіР»Р°С€РµРЅРёРµ
+              Пользовательское соглашение
             </Link>
             <Link
               href="/legal/privacy"
               className="rounded-full border border-white/80 bg-white/80 px-3 py-1.5 text-sm font-medium text-slate-700 transition-all hover:border-primary/40 hover:text-primary"
             >
-              РџРѕР»РёС‚РёРєР° РєРѕРЅС„РёРґРµРЅС†РёР°Р»СЊРЅРѕСЃС‚Рё
+              Политика конфиденциальности
             </Link>
           </div>
         </section>

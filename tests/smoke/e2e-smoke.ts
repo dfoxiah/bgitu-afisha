@@ -12,8 +12,14 @@
 
 import { strict as assert } from "node:assert"
 
+const parsePositiveInt = (value: string | undefined, fallback: number) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
+}
+
 const baseUrl = process.env.SMOKE_BASE_URL || "http://localhost:3000"
 const strictMode = process.env.SMOKE_STRICT === "true"
+const requestTimeoutMs = parsePositiveInt(process.env.SMOKE_REQUEST_TIMEOUT_MS, 15000)
 
 type Credentials = {
   email: string
@@ -34,13 +40,48 @@ const cookieHeader = (jar: CookieJar) =>
     .map(([name, value]) => `${name}=${value}`)
     .join("; ")
 
-const fetchWithJar = async (path: string, init: RequestInit = {}, jar?: CookieJar) => {
+const fetchWithJar = async (
+  path: string,
+  init: RequestInit = {},
+  jar?: CookieJar,
+  label?: string
+) => {
   const headers = new Headers(init.headers || {})
   if (jar && jar.size > 0) {
     headers.set("cookie", cookieHeader(jar))
   }
 
-  const response = await fetch(`${baseUrl}${path}`, { ...init, headers, redirect: "manual" })
+  const requestLabel = label || `${init.method || "GET"} ${path}`
+  const startedAt = Date.now()
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs)
+
+  console.log(`[e2e-smoke] -> ${requestLabel}`)
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      ...init,
+      headers,
+      redirect: "manual",
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(
+        `[e2e-smoke] timeout ${requestTimeoutMs}ms: ${requestLabel}`
+      )
+    }
+    throw new Error(
+      `[e2e-smoke] request failed: ${requestLabel} (${error instanceof Error ? error.message : "unknown error"})`
+    )
+  } finally {
+    clearTimeout(timeoutId)
+  }
+
+  console.log(
+    `[e2e-smoke] <- ${requestLabel} ${response.status} (${Date.now() - startedAt}ms)`
+  )
+
   const setCookie = response.headers.getSetCookie()
   if (jar) {
     setCookie.forEach((value) => {
@@ -55,7 +96,7 @@ const fetchWithJar = async (path: string, init: RequestInit = {}, jar?: CookieJa
 const login = async ({ email, password }: Credentials) => {
   const jar: CookieJar = new Map()
 
-  const csrfResponse = await fetchWithJar("/api/auth/csrf", {}, jar)
+  const csrfResponse = await fetchWithJar("/api/auth/csrf", {}, jar, "GET /api/auth/csrf")
   assert.equal(csrfResponse.status, 200, "CSRF endpoint must return 200")
 
   const csrfPayload = (await csrfResponse.json()) as { csrfToken?: string }
@@ -75,7 +116,8 @@ const login = async ({ email, password }: Credentials) => {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: form.toString(),
     },
-    jar
+    jar,
+    "POST /api/auth/callback/credentials"
   )
   assert.equal(loginResponse.status, 200, "Credentials login must return 200")
 
@@ -95,17 +137,19 @@ const logSkip = (message: string) => {
 }
 
 const ensurePage = async (path: string, jar: CookieJar) => {
-  const response = await fetchWithJar(path, {}, jar)
+  const response = await fetchWithJar(path, {}, jar, `GET ${path}`)
   assert.equal(response.status, 200, `Page ${path} must return 200`)
 }
 
 const run = async () => {
   console.log(`[e2e-smoke] base: ${baseUrl}`)
+  console.log(`[e2e-smoke] request timeout: ${requestTimeoutMs}ms`)
 
   const studentCredentials = readCredentials("SMOKE_STUDENT")
   if (!studentCredentials) {
     logSkip("SMOKE_STUDENT_EMAIL/SMOKE_STUDENT_PASSWORD are not set")
   } else {
+    console.log("[e2e-smoke] step: student page flow")
     const studentJar = await login(studentCredentials)
 
     await ensurePage("/dashboard", studentJar)
@@ -113,7 +157,12 @@ const run = async () => {
     await ensurePage("/profile", studentJar)
     await ensurePage("/notifications", studentJar)
 
-    const eventsResponse = await fetchWithJar("/api/events?limit=1", {}, studentJar)
+    const eventsResponse = await fetchWithJar(
+      "/api/events?limit=1",
+      {},
+      studentJar,
+      "GET /api/events?limit=1 (student)"
+    )
     assert.equal(eventsResponse.status, 200, "Events API must return 200 for authenticated user")
     const events = (await eventsResponse.json()) as Array<{ id: string }>
     if (events.length > 0) {
@@ -125,6 +174,7 @@ const run = async () => {
   if (!adminCredentials) {
     logSkip("SMOKE_ADMIN_EMAIL/SMOKE_ADMIN_PASSWORD are not set")
   } else {
+    console.log("[e2e-smoke] step: admin page flow")
     const adminJar = await login(adminCredentials)
     await ensurePage("/admin", adminJar)
   }
@@ -136,4 +186,3 @@ run().catch((error) => {
   console.error("[e2e-smoke] failed:", error)
   process.exitCode = 1
 })
-

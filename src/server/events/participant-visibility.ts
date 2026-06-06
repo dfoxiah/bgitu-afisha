@@ -12,6 +12,7 @@
  */
 
 import { ParticipantStatus } from "@prisma/client"
+import { isContentManagerRole } from "@/lib/roles"
 
 type EventWithParticipantPayload = Record<string, unknown> & {
   participants?: Array<{ id?: string }>
@@ -24,7 +25,7 @@ type EventWithParticipantPayload = Record<string, unknown> & {
 type ViewerContext = { id?: string | null; role?: string | null } | null | undefined
 
 export const canViewerSeeParticipants = (role?: string | null) =>
-  role === "TEACHER" || role === "ADMIN"
+  isContentManagerRole(role)
 
 export const applyParticipantVisibility = (event: EventWithParticipantPayload, viewer: ViewerContext) => {
   const confirmed = Array.isArray(event.participants) ? event.participants : []
@@ -71,3 +72,37 @@ export const applyParticipantVisibility = (event: EventWithParticipantPayload, v
   }
 }
 
+const scrubPublicUser = (user: unknown) => {
+  if (!user || typeof user !== "object") return user
+
+  const value = user as Record<string, unknown>
+  return {
+    id: value.id,
+    name: value.name,
+    role: value.role,
+    department: value.department,
+    group: value.group,
+    image: value.image,
+    email: "",
+  }
+}
+
+const isPublishedReport = (report: unknown) => {
+  if (!report || typeof report !== "object") return false
+  const status = (report as Record<string, unknown>).status
+  return status === "PUBLISHED"
+}
+
+export const applyPublicEventVisibility = (event: EventWithParticipantPayload) => ({
+  ...event,
+  participants: [],
+  pendingParticipants: [],
+  moderators: Array.isArray(event.moderators)
+    ? event.moderators.map((moderator) => scrubPublicUser(moderator))
+    : [],
+  creator: scrubPublicUser(event.creator),
+  report: isPublishedReport(event.report) ? event.report : null,
+  canViewParticipants: false,
+  viewerParticipationStatus: null,
+  pendingParticipantsCount: 0,
+})

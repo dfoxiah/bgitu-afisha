@@ -11,7 +11,7 @@
  * - src/app/admin/page.tsx
  */
 
-import type { Role, EventCategory } from "@prisma/client"
+import type { Role, EventCategory, ImportStatus, ImportType } from "@prisma/client"
 
 export type AdminUser = {
   id: string
@@ -20,6 +20,7 @@ export type AdminUser = {
   role: Role
   department: string | null
   group: string | null
+  admissionYear: number | null
   groupChangeCount: number
   bio: string | null
   privacyConsentAt?: string | null
@@ -35,6 +36,7 @@ export type AdminUserCreateInput = {
   role: Role
   department?: string
   group?: string
+  admissionYear?: number | null
 }
 
 export type AdminUserUpdateInput = {
@@ -44,8 +46,55 @@ export type AdminUserUpdateInput = {
   role?: Role
   department?: string | null
   group?: string | null
+  admissionYear?: number | null
   groupChangeCount?: number
   bio?: string | null
+}
+
+export type AdminStructureField = "department" | "group"
+
+export type AdminStructureRoleFilter = "ALL" | Role
+
+export type AdminStructureValue = {
+  value: string
+  total: number
+  byRole: Record<Role, number>
+}
+
+export type AdminStructureSnapshot = {
+  departments: AdminStructureValue[]
+  groups: AdminStructureValue[]
+}
+
+export type AdminStructureUpdateInput = {
+  field: AdminStructureField
+  fromValue: string
+  toValue?: string | null
+  role?: AdminStructureRoleFilter
+  resetGroupChangeCount?: boolean
+}
+
+export type AdminStructureUpdateResult = {
+  success: true
+  field: AdminStructureField
+  fromValue: string
+  toValue: string | null
+  role: AdminStructureRoleFilter
+  affectedUsers: number
+  resetGroupChangeCountApplied: boolean
+}
+
+export type AdminGroupPromotionResult = {
+  success: true
+  dryRun: boolean
+  isAfterSummer: boolean
+  promotedGroups: Array<{
+    from: string
+    to: string
+    users: number
+  }>
+  skippedGroups: string[]
+  affectedUsers: number
 }
 
 export type AdminEventModerator = {
@@ -137,6 +186,38 @@ export type AdminNewsCreateInput = {
   createReport?: boolean
 }
 
+export type AdminNewsTemplate = {
+  id: string
+  name: string
+  description: string | null
+  body: string
+  variables: string[]
+  createdById: string | null
+  createdBy?: {
+    id: string
+    name: string | null
+    email: string
+  } | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type AdminNewsTemplateInput = {
+  name: string
+  description?: string | null
+  body: string
+  variables?: string[]
+}
+
+export type AdminNewsDraftResult = {
+  id: string
+  title: string
+  description: string
+  sourceEventId: string
+  templateId: string
+  link: string
+}
+
 export type AdminAuditLog = {
   id: string
   action: string
@@ -160,6 +241,21 @@ export type AdminImportResult = {
   skipped: number
   errors: string[]
   warnings: string[]
+}
+
+export type AdminImportJob = {
+  id: string
+  type: ImportType
+  mode: AdminImportMode | string
+  status: ImportStatus
+  inputRows: number
+  created: number
+  updated: number
+  skipped: number
+  errors: string[]
+  warnings: string[]
+  createdAt: string
+  actor: string | null
 }
 
 export type AdminPopularEventMetric = {
@@ -348,4 +444,74 @@ export type AdminDashboardMetrics = {
     upcomingWithoutModerators: number
     eventsMissingContact: number
   }
+}
+
+export type AdminDiagnosticsCheck = {
+  id: string
+  label: string
+  status: "ok" | "warning" | "error"
+  detail: string
+  recommendation?: string
+  durationMs: number
+}
+
+export type AdminDiagnostics = {
+  generatedAt: string
+  environment: string
+  appVersion: string
+  uptimeSeconds: number | null
+  checks: AdminDiagnosticsCheck[]
+  counts: {
+    users: number
+    students: number
+    teachers: number
+    editors: number
+    moderators: number
+    admins: number
+    profilesComplete: number
+    profilesIncomplete: number
+    usersMissingName: number
+    studentsMissingGroup: number
+    usersMissingDepartment: number
+    events: number
+    publicEvents: number
+    privateEvents: number
+    activeEvents: number
+    completedEvents: number
+    news: number
+    reports: number
+    draftReports: number
+    participants: number
+    pendingParticipants: number
+    confirmedParticipants: number
+    notifications: number
+    unreadNotifications: number
+    activeSessions: number
+    auditLogs: number
+    importJobsTotal: number
+    importJobsWithErrors: number
+    eventsMissingContact: number
+    eventsWithoutModerators: number
+  }
+  integrationStatus: {
+    maxOAuth: string
+    vkMessages: string
+    yandexOAuth: string
+    email: string
+  }
+  latestImportJobs: AdminImportJob[]
+  metricsSnapshot: {
+    totalEvents: number
+    upcomingEvents: number
+    completedEvents: number
+    registrations: number
+    pendingApprovals: number
+    actionsLast7Days: number
+  } | null
+  latestAudit: {
+    action: string
+    entityType: string
+    createdAt: string
+    actor: string | null
+  } | null
 }

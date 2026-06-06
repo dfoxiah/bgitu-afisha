@@ -3,58 +3,23 @@
  * Public entry page of the application.
  *
  * Main logic:
- * - Render landing/start experience.
- * - Provide navigation to authentication and dashboard flows.
+ * - Render the public event poster without requiring authentication.
+ * - Keep the root page tied to the same event data as the private app.
  *
  * Integrations:
- * - App Router home route
- * - Layout and shared UI components
+ * - src/components/public/PublicAfishaPage.tsx
  */
-"use client"
 
-import { useEffect, useRef } from "react"
-import { getSession, useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import PageState from "@/components/ui/PageState"
+import PublicAfishaPage from "@/components/public/PublicAfishaPage"
+import { authOptions } from "@/lib/auth"
+import { getServerSession } from "next-auth"
+import { redirect } from "next/navigation"
 
-const REDIRECT_FALLBACK_MS = 1500
+export default async function HomePage() {
+  const session = await getServerSession(authOptions)
+  if (session?.user?.id) {
+    redirect("/dashboard")
+  }
 
-export default function HomePage() {
-  const { status } = useSession()
-  const router = useRouter()
-  const fallbackTimerRef = useRef<NodeJS.Timeout | null>(null)
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      router.replace("/dashboard")
-      return
-    }
-
-    if (status === "unauthenticated") {
-      router.replace("/login")
-      return
-    }
-
-    if (!fallbackTimerRef.current) {
-      fallbackTimerRef.current = setTimeout(async () => {
-        const freshSession = await getSession()
-        router.replace(freshSession ? "/dashboard" : "/login")
-      }, REDIRECT_FALLBACK_MS)
-    }
-
-    return () => {
-      if (fallbackTimerRef.current) {
-        clearTimeout(fallbackTimerRef.current)
-        fallbackTimerRef.current = null
-      }
-    }
-  }, [status, router])
-
-  return (
-    <PageState
-      title="Загрузка приложения..."
-      subtitle="Пожалуйста, подождите"
-      spinning
-    />
-  )
+  return <PublicAfishaPage />
 }

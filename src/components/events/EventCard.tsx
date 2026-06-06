@@ -16,11 +16,12 @@
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { useOptimistic, useState } from "react"
+import { startTransition, useOptimistic, useState } from "react"
 import { EventCategory } from "@prisma/client"
 import { useAppContext } from "@/contexts/AppContext"
 import { showToast } from "@/lib/toast"
 import { CategoryDisplayMap, type Event, type User } from "@/types"
+import { isAdminRole, isContentManagerRole } from "@/lib/roles"
 
 interface EventCardProps {
   event: Event
@@ -53,11 +54,11 @@ export default function EventCard({ event, onClick, onEdit, onComplete }: EventC
 
   const eventDate = event.date instanceof Date ? event.date : new Date(event.date)
   const isPast = event.isPast || eventDate < new Date()
-  const isTeacher = session?.user?.role === "TEACHER" || session?.user?.role === "ADMIN"
+  const isTeacher = isContentManagerRole(session?.user?.role)
   const moderatorIds = event.moderators?.map((moderator) => moderator.id) || []
   const canModerate =
     isTeacher &&
-    (session?.user?.role === "ADMIN" ||
+    (isAdminRole(session?.user?.role) ||
       event.creatorId === session?.user?.id ||
       moderatorIds.includes(session?.user?.id || ""))
 
@@ -74,7 +75,9 @@ export default function EventCard({ event, onClick, onEdit, onComplete }: EventC
 
     setUpdatingParticipantId(userId)
     setUpdatingAction(action)
-    applyOptimisticPending({ type: "remove", userId })
+    startTransition(() => {
+      applyOptimisticPending({ type: "remove", userId })
+    })
 
     try {
       await updateParticipantStatus(event.id, userId, action)

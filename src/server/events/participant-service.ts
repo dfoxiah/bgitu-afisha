@@ -12,6 +12,7 @@
  */
 
 import { prisma } from "@/lib/prisma"
+import { Role, type Prisma } from "@prisma/client"
 
 const toNormalizedEmails = (value: unknown) => {
   if (!Array.isArray(value)) return []
@@ -25,24 +26,44 @@ const toNormalizedEmails = (value: unknown) => {
   )
 }
 
-export const resolveParticipantUsers = async (rawEmails: unknown) => {
+const toNormalizedGroups = (value: unknown) => {
+  if (!Array.isArray(value)) return []
+
+  return Array.from(
+    new Set(
+      value
+        .map((item) => String(item).trim())
+        .filter((group): group is string => Boolean(group))
+    )
+  )
+}
+
+export const resolveParticipantUsers = async (rawEmails: unknown, rawGroups: unknown = []) => {
   const emails = toNormalizedEmails(rawEmails)
-  if (emails.length === 0) {
+  const groups = toNormalizedGroups(rawGroups)
+  if (emails.length === 0 && groups.length === 0) {
     return {
-      users: [] as Array<{ id: string; email: string }>,
+      users: [] as Array<{ id: string; email: string; group?: string | null }>,
       missingEmails: [] as string[],
+      missingGroups: [] as string[],
     }
   }
 
+  const or: Prisma.UserWhereInput[] = []
+  if (emails.length > 0) or.push({ email: { in: emails } })
+  if (groups.length > 0) or.push({ group: { in: groups } })
+
   const users = await prisma.user.findMany({
-    where: { email: { in: emails } },
-    select: { id: true, email: true },
+    where: { OR: or },
+    select: { id: true, email: true, group: true },
   })
 
   const found = new Set(users.map((user) => user.email))
   const missingEmails = emails.filter((email) => !found.has(email))
+  const foundGroups = new Set(users.map((user) => user.group).filter((group): group is string => Boolean(group)))
+  const missingGroups = groups.filter((group) => !foundGroups.has(group))
 
-  return { users, missingEmails }
+  return { users, missingEmails, missingGroups }
 }
 
 export const resolveModerators = async (rawEmails: unknown, creatorId?: string) => {
@@ -57,7 +78,7 @@ export const resolveModerators = async (rawEmails: unknown, creatorId?: string) 
   const users = await prisma.user.findMany({
     where: {
       email: { in: emails },
-      role: { in: ["TEACHER", "ADMIN"] },
+      role: { in: [Role.TEACHER, Role.EDITOR, Role.ADMIN] },
     },
     select: { id: true, email: true },
   })
@@ -68,4 +89,3 @@ export const resolveModerators = async (rawEmails: unknown, creatorId?: string) 
 
   return { users: filteredUsers, missingEmails }
 }
-

@@ -18,6 +18,7 @@ import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
 import { prisma } from "@/lib/prisma"
 import { revalidateEventsCache } from "@/server/events/event-cache"
 import { errorJson } from "@/server/shared/http-response"
+import { isContentManagerRole } from "@/lib/roles"
 
 type RouteParams = {
   params: Promise<{ id: string }>
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         date: true,
         maxParticipants: true,
         currentParticipants: true,
+        requiresApproval: true,
       },
     })
 
@@ -68,8 +70,11 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       return errorJson(400, "CONFLICT", "Вы уже зарегистрированы на это мероприятие")
     }
 
-    const isPrivileged = session.user.role === "TEACHER" || session.user.role === "ADMIN"
-    const status = isPrivileged ? ParticipantStatus.CONFIRMED : ParticipantStatus.PENDING
+    const isPrivileged = isContentManagerRole(session.user.role)
+    const status =
+      isPrivileged || !event.requiresApproval
+        ? ParticipantStatus.CONFIRMED
+        : ParticipantStatus.PENDING
 
     await prisma.$transaction(async (tx) => {
       await tx.eventParticipant.create({

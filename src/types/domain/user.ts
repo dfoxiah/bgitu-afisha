@@ -22,15 +22,24 @@ export interface User {
   role: Role
   department: string | null
   group: string | null
+  admissionYear?: number | null
   groupChangeCount?: number
+  profileCompletedAt?: Date | null
   privacyConsentAt?: Date | null
+  privacyConsentVersion?: string | null
   termsConsentAt?: Date | null
+  termsConsentVersion?: string | null
+  consentSource?: string | null
   bio?: string | null
   notifyNewEvents?: boolean
   notifyChanges?: boolean
   notifyNews?: boolean
+  notifyInApp?: boolean
+  notifyEmail?: boolean
+  notifyVk?: boolean
   notificationCategories?: EventCategory[]
+  vkUserId?: string | null
+  yandexEmail?: string | null
   createdAt: Date
   updatedAt: Date
 }
-

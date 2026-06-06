@@ -19,16 +19,15 @@ import { authOptions } from "@/lib/auth"
 import { buildEventListWhere, findEventsForList } from "@/server/events/event-query-service"
 import { EVENTS_CACHE_TAG } from "@/server/events/event-cache"
 import { createEventFromApi, serializeEventForApi } from "@/server/events/event-mutation-service"
-import { applyParticipantVisibility } from "@/server/events/participant-visibility"
+import {
+  applyParticipantVisibility,
+  applyPublicEventVisibility,
+} from "@/server/events/participant-visibility"
 import { createEventBodySchema } from "@/server/shared/schemas/event-api-schema"
 import { errorJson } from "@/server/shared/http-response"
 import { isServiceError } from "@/server/shared/service-error"
-
-const debugLog = (...args: unknown[]) => {
-  if (process.env.DEBUG_EVENTS === "true") {
-    console.log(...args)
-  }
-}
+import { isContentManagerRole } from "@/lib/roles"
+import { hasPermission } from "@/lib/permissions"
 
 export const dynamic = "force-dynamic"
 
@@ -41,6 +40,7 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search")
     const upcoming = searchParams.get("upcoming")
     const past = searchParams.get("past")
+    const publicOnly = !session?.user?.id || searchParams.get("public") === "true"
     const rawLimit = searchParams.get("limit")
     const parsedLimit = rawLimit ? Number(rawLimit) : NaN
     const limit =
@@ -53,9 +53,8 @@ export async function GET(req: NextRequest) {
       past,
       limit,
       includePastForAuthorized: Boolean(session?.user?.id),
+      publicOnly,
     })
-
-    debugLog("GET /api/events where", where)
 
     const cacheKey = [
       "events",
@@ -65,6 +64,7 @@ export async function GET(req: NextRequest) {
       search || "",
       upcoming || "",
       past || "",
+      publicOnly ? "public" : "all",
       String(limit || ""),
     ].join(":")
 
@@ -82,6 +82,9 @@ export async function GET(req: NextRequest) {
       .map((event) => serializeEventForApi(event))
       .map((event) =>
         applyParticipantVisibility(event as unknown as Record<string, unknown>, session?.user)
+      )
+      .map((event) =>
+        publicOnly ? applyPublicEventVisibility(event as unknown as Record<string, unknown>) : event
       )
 
     const headers: Record<string, string> = {
@@ -118,11 +121,11 @@ export async function POST(req: NextRequest) {
       return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
-    if (session.user.role !== "TEACHER" && session.user.role !== "ADMIN") {
+    if (!isContentManagerRole(session.user.role) || !hasPermission(session.user.role, "events.create")) {
       return errorJson(
         403,
         "FORBIDDEN",
-        "Недостаточно прав. Только преподаватели и администраторы могут создавать мероприятия."
+        "Недостаточно прав. Только пользователи с правом events.create могут создавать мероприятия."
       )
     }
 

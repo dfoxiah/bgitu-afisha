@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/contexts/AppContext'
 import EventCard from '@/components/events/EventCard'
 import Button from '@/components/ui/Button'
@@ -24,12 +25,14 @@ import { Event } from '@/types'
 import { showToast } from '@/lib/toast'
 import type { CompleteEventDto, CreateEventDto } from '@/types/dto'
 import { fetchEventByIdApi } from '@/features/events/client/events-api'
+import { isAdminRole, isContentManagerRole } from '@/lib/roles'
 
 const EventForm = dynamic(() => import('@/components/events/EventForm'))
 const CompleteEventModal = dynamic(() => import('@/components/events/CompleteEventModal'))
 
 export default function EventsPage() {
   const { data: session } = useSession()
+  const router = useRouter()
   const { createEvent, updateEvent, completeEvent, upcomingEvents, pastEvents } = useAppContext()
 
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming')
@@ -67,8 +70,7 @@ export default function EventsPage() {
       setShowForm(false)
       setEditingEvent(null)
     } catch (error) {
-      console.error('Event save error:', error)
-      showToast('Произошла ошибка при сохранении мероприятия', 'error')
+      showToast(error instanceof Error ? error.message : 'Произошла ошибка при сохранении мероприятия', 'error')
     }
   }
 
@@ -104,7 +106,7 @@ export default function EventsPage() {
     if (loadingEventId) return
 
     const canModerate =
-      session?.user?.role === 'ADMIN' ||
+      isAdminRole(session?.user?.role) ||
       event.creatorId === session?.user?.id ||
       (event.moderators || []).some((moderator) => moderator.id === session?.user?.id)
 
@@ -124,7 +126,7 @@ export default function EventsPage() {
     if (loadingEventId) return
 
     const canModerate =
-      session?.user?.role === 'ADMIN' ||
+      isAdminRole(session?.user?.role) ||
       event.creatorId === session?.user?.id ||
       (event.moderators || []).some((moderator) => moderator.id === session?.user?.id)
 
@@ -141,10 +143,10 @@ export default function EventsPage() {
 
   const handleCreateClick = () => {
     setEditingEvent(null)
-    setShowForm(true)
+    router.push('/events/create')
   }
 
-  const isTeacher = session?.user?.role === 'TEACHER' || session?.user?.role === 'ADMIN'
+  const isTeacher = isContentManagerRole(session?.user?.role)
   const activeCollection = useMemo(() => {
     if (activeTab === 'past') return pastEvents
 
@@ -311,9 +313,9 @@ export default function EventsPage() {
             <section className="liquid-section p-4">
               <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-primary/64">Панель контроля</h2>
               <ul className="mt-3 space-y-2 text-sm text-primary/72">
-                <li className="rounded-lg border border-primary/12 bg-white/80 px-3 py-2">Следите за заявками в карточках ближайших событий.</li>
-                <li className="rounded-lg border border-primary/12 bg-white/80 px-3 py-2">После завершения сразу добавляйте отчет и фото.</li>
-                <li className="rounded-lg border border-primary/12 bg-white/80 px-3 py-2">Используйте архив как базу для новостной ленты.</li>
+                <li className="border-b border-primary/12 px-0 py-2 last:border-b-0">Следите за заявками в карточках ближайших событий.</li>
+                <li className="border-b border-primary/12 px-0 py-2 last:border-b-0">После завершения сразу добавляйте отчет и фото.</li>
+                <li className="border-b border-primary/12 px-0 py-2 last:border-b-0">Используйте архив как базу для новостной ленты.</li>
               </ul>
             </section>
 
@@ -331,6 +333,7 @@ export default function EventsPage() {
 
       {showForm && (
         <EventForm
+          isOpen={showForm}
           event={editingEvent}
           onClose={() => {
             setShowForm(false)
@@ -340,7 +343,14 @@ export default function EventsPage() {
         />
       )}
 
-      {completingEvent && <CompleteEventModal event={completingEvent} onClose={() => setCompletingEvent(null)} onSubmit={handleComplete} />}
+      {completingEvent && (
+        <CompleteEventModal
+          isOpen={Boolean(completingEvent)}
+          event={completingEvent}
+          onClose={() => setCompletingEvent(null)}
+          onSubmit={handleComplete}
+        />
+      )}
     </div>
   )
 }

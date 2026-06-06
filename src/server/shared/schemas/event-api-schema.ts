@@ -30,14 +30,29 @@ const stringArrayOptional = z.preprocess(
   z.array(z.string()).optional()
 )
 
-const booleanWithDefaultFalse = z.preprocess((value) => {
+const coerceBoolean = (value: unknown) => {
   if (typeof value === "boolean") return value
   if (typeof value === "number") return value > 0
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase()
     return normalized === "true" || normalized === "1" || normalized === "yes"
   }
-  return false
+  return value
+}
+
+const booleanOptional = z.preprocess((value) => {
+  if (value === undefined || value === null || value === "") return undefined
+  return coerceBoolean(value)
+}, z.boolean().optional())
+
+const booleanWithDefaultFalse = z.preprocess((value) => {
+  const normalized = coerceBoolean(value)
+  return typeof normalized === "boolean" ? normalized : false
+}, z.boolean())
+
+const booleanWithDefaultTrue = z.preprocess((value) => {
+  const normalized = coerceBoolean(value)
+  return typeof normalized === "boolean" ? normalized : true
 }, z.boolean())
 
 export const createEventBodySchema = z.object({
@@ -50,12 +65,14 @@ export const createEventBodySchema = z.object({
   description: nonEmptyString,
   maxParticipants: numericOptional,
   participants: stringArrayOptional,
+  participantGroups: stringArrayOptional,
   moderators: stringArrayOptional,
   images: stringArrayOptional,
   responsible: optionalTrimmedString,
   responsibleId: optionalTrimmedString,
   contact: optionalTrimmedString,
   isNews: booleanWithDefaultFalse.optional().default(false),
+  requiresApproval: booleanWithDefaultTrue.optional().default(true),
 })
 
 export const updateEventBodySchema = z
@@ -69,11 +86,13 @@ export const updateEventBodySchema = z
     description: optionalTrimmedString,
     maxParticipants: numericOptional,
     participants: stringArrayOptional,
+    participantGroups: stringArrayOptional,
     moderators: stringArrayOptional,
     images: stringArrayOptional,
     responsible: optionalTrimmedString,
     responsibleId: optionalTrimmedString,
     contact: optionalTrimmedString,
+    requiresApproval: booleanOptional,
   })
   .strict()
 

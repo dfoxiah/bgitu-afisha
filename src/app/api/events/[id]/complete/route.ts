@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
+import { NotificationType, Role } from "@prisma/client"
 import { authOptions } from "@/lib/auth"
 import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
 import { prisma } from "@/lib/prisma"
@@ -20,6 +21,8 @@ import { revalidateEventsCache } from "@/server/events/event-cache"
 import { flattenModerators, serializeReport, splitEventParticipants } from "@/server/events/event-serializer"
 import { canModerateEventByRole } from "@/server/shared/session"
 import { errorJson } from "@/server/shared/http-response"
+import { isContentManagerRole } from "@/lib/roles"
+import { buildEventLink, createNotifications } from "@/server/notifications/notification-service"
 
 type RouteParams = {
   params: Promise<{ id: string }>
@@ -34,7 +37,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
-    if (session.user.role !== "TEACHER" && session.user.role !== "ADMIN") {
+    if (!isContentManagerRole(session.user.role)) {
       return errorJson(403, "FORBIDDEN", "Недостаточно прав")
     }
 
@@ -43,6 +46,14 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       include: {
         report: true,
         moderators: { select: { userId: true } },
+        eventParticipants: {
+          where: { status: "CONFIRMED" },
+          select: {
+            user: {
+              select: { id: true, name: true, email: true },
+            },
+          },
+        },
       },
     })
 
@@ -55,6 +66,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       userId: session.user.id,
       creatorId: event.creatorId,
       moderatorIds: event.moderators.map((moderator) => moderator.userId),
+      permission: "events.complete",
     })
 
     if (!canModerate) {
@@ -65,23 +77,33 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       return errorJson(400, "CONFLICT", "Мероприятие уже завершено")
     }
 
-    const bodyRaw: unknown = await req.json()
-    if (!bodyRaw || typeof bodyRaw !== "object") {
-      return errorJson(400, "BAD_REQUEST", "Некорректное тело запроса")
+    let bodyRaw: unknown = {}
+    try {
+      bodyRaw = await req.json()
+    } catch {
+      bodyRaw = {}
     }
 
-    const body = bodyRaw as Record<string, unknown>
+    const body = bodyRaw && typeof bodyRaw === "object" ? (bodyRaw as Record<string, unknown>) : {}
     const summary = typeof body.summary === "string" ? body.summary.trim() : ""
-    if (!summary) {
-      return errorJson(400, "VALIDATION_ERROR", "Заполните описание мероприятия")
-    }
+    const participantNames = event.eventParticipants
+      .map((participant) => participant.user.name || participant.user.email)
+      .filter(Boolean)
+    const draftSummary =
+      summary ||
+      [
+        `Мероприятие «${event.title}» завершено.`,
+        `Дата проведения: ${new Date(event.date).toLocaleDateString("ru-RU")} ${event.time || ""}.`,
+        `Участников по списку: ${event.currentParticipants}.`,
+        "Черновик создан автоматически и требует проверки перед публикацией.",
+      ].join("\n")
 
     const tasks = Array.isArray(body.tasks)
       ? body.tasks.map((task) => String(task).trim()).filter(Boolean)
       : []
     const activeParticipants = Array.isArray(body.activeParticipants)
       ? body.activeParticipants.map((item) => String(item)).filter(Boolean)
-      : []
+      : participantNames
     const images = Array.isArray(body.images)
       ? body.images.map((item) => String(item)).filter(Boolean)
       : []
@@ -92,13 +114,15 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       where: { id: eventId },
       data: {
         isPast: true,
+        completedAt: new Date(),
         report: {
           create: {
-            summary,
+            summary: draftSummary,
             tasks,
             activeParticipants,
             images,
             reportDate,
+            status: "DRAFT",
           },
         },
       },
@@ -150,6 +174,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       entityId: updated.id,
       metadata: {
         summaryLength: summary.length,
+        autoDraft: !summary,
         tasksCount: tasks.length,
         imagesCount: images.length,
       },
@@ -158,6 +183,36 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     })
 
     revalidateEventsCache()
+
+    const admins = await prisma.user.findMany({
+      where: { role: Role.ADMIN },
+      select: { id: true },
+      take: 50,
+    })
+    const notificationRecipientIds = Array.from(
+      new Set([
+        updated.creatorId,
+        ...updated.moderators.map((moderator) => moderator.user.id),
+        ...admins.map((admin) => admin.id),
+      ].filter(Boolean))
+    )
+
+    await createNotifications(
+      notificationRecipientIds
+        .filter((userId) => userId !== session.user.id)
+        .map((userId) => ({
+          userId,
+          title: "Создан черновик отчета",
+          content: `Мероприятие «${updated.title}» завершено. Сформирован черновик отчета, его нужно проверить перед публикацией.`,
+          type: NotificationType.REPORT_DRAFT_CREATED,
+          link: buildEventLink(updated.id),
+          metadata: {
+            eventId: updated.id,
+            reportId: updated.report?.id,
+            action: "report_draft_created",
+          },
+        }))
+    )
 
     return NextResponse.json({
       ...updated,

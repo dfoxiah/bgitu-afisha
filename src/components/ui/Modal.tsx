@@ -49,21 +49,19 @@ export default function Modal({ isOpen, onClose, title, children, size = "md" }:
 
   return ReactDOM.createPortal(
     <div
-      className="modal-overlay fixed inset-0 z-[1000] flex items-start justify-center overflow-y-auto bg-slate-950/62 p-2.5 backdrop-blur-md sm:items-center sm:p-5"
+      className="modal-overlay fixed inset-0 z-[1000] flex items-center justify-center overflow-y-auto bg-slate-950/45 p-2.5 backdrop-blur-[2px] sm:p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className={`modal modal-shell relative my-4 w-full max-h-[88vh] overflow-hidden rounded-[1.75rem] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,247,255,0.94))] shadow-[0_34px_90px_rgba(16,24,40,0.38)] ${sizeClasses[size]} animate-scaleIn sm:my-0`}
+        className={`modal modal-shell relative my-auto w-full max-h-[92vh] overflow-hidden rounded-2xl border border-slate-200/85 bg-white shadow-[0_24px_72px_rgba(16,24,40,0.32)] ${sizeClasses[size]} animate-scaleIn`}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-r from-primary/16 via-accent/10 to-secondary/18" />
-
-        <div className="relative z-[2] sticky top-0 flex items-start justify-between gap-3 border-b border-slate-200/75 bg-white/88 px-5 py-4 backdrop-blur sm:items-center sm:px-7 sm:py-5">
-          {title ? <h3 className="text-lg font-semibold text-slate-900 sm:text-xl">{title}</h3> : <span />}
+        <div className="relative z-[2] sticky top-0 flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
+          {title ? <h3 className="text-base font-semibold text-slate-900 sm:text-lg">{title}</h3> : <span />}
           <button
-            className="modal-close inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/85 bg-white/86 text-xl leading-none text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            className="modal-close inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-xl leading-none text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
             onClick={onClose}
             aria-label="Закрыть"
           >
@@ -71,7 +69,7 @@ export default function Modal({ isOpen, onClose, title, children, size = "md" }:
           </button>
         </div>
 
-        <div className="modal-body max-h-[calc(88vh-80px)] overflow-y-auto p-4 sm:p-5">{children}</div>
+        <div className="modal-body max-h-[calc(92vh-58px)] overflow-y-auto p-3 sm:p-4">{children}</div>
       </div>
     </div>,
     document.body

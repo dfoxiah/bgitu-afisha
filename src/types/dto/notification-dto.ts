@@ -15,16 +15,24 @@ import type { NotificationType } from "@prisma/client"
 export interface SendEventNotificationDto {
   eventId: string
   content: string
+  audience?: "participants" | "users"
   recipients: "all" | "confirmed" | "pending"
   type?: NotificationType
+  userIds?: string[]
   groups?: string[]
   departments?: string[]
+  faculties?: string[]
 }
 
 export interface SendEventNotificationResultDto {
   created: number
   broadcastId: string
   eventId: string
+  filters?: {
+    groups: string[]
+    departments: string[]
+    userIds?: string[]
+  }
 }
 
 export interface CancelNotificationBroadcastResultDto {

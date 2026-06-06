@@ -17,10 +17,14 @@ import type { Role } from "@prisma/client"
 import { authOptions } from "@/lib/auth"
 import { findEventByIdForRead } from "@/server/events/event-query-service"
 import { serializeEventForApi, updateEventFromApi } from "@/server/events/event-mutation-service"
-import { applyParticipantVisibility } from "@/server/events/participant-visibility"
+import {
+  applyParticipantVisibility,
+  applyPublicEventVisibility,
+} from "@/server/events/participant-visibility"
 import { updateEventBodySchema } from "@/server/shared/schemas/event-api-schema"
 import { errorJson } from "@/server/shared/http-response"
 import { isServiceError } from "@/server/shared/service-error"
+import { isContentManagerRole } from "@/lib/roles"
 
 type RouteParams = {
   params: Promise<{ id: string }>
@@ -36,11 +40,19 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       return errorJson(404, "NOT_FOUND", "Мероприятие не найдено")
     }
 
+    if (!session?.user?.id && (!event.isPublic || event.removedFromCalendar)) {
+      return errorJson(404, "NOT_FOUND", "Мероприятие не найдено")
+    }
+
+    const visibleEvent = applyParticipantVisibility(
+      serializeEventForApi(event) as unknown as Record<string, unknown>,
+      session?.user
+    )
+
     return NextResponse.json(
-      applyParticipantVisibility(
-        serializeEventForApi(event) as unknown as Record<string, unknown>,
-        session?.user
-      )
+      !session?.user?.id
+        ? applyPublicEventVisibility(visibleEvent as unknown as Record<string, unknown>)
+        : visibleEvent
     )
   } catch (error) {
     console.error("GET /api/events/[id] error", error)
@@ -55,7 +67,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
-    if (session.user.role !== "TEACHER" && session.user.role !== "ADMIN") {
+    if (!isContentManagerRole(session.user.role)) {
       return errorJson(403, "FORBIDDEN", "Недостаточно прав")
     }
 

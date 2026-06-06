@@ -74,16 +74,25 @@ export const clearNotificationsApi = async () => {
 type SendEventNotificationPayload = {
   eventId: string
   content: string
-  recipients: string
+  audience?: "participants" | "users"
+  recipients: "all" | "confirmed" | "pending"
   type: NotificationType
+  userIds?: string[]
   groups?: string[]
   departments?: string[]
+  faculties?: string[]
 }
 
 export type SendEventNotificationResult = {
   created: number
   broadcastId: string
   eventId: string
+  filters?: {
+    audience?: "participants" | "users"
+    groups: string[]
+    departments: string[]
+    userIds?: string[]
+  }
 }
 
 export const sendEventNotificationApi = async (payload: SendEventNotificationPayload) => {

@@ -25,7 +25,6 @@ import {
 } from "react"
 import { useSession } from "next-auth/react"
 import { Role } from "@prisma/client"
-import { useDebugger } from "@/lib/debugger"
 import { CategoryReverseMap, type Event, type Notification, type NotificationType, type User } from "@/types"
 import type { CompleteEventDto, CreateEventDto, UpdateEventDto } from "@/types/dto"
 import {
@@ -64,7 +63,9 @@ interface AppContextType {
   createEvent: (eventData: CreateEventDto) => Promise<Event>
   updateEvent: (id: string, updates: UpdateEventDto) => Promise<void>
   completeEvent: (id: string, reportData: CompleteEventDto) => Promise<void>
-  registerForEvent: (eventId: string) => Promise<void>
+  registerForEvent: (
+    eventId: string
+  ) => Promise<{ success: true; status: string; message: string }>
   updateParticipantStatus: (eventId: string, userId: string, action: "confirm" | "reject") => Promise<void>
   refreshNotifications: () => Promise<void>
   markNotificationAsRead: (id: string) => void
@@ -73,9 +74,11 @@ interface AppContextType {
   sendEventNotification: (
     eventId: string,
     content: string,
-    recipients: string,
+    recipients: "all" | "confirmed" | "pending",
     type?: NotificationType,
     filters?: {
+      audience?: "participants" | "users"
+      userIds?: string[]
       groups?: string[]
       departments?: string[]
     }
@@ -87,15 +90,29 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
 
-const NOTIFICATIONS_LIVE_INTERVAL_MS = 15000
+const parsePositiveInt = (value: string | undefined, fallback: number) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
+}
+
+const EVENTS_MIN_REFETCH_MS = Math.max(
+  parsePositiveInt(process.env.NEXT_PUBLIC_EVENTS_MIN_REFETCH_MS, 5000),
+  1000
+)
+const NOTIFICATIONS_LIVE_INTERVAL_MS = Math.max(
+  parsePositiveInt(process.env.NEXT_PUBLIC_NOTIFICATIONS_POLL_MS, 15000),
+  5000
+)
+const NOTIFICATIONS_MANUAL_REFRESH_COOLDOWN_MS = Math.max(
+  parsePositiveInt(process.env.NEXT_PUBLIC_NOTIFICATIONS_MANUAL_COOLDOWN_MS, 5000),
+  1000
+)
 
 let notificationsGlobalCooldownUntil = 0
 let notificationsGlobalInFlight = false
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession()
-  const debug = useDebugger("AppContext")
-  const debugRef = useRef(debug)
 
   const [events, setEvents] = useState<Event[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -114,10 +131,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const notificationsLoadedRef = useRef<string | null>(null)
   const lastNotificationsFetchRef = useRef(0)
   const notificationsFetchingRef = useRef(false)
-
-  useEffect(() => {
-    debugRef.current = debug
-  }, [debug])
 
   const categories = useMemo(
     () => [
@@ -198,7 +211,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (status === "loading") return
 
       const now = Date.now()
-      if (!forceRefresh && now - lastLoadTimeRef.current < 5000) return
+      if (!forceRefresh && now - lastLoadTimeRef.current < EVENTS_MIN_REFETCH_MS) return
 
       isFetchingRef.current = true
       loadAttemptsRef.current += 1
@@ -227,7 +240,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
 
         shouldRetry = true
-        debug.error("events", "Failed to load events", loadError)
         setEvents([])
         setHasLoadedEvents(false)
         if (loadAttemptsRef.current === 1) {
@@ -252,7 +264,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
     },
-    [debug, hasLoadedEvents, status]
+    [hasLoadedEvents, status]
   )
 
   useEffect(() => {
@@ -310,8 +322,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setNotifications(data)
         notificationsLoadedRef.current = session.user.id
         lastNotificationsFetchRef.current = Date.now()
-      } catch (loadError) {
-        debugRef.current.error("notifications", "Failed to load notifications", loadError)
+      } catch {
+        lastNotificationsFetchRef.current = 0
       } finally {
         notificationsGlobalInFlight = false
         notificationsFetchingRef.current = false
@@ -326,11 +338,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const now = Date.now()
     if (now < notificationsGlobalCooldownUntil) return
     if (notificationsGlobalInFlight || notificationsFetchingRef.current) return
-    if (now - lastNotificationsFetchRef.current < 5000) return
+    if (now - lastNotificationsFetchRef.current < NOTIFICATIONS_MANUAL_REFRESH_COOLDOWN_MS) return
 
     const shouldFetch =
       notificationsLoadedRef.current !== session.user.id ||
-      now - lastNotificationsFetchRef.current > 30000
+      now - lastNotificationsFetchRef.current > Math.max(NOTIFICATIONS_LIVE_INTERVAL_MS * 2, 15000)
 
     if (shouldFetch) {
       await fetchNotifications(true)
@@ -372,20 +384,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [fetchNotifications, session?.user?.id, status])
 
-  const setSelectedCategoryWithDebug = useCallback(
+  const setSelectedCategoryValue = useCallback(
     (category: string) => {
-      debug.info("ui", `Category changed: ${category}`)
       setSelectedCategory(category)
     },
-    [debug]
+    []
   )
 
-  const setSearchQueryWithDebug = useCallback(
+  const setSearchQueryValue = useCallback(
     (query: string) => {
-      debug.debug("ui", `Search query changed: ${query}`)
       setSearchQuery(query)
     },
-    [debug]
+    []
   )
 
   const createEvent = useCallback(
@@ -471,6 +481,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         })
       )
+
+      return result
     },
     [session]
   )
@@ -537,36 +549,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       )
     )
 
-    markNotificationAsReadApi(id).catch((readError) => {
-      debug.error("notifications", "Failed to mark notification as read", readError)
-    })
-  }, [debug])
+    markNotificationAsReadApi(id).catch(() => undefined)
+  }, [])
 
   const markAllNotificationsAsRead = useCallback(() => {
     setNotifications((prev) => prev.map((notification) => ({ ...notification, read: true })))
 
-    markAllNotificationsAsReadApi().catch((readError) => {
-      debug.error("notifications", "Failed to mark all notifications as read", readError)
-    })
-  }, [debug])
+    markAllNotificationsAsReadApi().catch(() => undefined)
+  }, [])
 
   const clearAllNotifications = useCallback(() => {
     setNotifications([])
     notificationsLoadedRef.current = session?.user?.id ?? null
     lastNotificationsFetchRef.current = Date.now()
 
-    clearNotificationsApi().catch((clearError) => {
-      debug.error("notifications", "Failed to clear notifications", clearError)
-    })
-  }, [debug, session?.user?.id])
+    clearNotificationsApi().catch(() => undefined)
+  }, [session?.user?.id])
 
   const sendEventNotification = useCallback(
     async (
       eventId: string,
       content: string,
-      recipients: string,
+      recipients: "all" | "confirmed" | "pending",
       type: NotificationType = "EVENT",
       filters?: {
+        audience?: "participants" | "users"
+        userIds?: string[]
         groups?: string[]
         departments?: string[]
       }
@@ -574,10 +582,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const result = await sendEventNotificationApi({
         eventId,
         content,
+        audience: filters?.audience || "participants",
         recipients,
         type,
+        userIds: filters?.userIds || [],
         groups: filters?.groups || [],
         departments: filters?.departments || [],
+        faculties: filters?.departments || [],
       })
       await fetchNotifications(true)
       return result
@@ -619,8 +630,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       searchQuery,
       isLoading,
       error,
-      setSelectedCategory: setSelectedCategoryWithDebug,
-      setSearchQuery: setSearchQueryWithDebug,
+      setSelectedCategory: setSelectedCategoryValue,
+      setSearchQuery: setSearchQueryValue,
       createEvent,
       updateEvent,
       completeEvent,
@@ -647,8 +658,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       searchQuery,
       isLoading,
       error,
-      setSelectedCategoryWithDebug,
-      setSearchQueryWithDebug,
+      setSelectedCategoryValue,
+      setSearchQueryValue,
       createEvent,
       updateEvent,
       completeEvent,
