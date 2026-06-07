@@ -40,8 +40,30 @@ import { buildAdminLink, createNotification } from "@/server/notifications/notif
 
 const importTemplates: Record<ImportType, string[][]> = {
   users: [
-    ["email", "name", "password", "role", "department", "group", "admissionYear", "bio"],
-    ["student@example.com", "Иванов Иван Иванович", "", "STUDENT", "Информационные системы", "ИС-23", "2023", ""],
+    [
+      "email",
+      "name",
+      "password",
+      "role",
+      "department",
+      "group",
+      "admissionYear",
+      "bio",
+      "privacyConsentAt",
+      "termsConsentAt",
+    ],
+    [
+      "student@example.com",
+      "Иванов Иван Иванович",
+      "",
+      "STUDENT",
+      "Информационные системы",
+      "ИС-23",
+      "2023",
+      "",
+      "2026-06-01",
+      "2026-06-01",
+    ],
   ],
   events: [
     [

@@ -21,6 +21,7 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { EventCategory, Role } from "@prisma/client";
 import { logAuditEvent } from "@/lib/audit";
+import { buildEmailInsensitiveFilter, normalizeEmailAddress } from "@/server/shared/user-email";
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -196,13 +197,14 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials): Promise<User | null> {
-        if (!credentials?.email || !credentials?.password) {
+        const normalizedEmail = normalizeEmailAddress(credentials?.email)
+        if (!normalizedEmail || !credentials?.password) {
           return null;
         }
 
         try {
-          const user = await prisma.user.findUnique({
-            where: { email: credentials.email },
+          const user = await prisma.user.findFirst({
+            where: buildEmailInsensitiveFilter(normalizedEmail),
           });
 
           if (!user) {

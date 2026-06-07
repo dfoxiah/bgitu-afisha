@@ -16,16 +16,18 @@ import { getServerSession } from "next-auth"
 import bcrypt from "bcryptjs"
 import { authOptions } from "@/lib/auth"
 import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
+import { deriveProfileCompletionState } from "@/lib/profile-completion"
 import { prisma } from "@/lib/prisma"
 import { ensureAdminSession } from "@/server/admin/admin-session"
 import { errorJson } from "@/server/shared/http-response"
+import { buildEmailInsensitiveFilter } from "@/server/shared/user-email"
 import { isRoleValue } from "@/lib/roles"
 
 const normalizeAdmissionYear = (value: unknown) => {
   if (value === undefined || value === null || String(value).trim() === "") return null
   const year = Number(value)
   const currentYear = new Date().getFullYear()
-  return Number.isInteger(year) && year >= 1990 && year <= currentYear + 1 ? year : null
+  return Number.isInteger(year) && year >= 1990 && year <= currentYear + 1 ? year : "invalid"
 }
 
 export async function GET(req: NextRequest) {
@@ -114,13 +116,31 @@ export async function POST(req: NextRequest) {
     return errorJson(400, "VALIDATION_ERROR", "Пароль должен быть не короче 6 символов")
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } })
+  const admissionYear = normalizeAdmissionYear(body.admissionYear)
+  if (admissionYear === "invalid") {
+    return errorJson(400, "VALIDATION_ERROR", "Некорректный год поступления")
+  }
+
+  const existing = await prisma.user.findFirst({ where: buildEmailInsensitiveFilter(email) })
   if (existing) {
     return errorJson(409, "CONFLICT", "Пользователь с таким email уже существует")
   }
 
   const hashedPassword = await bcrypt.hash(password, 10)
   const consentAt = body.acceptPrivacy && body.acceptTerms ? new Date() : null
+  const completionState = deriveProfileCompletionState(
+    {
+      name,
+      email,
+      role: roleRaw,
+      department: body.department ? String(body.department).trim() : null,
+      group: body.group ? String(body.group).trim() : null,
+      admissionYear,
+      privacyConsentAt: consentAt,
+      termsConsentAt: consentAt,
+    },
+    "admin"
+  )
 
   const user = await prisma.user.create({
     data: {
@@ -130,10 +150,11 @@ export async function POST(req: NextRequest) {
       role: roleRaw,
       department: body.department ? String(body.department).trim() : null,
       group: body.group ? String(body.group).trim() : null,
-      admissionYear: normalizeAdmissionYear(body.admissionYear),
+      admissionYear,
       bio: body.bio ? String(body.bio).trim() : null,
       privacyConsentAt: consentAt,
       termsConsentAt: consentAt,
+      ...completionState,
     },
     select: {
       id: true,
@@ -145,6 +166,8 @@ export async function POST(req: NextRequest) {
       admissionYear: true,
       groupChangeCount: true,
       bio: true,
+      privacyConsentAt: true,
+      termsConsentAt: true,
       createdAt: true,
       updatedAt: true,
     },

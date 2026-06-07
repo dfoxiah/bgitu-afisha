@@ -14,8 +14,13 @@
 
 import bcrypt from "bcryptjs"
 import { EventCategory, Role } from "@prisma/client"
+import { deriveProfileCompletionState } from "@/lib/profile-completion"
 import { prisma } from "@/lib/prisma"
 import { isModeratorRole } from "@/lib/roles"
+import {
+  buildEmailInsensitiveFilters,
+  normalizeEmailAddress,
+} from "@/server/shared/user-email"
 import {
   normalizeCategory,
   normalizeRole,
@@ -66,7 +71,7 @@ const resolveCreatorFromRow = async (
   usersByEmail: Map<string, UserLookup>,
   creatorByIdCache: Map<string, UserLookup | null>
 ) => {
-  const creatorEmail = String(row.creatorEmail || "").trim().toLowerCase()
+  const creatorEmail = normalizeEmailAddress(row.creatorEmail)
   const creatorId = String(row.creatorId || "").trim()
 
   let resolvedId = actor.id
@@ -109,21 +114,35 @@ const resolveCreatorFromRow = async (
 export const importUsersRows = async (rows: ImportRow[], mode: ImportMode): Promise<ImportResult> => {
   const result = emptyImportResult()
 
-  const emails = Array.from(
-    new Set(rows.map((row) => String(row.email || "").trim().toLowerCase()).filter(Boolean))
-  )
+  const emails = Array.from(new Set(rows.map((row) => normalizeEmailAddress(row.email)).filter(Boolean)))
 
-  const existing = await prisma.user.findMany({
-    where: { email: { in: emails } },
-    select: { id: true, email: true },
-  })
-  const existingByEmail = new Map(existing.map((user) => [user.email, user]))
+  const existing = emails.length
+    ? await prisma.user.findMany({
+        where: { OR: buildEmailInsensitiveFilters(emails) },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          department: true,
+          group: true,
+          admissionYear: true,
+          privacyConsentAt: true,
+          privacyConsentVersion: true,
+          termsConsentAt: true,
+          termsConsentVersion: true,
+          consentSource: true,
+          profileCompletedAt: true,
+        },
+      })
+    : []
+  const existingByEmail = new Map(existing.map((user) => [normalizeEmailAddress(user.email), user]))
 
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index]
     const rowNumber = index + 2
 
-    const email = String(row.email || "").trim().toLowerCase()
+    const email = normalizeEmailAddress(row.email)
     if (!email) {
       result.errors.push(`строка ${rowNumber}: отсутствует email`)
       continue
@@ -172,6 +191,10 @@ export const importUsersRows = async (rows: ImportRow[], mode: ImportMode): Prom
         bio?: string | null
         privacyConsentAt?: Date | null
         termsConsentAt?: Date | null
+        privacyConsentVersion?: string | null
+        termsConsentVersion?: string | null
+        consentSource?: string | null
+        profileCompletedAt?: Date | null
         password?: string
       } = {
         name: row.name ? String(row.name).trim() : undefined,
@@ -193,6 +216,37 @@ export const importUsersRows = async (rows: ImportRow[], mode: ImportMode): Prom
         updateData.password = await bcrypt.hash(password, 10)
       }
 
+      Object.assign(
+        updateData,
+        deriveProfileCompletionState(
+          {
+            name: updateData.name ?? existingUser.name,
+            email,
+            role: updateData.role ?? existingUser.role,
+            department:
+              updateData.department !== undefined ? updateData.department : existingUser.department,
+            group: updateData.group !== undefined ? updateData.group : existingUser.group,
+            admissionYear:
+              updateData.admissionYear !== undefined
+                ? updateData.admissionYear
+                : existingUser.admissionYear,
+            privacyConsentAt:
+              updateData.privacyConsentAt !== undefined
+                ? updateData.privacyConsentAt
+                : existingUser.privacyConsentAt,
+            termsConsentAt:
+              updateData.termsConsentAt !== undefined
+                ? updateData.termsConsentAt
+                : existingUser.termsConsentAt,
+            privacyConsentVersion: existingUser.privacyConsentVersion,
+            termsConsentVersion: existingUser.termsConsentVersion,
+            consentSource: existingUser.consentSource,
+            profileCompletedAt: existingUser.profileCompletedAt,
+          },
+          "admin-import"
+        )
+      )
+
       await prisma.user.update({
         where: { id: existingUser.id },
         data: updateData,
@@ -213,6 +267,10 @@ export const importUsersRows = async (rows: ImportRow[], mode: ImportMode): Prom
       bio: string | null
       privacyConsentAt?: Date | null
       termsConsentAt?: Date | null
+      privacyConsentVersion?: string | null
+      termsConsentVersion?: string | null
+      consentSource?: string | null
+      profileCompletedAt?: Date | null
       password?: string
     } = {
       email,
@@ -237,6 +295,23 @@ export const importUsersRows = async (rows: ImportRow[], mode: ImportMode): Prom
       result.warnings.push(`строка ${rowNumber}: пароль не задан, вход по паролю недоступен`)
     }
 
+    Object.assign(
+      createData,
+      deriveProfileCompletionState(
+        {
+          name: createData.name,
+          email,
+          role: createData.role,
+          department: createData.department,
+          group: createData.group,
+          admissionYear: createData.admissionYear,
+          privacyConsentAt: createData.privacyConsentAt,
+          termsConsentAt: createData.termsConsentAt,
+        },
+        "admin-import"
+      )
+    )
+
     await prisma.user.create({ data: createData })
     result.created += 1
   }
@@ -254,20 +329,20 @@ export const importEventRows = async (
   const importIsNews = type === "news"
 
   const creatorEmails = rows
-    .map((row) => String(row.creatorEmail || "").trim().toLowerCase())
+    .map((row) => normalizeEmailAddress(row.creatorEmail))
     .filter(Boolean)
   const moderatorEmails = rows.flatMap((row) =>
-    splitList(row.moderatorEmails).map((email) => String(email).toLowerCase())
+    splitList(row.moderatorEmails).map((email) => normalizeEmailAddress(email))
   )
   const allEmails = Array.from(new Set([...creatorEmails, ...moderatorEmails]))
 
   const users = allEmails.length
     ? await prisma.user.findMany({
-        where: { email: { in: allEmails } },
+        where: { OR: buildEmailInsensitiveFilters(allEmails) },
         select: { id: true, email: true, role: true, name: true },
       })
     : []
-  const usersByEmail = new Map(users.map((user) => [user.email.toLowerCase(), user]))
+  const usersByEmail = new Map(users.map((user) => [normalizeEmailAddress(user.email), user]))
   const creatorByIdCache = new Map<string, UserLookup | null>()
 
   for (let index = 0; index < rows.length; index += 1) {
@@ -312,7 +387,9 @@ export const importEventRows = async (
       result.warnings.push(`строка ${rowNumber}: ${creator.warning}`)
     }
 
-    const moderatorEmailsList = splitList(row.moderatorEmails).map((email) => email.toLowerCase())
+    const moderatorEmailsList = splitList(row.moderatorEmails).map((email) =>
+      normalizeEmailAddress(email)
+    )
     const moderatorUsers = moderatorEmailsList
       .map((email) => usersByEmail.get(email))
       .filter((user): user is UserLookup => Boolean(user))

@@ -108,7 +108,14 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       ? body.images.map((item) => String(item)).filter(Boolean)
       : []
 
-    const reportDate = body.reportDate ? new Date(String(body.reportDate)) : new Date()
+    let reportDate = new Date()
+    if (body.reportDate !== undefined && body.reportDate !== null && String(body.reportDate).trim()) {
+      const parsedReportDate = new Date(String(body.reportDate))
+      if (Number.isNaN(parsedReportDate.getTime())) {
+        return errorJson(400, "VALIDATION_ERROR", "Некорректная дата отчета")
+      }
+      reportDate = parsedReportDate
+    }
 
     const updated = await prisma.event.update({
       where: { id: eventId },

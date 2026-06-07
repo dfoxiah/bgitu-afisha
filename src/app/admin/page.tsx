@@ -212,6 +212,8 @@ export default function AdminPage() {
     department: "",
     group: "",
     admissionYear: "",
+    acceptPrivacy: false,
+    acceptTerms: false,
   })
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null)
   const [editingPassword, setEditingPassword] = useState("")
@@ -552,7 +554,17 @@ export default function AdminPage() {
         admissionYear: newUser.admissionYear ? Number(newUser.admissionYear) : null,
       })
       showToast("Пользователь создан", "success")
-      setNewUser({ name: "", email: "", password: "", role: "STUDENT", department: "", group: "", admissionYear: "" })
+      setNewUser({
+        name: "",
+        email: "",
+        password: "",
+        role: "STUDENT",
+        department: "",
+        group: "",
+        admissionYear: "",
+        acceptPrivacy: false,
+        acceptTerms: false,
+      })
       await Promise.all([loadUsers(), loadStructure()])
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Ошибка создания пользователя", "error")
@@ -570,6 +582,8 @@ export default function AdminPage() {
         group: editingUser.group,
         admissionYear: editingUser.admissionYear,
         groupChangeCount: editingUser.groupChangeCount,
+        privacyConsentAt: editingUser.privacyConsentAt || null,
+        termsConsentAt: editingUser.termsConsentAt || null,
         password: editingPassword || undefined,
       })
       showToast("Пользователь обновлен", "success")
@@ -1134,6 +1148,26 @@ export default function AdminPage() {
               <input className="w-full px-3 py-2 border rounded" placeholder="Кафедра/факультет (необязательно)" value={newUser.department} onChange={(event) => setNewUser((previous) => ({ ...previous, department: event.target.value }))} />
               <input className="w-full px-3 py-2 border rounded" placeholder="Группа/курс (необязательно)" value={newUser.group} onChange={(event) => setNewUser((previous) => ({ ...previous, group: event.target.value }))} />
               <input className="w-full px-3 py-2 border rounded" type="number" min={1990} max={new Date().getFullYear() + 1} placeholder="Год поступления (для студента)" value={newUser.admissionYear} onChange={(event) => setNewUser((previous) => ({ ...previous, admissionYear: event.target.value }))} />
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={newUser.acceptPrivacy}
+                  onChange={(event) =>
+                    setNewUser((previous) => ({ ...previous, acceptPrivacy: event.target.checked }))
+                  }
+                />
+                Подтверждена актуальная политика конфиденциальности
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={newUser.acceptTerms}
+                  onChange={(event) =>
+                    setNewUser((previous) => ({ ...previous, acceptTerms: event.target.checked }))
+                  }
+                />
+                Подтверждено актуальное пользовательское соглашение
+              </label>
               <Button variant="primary" onClick={() => void handleCreateUser()}>Создать</Button>
             </div>
             {editingUser && (
@@ -1153,6 +1187,40 @@ export default function AdminPage() {
                 <input className="w-full px-3 py-2 border rounded" type="number" min={1990} max={new Date().getFullYear() + 1} placeholder="Год поступления" value={editingUser.admissionYear || ""} onChange={(event) => setEditingUser((previous) => (previous ? { ...previous, admissionYear: event.target.value ? Number(event.target.value) : null } : previous))} />
                 <input className="w-full px-3 py-2 border rounded" type="number" min={0} placeholder="Счетчик смены группы" value={editingUser.groupChangeCount} onChange={(event) => setEditingUser((previous) => (previous ? { ...previous, groupChangeCount: Math.max(0, Number(event.target.value) || 0) } : previous))} />
                 <input className="w-full px-3 py-2 border rounded" type="password" placeholder="Новый пароль" value={editingPassword} onChange={(event) => setEditingPassword(event.target.value)} />
+                <label className="flex items-center gap-2 text-sm text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingUser.privacyConsentAt)}
+                    onChange={(event) =>
+                      setEditingUser((previous) =>
+                        previous
+                          ? {
+                              ...previous,
+                              privacyConsentAt: event.target.checked ? new Date().toISOString() : null,
+                            }
+                          : previous
+                      )
+                    }
+                  />
+                  Политика конфиденциальности подтверждена
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingUser.termsConsentAt)}
+                    onChange={(event) =>
+                      setEditingUser((previous) =>
+                        previous
+                          ? {
+                              ...previous,
+                              termsConsentAt: event.target.checked ? new Date().toISOString() : null,
+                            }
+                          : previous
+                      )
+                    }
+                  />
+                  Пользовательское соглашение подтверждено
+                </label>
                 <div className="flex flex-col gap-2 sm:flex-row"><Button variant="primary" onClick={() => void handleSaveUser()}>Сохранить</Button><Button variant="secondary" onClick={() => { setEditingUser(null); setEditingPassword("") }}>Отмена</Button></div>
               </div>
             )}

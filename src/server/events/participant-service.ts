@@ -13,6 +13,10 @@
 
 import { prisma } from "@/lib/prisma"
 import { Role, type Prisma } from "@prisma/client"
+import {
+  buildEmailInsensitiveFilters,
+  normalizeEmailAddress,
+} from "@/server/shared/user-email"
 
 const toNormalizedEmails = (value: unknown) => {
   if (!Array.isArray(value)) return []
@@ -20,7 +24,7 @@ const toNormalizedEmails = (value: unknown) => {
   return Array.from(
     new Set(
       value
-        .map((item) => String(item).trim())
+        .map((item) => normalizeEmailAddress(item))
         .filter((email): email is string => Boolean(email))
     )
   )
@@ -50,7 +54,7 @@ export const resolveParticipantUsers = async (rawEmails: unknown, rawGroups: unk
   }
 
   const or: Prisma.UserWhereInput[] = []
-  if (emails.length > 0) or.push({ email: { in: emails } })
+  if (emails.length > 0) or.push(...buildEmailInsensitiveFilters(emails))
   if (groups.length > 0) or.push({ group: { in: groups } })
 
   const users = await prisma.user.findMany({
@@ -58,7 +62,7 @@ export const resolveParticipantUsers = async (rawEmails: unknown, rawGroups: unk
     select: { id: true, email: true, group: true },
   })
 
-  const found = new Set(users.map((user) => user.email))
+  const found = new Set(users.map((user) => normalizeEmailAddress(user.email)))
   const missingEmails = emails.filter((email) => !found.has(email))
   const foundGroups = new Set(users.map((user) => user.group).filter((group): group is string => Boolean(group)))
   const missingGroups = groups.filter((group) => !foundGroups.has(group))
@@ -77,13 +81,13 @@ export const resolveModerators = async (rawEmails: unknown, creatorId?: string) 
 
   const users = await prisma.user.findMany({
     where: {
-      email: { in: emails },
+      OR: buildEmailInsensitiveFilters(emails),
       role: { in: [Role.TEACHER, Role.EDITOR, Role.ADMIN] },
     },
     select: { id: true, email: true },
   })
 
-  const found = new Set(users.map((user) => user.email))
+  const found = new Set(users.map((user) => normalizeEmailAddress(user.email)))
   const missingEmails = emails.filter((email) => !found.has(email))
   const filteredUsers = creatorId ? users.filter((user) => user.id !== creatorId) : users
 

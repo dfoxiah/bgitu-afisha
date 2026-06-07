@@ -17,6 +17,10 @@ export type ProfileCompletionUser = {
   profileCompletedAt?: Date | string | null
 }
 
+type ProfileCompletionWriteUser = ProfileCompletionUser & {
+  consentSource?: string | null
+}
+
 const isFilled = (value?: string | null) => Boolean(value && value.trim().length > 0)
 
 const isSyntheticOAuthEmail = (email?: string | null) =>
@@ -48,3 +52,42 @@ export const getProfileCompletionIssues = (user: ProfileCompletionUser) => {
 
 export const isProfileComplete = (user: ProfileCompletionUser) =>
   Boolean(user.profileCompletedAt) && getProfileCompletionIssues(user).length === 0
+
+const toValidDate = (value?: Date | string | null) => {
+  if (!value) return null
+
+  const parsed = value instanceof Date ? new Date(value) : new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+export const deriveProfileCompletionState = (
+  user: ProfileCompletionWriteUser,
+  fallbackConsentSource = "profile",
+  now = new Date()
+) => {
+  const hasPrivacyConsent = Boolean(user.privacyConsentAt)
+  const hasTermsConsent = Boolean(user.termsConsentAt)
+  const privacyConsentVersion = hasPrivacyConsent ? PRIVACY_POLICY_VERSION : null
+  const termsConsentVersion = hasTermsConsent ? TERMS_VERSION : null
+  const consentSource =
+    hasPrivacyConsent || hasTermsConsent
+      ? user.consentSource?.trim() || fallbackConsentSource
+      : null
+  const completedAtCandidate = toValidDate(user.profileCompletedAt) || now
+  const profileCompletedAt =
+    getProfileCompletionIssues({
+      ...user,
+      privacyConsentVersion,
+      termsConsentVersion,
+      profileCompletedAt: completedAtCandidate,
+    }).length === 0
+      ? completedAtCandidate
+      : null
+
+  return {
+    privacyConsentVersion,
+    termsConsentVersion,
+    consentSource,
+    profileCompletedAt,
+  }
+}

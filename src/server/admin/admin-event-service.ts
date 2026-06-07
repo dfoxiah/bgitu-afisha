@@ -25,6 +25,10 @@ import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
 import { parseLocalDateTime } from "@/server/shared/date-time"
 import { buildFieldChanges, toAuditValue } from "@/server/shared/audit-diff"
 import { ServiceError } from "@/server/shared/service-error"
+import {
+  buildEmailInsensitiveFilters,
+  normalizeEmailAddress,
+} from "@/server/shared/user-email"
 import type { NextRequest } from "next/server"
 import { isModeratorRole } from "@/lib/roles"
 
@@ -236,19 +240,19 @@ const parseReportPatch = (value: unknown): ReportPatch => {
 const parseModerators = async (value: unknown) => {
   if (!Array.isArray(value)) return null
 
-  const emails = value.map((item) => String(item).trim().toLowerCase()).filter(Boolean)
+  const emails = value.map((item) => normalizeEmailAddress(item)).filter(Boolean)
   const uniqueEmails = Array.from(new Set(emails))
   if (uniqueEmails.length === 0) return [] as string[]
 
   const users = await prisma.user.findMany({
     where: {
-      email: { in: uniqueEmails },
+      OR: buildEmailInsensitiveFilters(uniqueEmails),
       role: { in: ["TEACHER", "EDITOR", "ADMIN"] },
     },
     select: { id: true, email: true },
   })
 
-  const found = new Set(users.map((user) => user.email.toLowerCase()))
+  const found = new Set(users.map((user) => normalizeEmailAddress(user.email)))
   const missing = uniqueEmails.filter((email) => !found.has(email))
   if (missing.length) {
     throw new ServiceError(400, "VALIDATION_ERROR", `Не найдены преподаватели/редакторы: ${missing.join(", ")}`)

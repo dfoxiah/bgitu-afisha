@@ -27,6 +27,7 @@ import { formatLocalDate, parseLocalDateTime } from "@/server/shared/date-time"
 import { ServiceError } from "@/server/shared/service-error"
 import { canModerateEventByRole } from "@/server/shared/session"
 import type { CreateEventBodyInput, UpdateEventBodyInput } from "@/server/shared/schemas/event-api-schema"
+import { buildEmailInsensitiveFilter } from "@/server/shared/user-email"
 import { isAdminRole, isModeratorRole } from "@/lib/roles"
 import {
   buildEventLink,
@@ -183,7 +184,7 @@ export const createEventFromApi = async (params: {
 
   const creator =
     (await prisma.user.findUnique({ where: { id: actor.id } })) ||
-    (actor.email ? await prisma.user.findUnique({ where: { email: actor.email } }) : null)
+    (actor.email ? await prisma.user.findFirst({ where: buildEmailInsensitiveFilter(actor.email) }) : null)
 
   if (!creator) {
     throw new ServiceError(

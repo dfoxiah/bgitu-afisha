@@ -37,6 +37,8 @@ export type AdminUserCreateInput = {
   department?: string
   group?: string
   admissionYear?: number | null
+  acceptPrivacy?: boolean
+  acceptTerms?: boolean
 }
 
 export type AdminUserUpdateInput = {
@@ -49,6 +51,8 @@ export type AdminUserUpdateInput = {
   admissionYear?: number | null
   groupChangeCount?: number
   bio?: string | null
+  privacyConsentAt?: string | null
+  termsConsentAt?: string | null
 }
 
 export type AdminStructureField = "department" | "group"
