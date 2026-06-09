@@ -15,11 +15,8 @@ const eslintConfig = defineConfig([
     // Workspace-internal but external to active Next.js app:
     "laravel-event-manager/**",
     "tmp-wordgen/**",
-    "tmp_docx_check_20260301_195812/**",
-    "tmp_docx_check_20260301_2042/**",
-    "tmp_docx_check_20260301_dense/**",
-    "tmp_docx_check_group_401/**",
-    "tmp_docx_extract_1/**",
+    "tmp_docx_check_*/**",
+    "tmp_docx_extract_*/**",
     "bgitu-afisha/**",
     "vendor/**",
     "public/build/**",

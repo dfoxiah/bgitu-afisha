@@ -7,6 +7,7 @@ dist/
 coverage/
 *.log
 *.tsbuildinfo
+*.obj
 Untitled-*.txt
 
 # Environment files
@@ -22,3 +23,7 @@ Untitled-*.txt
 
 # Local nested repo copy
 bgitu-afisha/
+laravel-event-manager/
+tmp-wordgen/
+tmp_docx_check_*/
+tmp_docx_extract_*/
