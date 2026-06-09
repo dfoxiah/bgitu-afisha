@@ -48,14 +48,14 @@
   </g>
 
   <g>
-    <rect x="272" y="360" width="208" height="56" rx="18" fill="#FFF2C8"/>
-    <text x="304" y="396" fill="#153A75" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="21" font-weight="800">Next.js 16 + Prisma</text>
+    <rect x="272" y="360" width="236" height="56" rx="18" fill="#FFF2C8"/>
+    <text x="290" y="396" fill="#153A75" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="20" font-weight="800">Next.js 16 + Prisma</text>
 
-    <rect x="496" y="360" width="184" height="56" rx="18" fill="#FFFFFF" fill-opacity="0.16" stroke="#FFFFFF" stroke-opacity="0.24"/>
-    <text x="527" y="396" fill="#FFFFFF" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="21" font-weight="700">React 19 + TS</text>
+    <rect x="524" y="360" width="176" height="56" rx="18" fill="#FFFFFF" fill-opacity="0.16" stroke="#FFFFFF" stroke-opacity="0.24"/>
+    <text x="551" y="396" fill="#FFFFFF" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="20" font-weight="700">React 19 + TS</text>
 
-    <rect x="696" y="360" width="188" height="56" rx="18" fill="#FFFFFF" fill-opacity="0.16" stroke="#FFFFFF" stroke-opacity="0.24"/>
-    <text x="731" y="396" fill="#FFFFFF" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="21" font-weight="700">Auth + Roles</text>
+    <rect x="716" y="360" width="168" height="56" rx="18" fill="#FFFFFF" fill-opacity="0.16" stroke="#FFFFFF" stroke-opacity="0.24"/>
+    <text x="749" y="396" fill="#FFFFFF" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="20" font-weight="700">Auth + Roles</text>
   </g>
 
   <g>
