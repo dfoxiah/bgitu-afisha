@@ -1,0 +1,91 @@
+<svg width="1280" height="640" viewBox="0 0 1280 640" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">БГИТУ Афиша</title>
+  <desc id="desc">Баннер проекта БГИТУ Афиша для README</desc>
+  <defs>
+    <linearGradient id="bg" x1="74" y1="54" x2="1188" y2="592" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0A2042"/>
+      <stop offset="0.52" stop-color="#173B78"/>
+      <stop offset="1" stop-color="#2C6FE5"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="300" y1="120" x2="1030" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE6A7" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.2"/>
+    </linearGradient>
+    <filter id="shadow" x="0" y="0" width="1280" height="640" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="28" flood-color="#08162F" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="640" rx="32" fill="url(#bg)"/>
+  <circle cx="1088" cy="122" r="182" fill="url(#accent)" fill-opacity="0.18"/>
+  <circle cx="1116" cy="540" r="154" fill="#9CC5FF" fill-opacity="0.09"/>
+  <circle cx="208" cy="586" r="148" fill="#FFFFFF" fill-opacity="0.06"/>
+
+  <g opacity="0.18">
+    <path d="M0 136C132 94 246 86 342 112C438 138 536 208 642 220C748 232 854 188 958 164C1062 140 1172 136 1280 166V0H0V136Z" fill="#FFFFFF"/>
+    <path d="M0 478C126 432 232 418 338 442C444 466 544 532 648 536C752 540 858 482 962 458C1066 434 1176 436 1280 470V640H0V478Z" fill="#FFFFFF"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="62" y="64" width="1156" height="512" rx="28" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.16"/>
+  </g>
+
+  <g>
+    <rect x="96" y="100" width="144" height="144" rx="32" fill="#FFFFFF" fill-opacity="0.14" stroke="#FFFFFF" stroke-opacity="0.28"/>
+    <rect x="124" y="128" width="88" height="88" rx="20" fill="#FFF2C8"/>
+    <path d="M143 150H193V184C193 196.15 183.15 206 171 206H165C152.85 206 143 196.15 143 184V150Z" fill="#1F5FE0"/>
+    <rect x="154" y="137" width="10" height="22" rx="5" fill="#1F5FE0"/>
+    <rect x="172" y="137" width="10" height="22" rx="5" fill="#1F5FE0"/>
+    <rect x="156" y="171" width="24" height="8" rx="4" fill="#FFF2C8"/>
+    <circle cx="171" cy="189" r="5" fill="#FFF2C8"/>
+  </g>
+
+  <g fill="#FFFFFF" font-family="Segoe UI, Inter, Arial, sans-serif">
+    <text x="276" y="156" font-size="24" font-weight="700" letter-spacing="0.18em" opacity="0.76">BGITU CAMPUS EVENTS PLATFORM</text>
+    <text x="276" y="238" font-size="70" font-weight="800">БГИТУ Афиша</text>
+    <text x="276" y="288" font-size="28" font-weight="500" opacity="0.88">Публичная афиша, новости, календарь и административный контур в одном интерфейсе.</text>
+  </g>
+
+  <g>
+    <rect x="276" y="334" width="220" height="56" rx="18" fill="#FFF2C8"/>
+    <text x="314" y="370" fill="#153A75" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="22" font-weight="800">Next.js 16 + Prisma</text>
+
+    <rect x="512" y="334" width="202" height="56" rx="18" fill="#FFFFFF" fill-opacity="0.16" stroke="#FFFFFF" stroke-opacity="0.24"/>
+    <text x="550" y="370" fill="#FFFFFF" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="22" font-weight="700">React 19 + TS</text>
+
+    <rect x="730" y="334" width="224" height="56" rx="18" fill="#FFFFFF" fill-opacity="0.16" stroke="#FFFFFF" stroke-opacity="0.24"/>
+    <text x="768" y="370" fill="#FFFFFF" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="22" font-weight="700">NextAuth + Roles</text>
+  </g>
+
+  <g>
+    <rect x="842" y="116" width="318" height="162" rx="26" fill="#FFFFFF" fill-opacity="0.13" stroke="#FFFFFF" stroke-opacity="0.26"/>
+    <text x="874" y="158" fill="#FFFFFF" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="28" font-weight="800">Что внутри</text>
+
+    <circle cx="878" cy="194" r="8" fill="#FFF2C8"/>
+    <text x="900" y="201" fill="#FFFFFF" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="22" font-weight="600">Публичная афиша</text>
+
+    <circle cx="878" cy="228" r="8" fill="#A8CBFF"/>
+    <text x="900" y="235" fill="#FFFFFF" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="22" font-weight="600">Новости и отчёты</text>
+
+    <circle cx="878" cy="262" r="8" fill="#A8CBFF"/>
+    <text x="900" y="269" fill="#FFFFFF" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="22" font-weight="600">Админ-панель и импорт</text>
+  </g>
+
+  <g>
+    <rect x="816" y="320" width="344" height="192" rx="28" fill="#FFFFFF"/>
+    <rect x="838" y="342" width="300" height="24" rx="12" fill="#EAF1FF"/>
+    <rect x="838" y="382" width="126" height="86" rx="20" fill="#1F5FE0"/>
+    <rect x="980" y="382" width="158" height="20" rx="10" fill="#D8E5FF"/>
+    <rect x="980" y="416" width="126" height="14" rx="7" fill="#E6EEFF"/>
+    <rect x="980" y="444" width="98" height="14" rx="7" fill="#E6EEFF"/>
+    <rect x="838" y="486" width="300" height="12" rx="6" fill="#EEF3FF"/>
+    <rect x="838" y="510" width="218" height="12" rx="6" fill="#EEF3FF"/>
+    <rect x="850" y="396" width="42" height="8" rx="4" fill="#FFF2C8"/>
+    <rect x="850" y="414" width="72" height="16" rx="8" fill="#FFFFFF" fill-opacity="0.9"/>
+    <rect x="850" y="438" width="52" height="12" rx="6" fill="#BBD3FF"/>
+  </g>
+
+  <g opacity="0.84" fill="#FFFFFF" font-family="Segoe UI, Inter, Arial, sans-serif">
+    <text x="96" y="544" font-size="18" font-weight="600">Студенты • Преподаватели • Модераторы • Редакторы • Администраторы</text>
+  </g>
+</svg>

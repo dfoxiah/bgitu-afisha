@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./public/window.svg" width="96" alt="БГИТУ Афиша" />
+  <img src="./docs/assets/readme-banner.svg" width="100%" alt="БГИТУ Афиша" />
 </p>
 
 <h1 align="center">БГИТУ Афиша</h1>
