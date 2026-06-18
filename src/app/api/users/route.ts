@@ -15,8 +15,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { Role, type Prisma } from '@prisma/client'
-import { isContentManagerRole, isRoleValue } from '@/lib/roles'
+import type { Prisma } from '@prisma/client'
+import { canManageDirectoryNotifications, isContentManagerRole, isRoleValue } from '@/lib/roles'
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -29,10 +29,21 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url)
-  const role = (searchParams.get('role') || 'TEACHER').toUpperCase() as Role
+  const role = (searchParams.get('role') || 'TEACHER').toUpperCase()
   const search = searchParams.get('search')?.trim()
+  const rawLimit = searchParams.get('limit')
+  const parsedLimit = rawLimit ? Number(rawLimit) : NaN
+  const limit =
+    Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(Math.trunc(parsedLimit), 500) : 200
 
   const where: Prisma.UserWhereInput = {}
+
+  if (role === 'ALL' && !canManageDirectoryNotifications(session.user.role)) {
+    return NextResponse.json(
+      { error: 'Полный справочник пользователей доступен только редакторам и администраторам' },
+      { status: 403 }
+    )
+  }
 
   if (isRoleValue(role)) {
     where.role = role
@@ -42,12 +53,15 @@ export async function GET(req: NextRequest) {
     where.OR = [
       { email: { contains: search, mode: 'insensitive' } },
       { name: { contains: search, mode: 'insensitive' } },
+      { department: { contains: search, mode: 'insensitive' } },
+      { group: { contains: search, mode: 'insensitive' } },
     ]
   }
 
   const users = await prisma.user.findMany({
     where,
     orderBy: { name: 'asc' },
+    take: limit,
     select: {
       id: true,
       name: true,
@@ -59,5 +73,7 @@ export async function GET(req: NextRequest) {
     },
   })
 
-  return NextResponse.json(users)
+  return NextResponse.json(users, {
+    headers: { 'Cache-Control': 'no-store' },
+  })
 }

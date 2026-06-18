@@ -46,7 +46,7 @@ const vkApiVersion = process.env.VK_API_VERSION || "5.199"
 const emailWebhookUrl = process.env.EMAIL_NOTIFICATION_WEBHOOK_URL || ""
 const emailFrom = process.env.EMAIL_NOTIFICATION_FROM || "no-reply@bgitu.ru"
 
-const toRandomId = () => Math.floor(Date.now() + Math.random() * 1000000)
+const toRandomId = () => Math.floor(Math.random() * 2_000_000_000)
 
 const sendVkNotification = async (recipient: NotificationRecipient, input: NotificationInput) => {
   if (!vkToken || !recipient.vkUserId || !recipient.notifyVk) return

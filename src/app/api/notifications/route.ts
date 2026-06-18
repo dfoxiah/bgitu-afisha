@@ -20,10 +20,12 @@ import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
 import { prisma } from "@/lib/prisma"
 import { canModerateEventByRole } from "@/server/shared/session"
 import { errorJson } from "@/server/shared/http-response"
-import { isContentManagerRole } from "@/lib/roles"
+import { canManageDirectoryNotifications, isContentManagerRole } from "@/lib/roles"
 import { buildEventLink, createNotifications } from "@/server/notifications/notification-service"
 
 export const dynamic = "force-dynamic"
+
+const broadcastNotificationTypes = new Set<NotificationType>(["EVENT", "CHANGE"])
 
 const parseStringList = (value: unknown) => {
   if (Array.isArray(value)) {
@@ -125,7 +127,8 @@ export async function POST(req: NextRequest) {
     const content = String(body.content || "").trim()
     const audience = String(body.audience || "participants")
     const recipients = String(body.recipients || "all")
-    const type = (body.type as NotificationType) || "EVENT"
+    const rawType = typeof body.type === "string" ? body.type.trim().toUpperCase() : "EVENT"
+    const type = (rawType || "EVENT") as NotificationType
     const broadcastId = globalThis.crypto.randomUUID()
     const groups = parseStringList(body.groups)
     const userIds = parseStringList(body.userIds)
@@ -139,6 +142,18 @@ export async function POST(req: NextRequest) {
     }
     if (!["participants", "users"].includes(audience)) {
       return errorJson(400, "VALIDATION_ERROR", "Некорректная область рассылки")
+    }
+
+    if (!broadcastNotificationTypes.has(type)) {
+      return errorJson(400, "VALIDATION_ERROR", "Некорректный тип уведомления")
+    }
+
+    if (audience === "users" && !canManageDirectoryNotifications(session.user.role)) {
+      return errorJson(
+        403,
+        "FORBIDDEN",
+        "Рассылка по базе пользователей доступна только редакторам и администраторам"
+      )
     }
 
     if (!eventId || !content) {

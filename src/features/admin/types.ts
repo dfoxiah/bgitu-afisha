@@ -499,6 +499,7 @@ export type AdminDiagnostics = {
   }
   integrationStatus: {
     maxOAuth: string
+    vkOAuth: string
     vkMessages: string
     yandexOAuth: string
     email: string

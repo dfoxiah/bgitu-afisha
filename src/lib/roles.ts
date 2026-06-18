@@ -45,3 +45,6 @@ export const isContentManagerRole = (role?: Role | string | null) =>
   role === "TEACHER" || role === "MODERATOR" || role === "EDITOR" || role === "ADMIN"
 
 export const isModeratorRole = isContentManagerRole
+
+export const canManageDirectoryNotifications = (role?: Role | string | null) =>
+  role === "EDITOR" || role === "ADMIN"

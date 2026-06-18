@@ -57,7 +57,7 @@ const fileEnv = {
 const readEnvValue = (key: string, fallback: string) =>
   process.env[key] || fileEnv[key] || fallback
 const defaultStudentEmail = "student@bgitu.ru"
-const defaultStudentPassword = "student"
+const defaultStudentPassword = readEnvValue("STUDENT_SEED_PASSWORD", "student")
 const defaultTeacherEmail = readEnvValue("TEACHER_SEED_EMAIL", "MainTeacher2026@bgitu.ru")
 const defaultTeacherPassword = readEnvValue("TEACHER_SEED_PASSWORD", "T9mW2pK7sL8xQ4cN")
 const defaultAdminEmail =

@@ -2028,6 +2028,7 @@ export default function AdminPage() {
                 <div className="rounded-xl border border-slate-200 bg-white/75 p-3 text-xs text-slate-600">
                   <div className="font-semibold text-slate-900">Интеграции</div>
                   <div className="mt-2 grid grid-cols-2 gap-2">
+                    <span>VK OAuth: {diagnostics.integrationStatus.vkOAuth}</span>
                     <span>MAX OAuth: {diagnostics.integrationStatus.maxOAuth}</span>
                     <span>Внешние сообщения: {diagnostics.integrationStatus.vkMessages}</span>
                     <span>Яндекс OAuth: {diagnostics.integrationStatus.yandexOAuth}</span>

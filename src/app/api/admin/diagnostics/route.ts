@@ -202,10 +202,27 @@ export async function GET() {
           process.env.MAX_USERINFO_URL
       )
     ),
+    vkOAuth: ok(Boolean(process.env.VK_CLIENT_ID && process.env.VK_CLIENT_SECRET)),
     vkMessages: ok(Boolean(process.env.VK_GROUP_TOKEN)),
     yandexOAuth: ok(Boolean(process.env.YANDEX_CLIENT_ID && process.env.YANDEX_CLIENT_SECRET)),
     email: ok(Boolean(process.env.EMAIL_NOTIFICATION_WEBHOOK_URL)),
   }
+
+  const hasConfiguredOAuthProvider =
+    integrationStatus.vkOAuth === "configured" ||
+    integrationStatus.maxOAuth === "configured" ||
+    integrationStatus.yandexOAuth === "configured"
+
+  const integrationsRecommendation = [
+    !hasConfiguredOAuthProvider
+      ? "Заполните хотя бы один OAuth-провайдер: VK, MAX или Яндекс."
+      : null,
+    integrationStatus.vkMessages === "missing" && integrationStatus.email === "missing"
+      ? "Для внешних уведомлений заполните токен канала сообщений или EMAIL_NOTIFICATION_WEBHOOK_URL."
+      : null,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
 
   const dataCheck: AdminDiagnosticsCheck = {
     id: "required-data",
@@ -263,16 +280,12 @@ export async function GET() {
     id: "integrations",
     label: "Внешние интеграции",
     status:
-      integrationStatus.maxOAuth === "missing" ||
-      integrationStatus.yandexOAuth === "missing" ||
+      !hasConfiguredOAuthProvider ||
       (integrationStatus.vkMessages === "missing" && integrationStatus.email === "missing")
         ? "warning"
         : "ok",
-    detail: `MAX OAuth: ${integrationStatus.maxOAuth}, Яндекс OAuth: ${integrationStatus.yandexOAuth}, внешние сообщения: ${integrationStatus.vkMessages}, email: ${integrationStatus.email}.`,
-    recommendation:
-      integrationStatus.vkMessages === "missing" && integrationStatus.email === "missing"
-        ? "Для внешних уведомлений заполните токен канала сообщений или EMAIL_NOTIFICATION_WEBHOOK_URL."
-        : undefined,
+    detail: `VK OAuth: ${integrationStatus.vkOAuth}, MAX OAuth: ${integrationStatus.maxOAuth}, Яндекс OAuth: ${integrationStatus.yandexOAuth}, сообщения VK: ${integrationStatus.vkMessages}, email: ${integrationStatus.email}.`,
+    recommendation: integrationsRecommendation || undefined,
     durationMs: 0,
   }
 

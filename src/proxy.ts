@@ -47,7 +47,7 @@ export async function proxy(request: NextRequest) {
 
   if (pathname === '/register' || pathname.startsWith('/api/auth/register')) {
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'Публичная регистрация отключена. Используйте MAX или Яндекс.' }, { status: 410 })
+      return NextResponse.json({ error: 'Публичная регистрация отключена. Используйте VK, MAX или Яндекс.' }, { status: 410 })
     }
     return NextResponse.redirect(new URL('/login', request.url))
   }

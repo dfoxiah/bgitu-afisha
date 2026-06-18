@@ -13,6 +13,14 @@ const studentSeedAdmissionYear = 2024
 const teacherSeedDepartment = 'Кафедра информационных технологий'
 const adminSeedDepartment = 'Администрация БГИТУ'
 const defaultAdminEmails = ['admin1@bgitu.ru', 'admin2@bgitu.ru', 'admin3@bgitu.ru']
+const isProduction = process.env.NODE_ENV === 'production'
+const allowPasswordLogging = process.env.SEED_LOG_PASSWORDS === 'true'
+
+const readDevOnlyPassword = (envName: string, fallback: string) => {
+  const configured = process.env[envName]?.trim()
+  if (configured) return configured
+  return isProduction ? '' : fallback
+}
 
 async function main() {
   console.log('🌱 Начало сидинга базы данных...')
@@ -41,9 +49,10 @@ async function main() {
 
   // Создание тестовых пользователей
   const teacherSeedEmail = process.env.TEACHER_SEED_EMAIL || 'MainTeacher2026@bgitu.ru'
-  const teacherSeedPassword = process.env.TEACHER_SEED_PASSWORD || 'T9mW2pK7sL8xQ4cN'
-  const hashedTeacherPassword = await bcrypt.hash(teacherSeedPassword, 10)
-  const hashedStudentPassword = await bcrypt.hash('student', 10)
+  const teacherSeedPassword = readDevOnlyPassword('TEACHER_SEED_PASSWORD', 'T9mW2pK7sL8xQ4cN')
+  const studentSeedPassword = readDevOnlyPassword('STUDENT_SEED_PASSWORD', 'student')
+  const hashedTeacherPassword = teacherSeedPassword ? await bcrypt.hash(teacherSeedPassword, 10) : null
+  const hashedStudentPassword = studentSeedPassword ? await bcrypt.hash(studentSeedPassword, 10) : null
 
   const existingTeacher = await prisma.user.findUnique({
     where: { email: teacherSeedEmail }
@@ -63,7 +72,7 @@ async function main() {
           termsConsentVersion: existingTeacher.termsConsentVersion || TERMS_VERSION,
           consentSource: existingTeacher.consentSource || 'seed',
           profileCompletedAt: existingTeacher.profileCompletedAt || consentAt,
-          ...(allowPasswordUpdate || !existingTeacher.password
+          ...((allowPasswordUpdate || !existingTeacher.password) && hashedTeacherPassword
             ? { password: hashedTeacherPassword }
             : {})
         }
@@ -72,7 +81,7 @@ async function main() {
         data: {
           email: teacherSeedEmail,
           name: 'Main Teacher',
-          password: hashedTeacherPassword,
+          ...(hashedTeacherPassword ? { password: hashedTeacherPassword } : {}),
           role: 'TEACHER',
           department: teacherSeedDepartment,
           privacyConsentAt: consentAt,
@@ -104,7 +113,7 @@ async function main() {
           termsConsentVersion: existingStudent.termsConsentVersion || TERMS_VERSION,
           consentSource: existingStudent.consentSource || 'seed',
           profileCompletedAt: existingStudent.profileCompletedAt || consentAt,
-          ...(allowPasswordUpdate || !existingStudent.password
+          ...((allowPasswordUpdate || !existingStudent.password) && hashedStudentPassword
             ? { password: hashedStudentPassword }
             : {})
         }
@@ -113,7 +122,7 @@ async function main() {
         data: {
           email: studentSeedEmail,
           name: 'Мария Сидорова',
-          password: hashedStudentPassword,
+          ...(hashedStudentPassword ? { password: hashedStudentPassword } : {}),
           role: 'STUDENT',
           department: studentSeedDepartment,
           group: 'ИС-21',
@@ -128,8 +137,7 @@ async function main() {
       })
 
   // Администраторы (3 учётные записи)
-  const adminSeedPassword =
-    process.env.ADMIN_SEED_PASSWORD || 'R5mQ9tX2sL7pV8cN'
+  const adminSeedPassword = readDevOnlyPassword('ADMIN_SEED_PASSWORD', 'R5mQ9tX2sL7pV8cN')
   const adminSeedName = process.env.ADMIN_SEED_NAME
   const adminEmails = (process.env.ADMIN_SEED_EMAILS || '')
     .split(',')
@@ -385,11 +393,19 @@ async function main() {
   }
 
   console.log('✅ Сидинг базы данных завершен!')
-  console.log(`👨‍🏫 Преподаватель: ${teacherSeedEmail} / ${teacherSeedPassword}`)
-  console.log(`👩‍🎓 Студент: ${studentSeedEmail} / student`)
+  console.log(`👨‍🏫 Преподаватель: ${teacherSeedEmail}`)
+  console.log(`👩‍🎓 Студент: ${studentSeedEmail}`)
+  if (allowPasswordLogging) {
+    if (teacherSeedPassword) {
+      console.log(`🔐 Пароль преподавателя (dev): ${teacherSeedPassword}`)
+    }
+    if (studentSeedPassword) {
+      console.log(`🔐 Пароль студента (dev): ${studentSeedPassword}`)
+    }
+  }
   if (adminSeedPassword) {
     console.log(`🛠️ Админы: ${resolvedAdminEmails.join(', ')}`)
-    if (process.env.NODE_ENV !== 'production') {
+    if (!isProduction && allowPasswordLogging) {
       console.log(`🔐 Пароль админов (dev): ${adminSeedPassword}`)
     }
   }

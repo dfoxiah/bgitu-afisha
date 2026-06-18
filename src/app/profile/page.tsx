@@ -14,7 +14,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useSession, signOut, getSession } from 'next-auth/react'
+import { useSession, signOut, getSession, getProviders, signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { useAppContext } from '@/contexts/AppContext'
@@ -87,6 +87,7 @@ export default function ProfilePage() {
   const [profileStats, setProfileStats] = useState<ProfileStatsResponse | null>(null)
   const [profileStatsLoading, setProfileStatsLoading] = useState(false)
   const [profileStatsError, setProfileStatsError] = useState<string | null>(null)
+  const [vkProviderAvailable, setVkProviderAvailable] = useState(false)
   const saveEffectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const loadingTimerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -169,6 +170,21 @@ export default function ProfilePage() {
       setProfileStatsLoading(false)
     }
   }, [status, session?.user?.id, loadProfileStats])
+
+  useEffect(() => {
+    let active = true
+
+    const loadProviders = async () => {
+      const providers = await getProviders().catch(() => null)
+      if (!active) return
+      setVkProviderAvailable(Boolean(providers?.vk))
+    }
+
+    void loadProviders()
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     if (status === 'loading') {
@@ -520,6 +536,21 @@ export default function ProfilePage() {
     URL.revokeObjectURL(url)
   }
 
+  const handleVkConnect = async () => {
+    if (!vkProviderAvailable) {
+      showToast('VK OAuth не настроен на сервере', 'error')
+      return
+    }
+
+    try {
+      await signIn('vk', {
+        callbackUrl: '/profile'
+      })
+    } catch {
+      showToast('Не удалось начать привязку VK', 'error')
+    }
+  }
+
   if (!session) {
     return (
       <div className="status-screen">
@@ -791,8 +822,21 @@ export default function ProfilePage() {
                     aria-invalid={!!validationErrors.vkUserId}
                     aria-describedby={validationErrors.vkUserId ? 'vkUserId-error' : 'vkUserId-help'}
                   />
+                  {vkProviderAvailable && (
+                    <div className="mt-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={handleVkConnect}
+                        icon="link"
+                        className="w-full sm:w-auto"
+                      >
+                        Привязать VK через OAuth
+                      </Button>
+                    </div>
+                  )}
                   <p id="vkUserId-help" className="mt-1 text-xs text-gray-500">
-                    Нужен только если вы хотите получать уведомления через VK-сообщения сообщества.
+                    Нужен для уведомлений в ЛС VK. Можно указать вручную или привязать аккаунт через OAuth.
                   </p>
                   {validationErrors.vkUserId && (
                     <p id="vkUserId-error" className="mt-1 text-sm text-red-600">

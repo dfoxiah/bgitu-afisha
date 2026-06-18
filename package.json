@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "predev": "node -e \"for (const dir of ['.next/dev', '.next/cache']) { try { require('fs').rmSync(dir, { recursive: true, force: true }) } catch (_) {} }\"",
     "dev": "next dev",
     "prebuild": "node -e \"try { require('fs').rmSync('.next/dev', { recursive: true, force: true }) } catch (_) {}\"",
     "build": "next build",

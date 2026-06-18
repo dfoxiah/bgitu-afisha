@@ -14,6 +14,7 @@
  */
 import type { NextAuthOptions, User } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import VKProvider, { type VkProfile } from "next-auth/providers/vk";
 import YandexProvider from "next-auth/providers/yandex";
 import type { OAuthConfig } from "next-auth/providers/oauth";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
@@ -22,6 +23,7 @@ import bcrypt from "bcryptjs";
 import { EventCategory, Role } from "@prisma/client";
 import { logAuditEvent } from "@/lib/audit";
 import { buildEmailInsensitiveFilter, normalizeEmailAddress } from "@/server/shared/user-email";
+import { normalizeVkRecipient } from "@/lib/vk";
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -40,6 +42,8 @@ if (isProduction && !nextAuthUrl) {
 }
 const yandexClientId = process.env.YANDEX_CLIENT_ID ?? "";
 const yandexClientSecret = process.env.YANDEX_CLIENT_SECRET ?? "";
+const vkClientId = process.env.VK_CLIENT_ID ?? "";
+const vkClientSecret = process.env.VK_CLIENT_SECRET ?? "";
 const maxClientId = process.env.MAX_CLIENT_ID ?? "";
 const maxClientSecret = process.env.MAX_CLIENT_SECRET ?? "";
 const maxAuthorizationUrl = process.env.MAX_AUTHORIZATION_URL ?? "";
@@ -59,7 +63,38 @@ const readProfileString = (profile: Record<string, unknown>, keys: string[]) => 
   return ""
 }
 
+const toRecord = (value: unknown) =>
+  value && typeof value === "object" ? (value as Record<string, unknown>) : null
+
+const toNullableString = (value: unknown) => {
+  if (typeof value === "string" && value.trim()) return value.trim()
+  if (typeof value === "number" && Number.isFinite(value)) return String(value)
+  return null
+}
+
+const getVkProfileUser = (profile: unknown) => {
+  const record = toRecord(profile)
+  const response = record?.response
+  if (!Array.isArray(response) || response.length === 0) return null
+  return toRecord(response[0])
+}
+
 type MaxOAuthProfile = Record<string, unknown>
+type OAuthAccountLike = {
+  provider?: string | null
+  providerAccountId?: string | number | null
+} | null
+
+const extractVkUserId = (profile: unknown, account?: OAuthAccountLike) => {
+  const vkProfile = getVkProfileUser(profile)
+  const resolvedValue =
+    toNullableString(account?.providerAccountId) ??
+    toNullableString(vkProfile?.id) ??
+    toNullableString(vkProfile?.screen_name) ??
+    toNullableString(vkProfile?.domain)
+
+  return normalizeVkRecipient(resolvedValue).storageValue
+}
 
 const maxProvider =
   maxClientId && maxClientSecret && maxAuthorizationUrl && maxTokenUrl && maxUserInfoUrl
@@ -101,6 +136,43 @@ const maxProvider =
           }
         },
       } satisfies OAuthConfig<MaxOAuthProfile>)
+    : null
+
+const vkProvider =
+  vkClientId && vkClientSecret
+    ? VKProvider({
+        clientId: vkClientId,
+        clientSecret: vkClientSecret,
+        profile(profile: VkProfile, tokens) {
+          const vkProfile = getVkProfileUser(profile)
+          const enrichedTokens = tokens as typeof tokens & {
+            email?: string | null
+            user_id?: string | number | null
+          }
+          const resolvedVkId =
+            toNullableString(vkProfile?.id) ??
+            toNullableString(enrichedTokens.user_id)
+          const providerId =
+            resolvedVkId ||
+            normalizeEmailAddress(enrichedTokens.email) ||
+            "vk-unknown"
+          const resolvedEmail =
+            normalizeEmailAddress(enrichedTokens.email) ||
+            toSyntheticProviderEmail("vk", providerId)
+
+          return {
+            id: providerId,
+            name:
+              [toNullableString(vkProfile?.first_name), toNullableString(vkProfile?.last_name)]
+                .filter(Boolean)
+                .join(" ") || null,
+            email: resolvedEmail,
+            image: toNullableString(vkProfile?.photo_100),
+            role: Role.STUDENT,
+            vkUserId: normalizeVkRecipient(resolvedVkId).storageValue,
+          }
+        },
+      })
     : null
 
 declare module "next-auth" {
@@ -264,6 +336,10 @@ export const authOptions: NextAuthOptions = {
               },
             },
             profile(profile) {
+              const resolvedEmail =
+                profile.default_email ||
+                (Array.isArray(profile.emails) && profile.emails[0]) ||
+                toSyntheticProviderEmail("yandex", profile.id)
               const name =
                 profile.real_name ||
                 profile.display_name ||
@@ -277,17 +353,16 @@ export const authOptions: NextAuthOptions = {
               return {
                 id: profile.id,
                 name: name || null,
-                email:
-                  profile.default_email ||
-                  (Array.isArray(profile.emails) && profile.emails[0]) ||
-                  toSyntheticProviderEmail("yandex", profile.id),
+                email: resolvedEmail,
                 image: avatar,
                 role: Role.STUDENT,
+                yandexEmail: resolvedEmail.endsWith("@oauth.local") ? null : resolvedEmail,
               };
             },
           }),
         ]
       : []),
+    ...(vkProvider ? [vkProvider] : []),
     ...(maxProvider ? [maxProvider] : []),
   ],
   session: {
@@ -309,7 +384,7 @@ export const authOptions: NextAuthOptions = {
       return true;
     },
 
-    async jwt({ token, user, account: _account, trigger, session }) {
+    async jwt({ token, user, account, profile, trigger, session }) {
       // При первом входе добавляем данные пользователя в токен.
       if (user) {
         token.id = user.id;
@@ -336,6 +411,14 @@ export const authOptions: NextAuthOptions = {
         token.termsConsentVersion = user.termsConsentVersion ?? null;
         token.profileCompletedAt = user.profileCompletedAt ? user.profileCompletedAt.toISOString() : null;
         token.notificationCategories = user.notificationCategories ?? [];
+      }
+
+      if (account?.provider === "vk") {
+        token.vkUserId =
+          extractVkUserId(profile, account) ??
+          user?.vkUserId ??
+          token.vkUserId ??
+          null
       }
 
       // При client-side update() синхронизируем измененные поля с токеном.
@@ -503,9 +586,9 @@ export const authOptions: NextAuthOptions = {
     signOut: "/",
     newUser: "/profile/complete",
   },
-  secret: nextAuthSecret || "development-secret-key-change-in-production",
+  secret: nextAuthSecret || undefined,
   events: {
-    async signIn({ user, account, isNewUser }) {
+    async signIn({ user, account, profile, isNewUser }) {
       await logAuditEvent({
         actorId: user.id,
         action: "AUTH_SIGN_IN",
@@ -513,6 +596,21 @@ export const authOptions: NextAuthOptions = {
         entityId: user.id,
         metadata: { provider: account?.provider, isNewUser: !!isNewUser },
       });
+
+      const updates: Record<string, unknown> = {}
+      if (account?.provider === "vk") {
+        const vkUserId = extractVkUserId(profile, account)
+        if (vkUserId) {
+          updates.vkUserId = vkUserId
+        }
+      }
+      if (account?.provider === "yandex" && user.email && !user.email.endsWith("@oauth.local")) {
+        updates.yandexEmail = user.email
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await prisma.user.update({ where: { id: user.id }, data: updates }).catch(() => undefined)
+      }
     },
     async signOut({ session }) {
       if (session?.user?.id) {

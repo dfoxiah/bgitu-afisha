@@ -13,10 +13,12 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useSession } from 'next-auth/react'
 import { useAppContext } from '@/contexts/AppContext'
 import Modal from './Modal'
 import Button from './Button'
 import { showToast } from '@/lib/toast'
+import { canManageDirectoryNotifications } from '@/lib/roles'
 
 interface NotificationModalProps {
   isOpen?: boolean
@@ -53,6 +55,8 @@ const toEventDateTime = (date: Date | string, time?: string) => {
 
 const NotificationModal = ({ isOpen = false, onClose }: NotificationModalProps) => {
   const { events, sendEventNotification, cancelNotificationBroadcast } = useAppContext()
+  const { data: session } = useSession()
+  const canSendDirectoryNotifications = canManageDirectoryNotifications(session?.user?.role)
 
   const templates: Record<NotificationTemplate, string> = {
     change: 'Изменение: мероприятие "[Название]" перенесено на [Дата] [Время].',
@@ -94,7 +98,9 @@ const NotificationModal = ({ isOpen = false, onClose }: NotificationModalProps) 
   const selectedEvent = futureEvents.find((event) => event.id === formData.eventId)
 
   useEffect(() => {
-    if (!isOpen || directoryUsers.length > 0 || directoryUsersLoading) return
+    if (!isOpen || !canSendDirectoryNotifications || directoryUsers.length > 0 || directoryUsersLoading) {
+      return
+    }
 
     let active = true
     const loadDirectoryUsers = async () => {
@@ -113,7 +119,23 @@ const NotificationModal = ({ isOpen = false, onClose }: NotificationModalProps) 
     return () => {
       active = false
     }
-  }, [directoryUsers.length, directoryUsersLoading, isOpen])
+  }, [canSendDirectoryNotifications, directoryUsers.length, directoryUsersLoading, isOpen])
+
+  useEffect(() => {
+    if (canSendDirectoryNotifications) return
+    setFormData((prev) =>
+      prev.audience === 'users'
+        ? {
+            ...prev,
+            audience: 'participants',
+            recipients: 'all',
+            userIds: [],
+            groups: [],
+            departments: [],
+          }
+        : prev
+    )
+  }, [canSendDirectoryNotifications])
 
   const participantPool = useMemo(() => {
     if (!selectedEvent) return []
@@ -216,8 +238,8 @@ const NotificationModal = ({ isOpen = false, onClose }: NotificationModalProps) 
     if (name === 'audience') {
       setFormData((prev) => ({
         ...prev,
-        audience: value === 'users' ? 'users' : 'participants',
-        recipients: value === 'users' ? 'all' : prev.recipients,
+        audience: value === 'users' && canSendDirectoryNotifications ? 'users' : 'participants',
+        recipients: value === 'users' && canSendDirectoryNotifications ? 'all' : prev.recipients,
         userIds: [],
         groups: [],
         departments: [],
@@ -338,13 +360,20 @@ const NotificationModal = ({ isOpen = false, onClose }: NotificationModalProps) 
           <label className="form-label">Область рассылки</label>
           <select name="audience" value={formData.audience} onChange={handleChange} className="liquid-input w-full px-4 py-3">
             <option value="participants">Участники выбранного мероприятия</option>
-            <option value="users">Пользователи по людям, группам и кафедрам</option>
+            {canSendDirectoryNotifications && (
+              <option value="users">Пользователи по людям, группам и кафедрам</option>
+            )}
           </select>
           <p className="mt-2 text-xs text-primary/60">
             {formData.audience === 'participants'
               ? 'Фильтры применяются только к записавшимся на выбранное мероприятие.'
               : 'Можно отправить группе или конкретным людям, даже если они еще не записались на мероприятие.'}
           </p>
+          {!canSendDirectoryNotifications && (
+            <p className="mt-2 text-xs text-amber-700">
+              Рассылка по всей базе пользователей доступна только редакторам и администраторам.
+            </p>
+          )}
         </div>
 
         {formData.audience === 'participants' ? (
