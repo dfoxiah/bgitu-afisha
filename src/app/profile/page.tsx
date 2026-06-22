@@ -22,9 +22,11 @@ import Button from '@/components/ui/Button'
 import { showToast } from '@/lib/toast'
 import {
   createTelegramLinkApi,
+  getNotificationChannelsConfigApi,
   getProfileStatsApi,
   getTelegramLinkStatusApi,
   unlinkTelegramApi,
+  type NotificationChannelsConfigResponse,
   type ProfileStatsResponse,
   type TelegramLinkStatusResponse,
 } from '@/features/profile/client/profile-api'
@@ -53,6 +55,7 @@ interface ProfileFormData {
 }
 
 type TelegramLinkState = TelegramLinkStatusResponse
+type NotificationChannelsState = NotificationChannelsConfigResponse
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -100,6 +103,8 @@ export default function ProfilePage() {
   const [profileStatsError, setProfileStatsError] = useState<string | null>(null)
   const [vkProviderAvailable, setVkProviderAvailable] = useState(false)
   const [telegramState, setTelegramState] = useState<TelegramLinkState | null>(null)
+  const [notificationChannelsConfig, setNotificationChannelsConfig] =
+    useState<NotificationChannelsState | null>(null)
   const [telegramLoading, setTelegramLoading] = useState(false)
   const [telegramLinkLoading, setTelegramLinkLoading] = useState(false)
   const [telegramUnlinkLoading, setTelegramUnlinkLoading] = useState(false)
@@ -171,6 +176,27 @@ export default function ProfilePage() {
     }
   }, [status])
 
+  const loadNotificationChannelsConfig = useCallback(async () => {
+    if (status !== 'authenticated') return
+
+    try {
+      const nextConfig = await getNotificationChannelsConfigApi()
+      setNotificationChannelsConfig(nextConfig)
+      setFormData(prev => ({
+        ...prev,
+        notifications: {
+          ...prev.notifications,
+          email: nextConfig.emailConfigured ? prev.notifications.email : false,
+          vk: nextConfig.vkConfigured ? prev.notifications.vk : false,
+          telegram: nextConfig.telegramMessagingConfigured ? prev.notifications.telegram : false,
+        }
+      }))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Ошибка загрузки каналов уведомлений'
+      showToast(message, 'error')
+    }
+  }, [status])
+
   useEffect(() => {
     if (session?.user) {
       const savedCategories = Array.isArray(session.user.notificationCategories)
@@ -208,6 +234,7 @@ export default function ProfilePage() {
     if (status === 'authenticated' && session?.user?.id) {
       void loadProfileStats()
       void loadTelegramState()
+      void loadNotificationChannelsConfig()
       return
     }
 
@@ -216,9 +243,10 @@ export default function ProfilePage() {
       setProfileStatsError(null)
       setProfileStatsLoading(false)
       setTelegramState(null)
+      setNotificationChannelsConfig(null)
       setTelegramLoading(false)
     }
-  }, [status, session?.user?.id, loadProfileStats, loadTelegramState])
+  }, [status, session?.user?.id, loadNotificationChannelsConfig, loadProfileStats, loadTelegramState])
 
   useEffect(() => {
     let active = true
@@ -402,6 +430,14 @@ export default function ProfilePage() {
       errors.vkUserId = 'Чтобы включить VK-уведомления, укажите VK ID, @username или ссылку на профиль'
     }
 
+    if (formData.notifications.email && !notificationChannelsConfig?.emailConfigured) {
+      errors.notifyEmail = 'Email-рассылка пока не настроена на сервере'
+    }
+
+    if (formData.notifications.vk && !notificationChannelsConfig?.vkConfigured) {
+      errors.notifyVk = 'Для VK-уведомлений на сервере нужен токен сообщества'
+    }
+
     if (formData.notifications.telegram && !telegramState?.connected) {
       errors.notifyTelegram = 'Чтобы включить Telegram-уведомления, сначала привяжите Telegram-бота'
     }
@@ -433,12 +469,23 @@ export default function ProfilePage() {
       setFormData(prev => ({ ...prev, [name]: value }))
     }
     
-    if (validationErrors[name]) {
+    if (
+      validationErrors[name] ||
+      name === 'notifications.telegram' ||
+      name === 'notifications.email' ||
+      name === 'notifications.vk'
+    ) {
       setValidationErrors(prev => {
         const newErrors = { ...prev }
         delete newErrors[name]
         if (name === 'notifications.telegram') {
           delete newErrors.notifyTelegram
+        }
+        if (name === 'notifications.email') {
+          delete newErrors.notifyEmail
+        }
+        if (name === 'notifications.vk') {
+          delete newErrors.notifyVk
         }
         return newErrors
       })
@@ -1040,9 +1087,6 @@ export default function ProfilePage() {
                         </p>
                       </div>
                     )}
-                    {validationErrors.notifyTelegram && (
-                      <p className="mt-2 text-sm text-red-600">{validationErrors.notifyTelegram}</p>
-                    )}
                   </div>
                 </div>
 
@@ -1116,6 +1160,17 @@ export default function ProfilePage() {
                       <p className="mt-1 text-xs text-gray-500">
                         Управляет тем, куда отправлять ваши уведомления. Флажки выше определяют, о чем именно уведомлять.
                       </p>
+                      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                          Внутри сайта: всегда доступно
+                        </div>
+                        <div className={`rounded-lg border px-3 py-2 text-xs ${notificationChannelsConfig?.emailConfigured ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-amber-100 bg-amber-50 text-amber-700'}`}>
+                          Email: {notificationChannelsConfig?.emailConfigured ? 'настроен' : 'не настроен'}
+                        </div>
+                        <div className={`rounded-lg border px-3 py-2 text-xs ${notificationChannelsConfig?.vkConfigured ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-amber-100 bg-amber-50 text-amber-700'}`}>
+                          VK: {notificationChannelsConfig?.vkConfigured ? 'настроен' : 'нужен токен сообщества'}
+                        </div>
+                      </div>
                       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
                         {[
                           {
@@ -1127,14 +1182,20 @@ export default function ProfilePage() {
                           {
                             name: 'notifications.email',
                             title: 'Email',
-                            description: 'Письмо на основной email аккаунта',
+                            description: notificationChannelsConfig?.emailConfigured
+                              ? 'Письмо на основной email аккаунта'
+                              : 'Сначала настройте SMTP или email webhook на сервере',
                             enabled: formData.notifications.email,
+                            disabled: !notificationChannelsConfig?.emailConfigured,
                           },
                           {
                             name: 'notifications.vk',
                             title: 'VK',
-                            description: 'Сообщение сообщества во ВКонтакте',
+                            description: notificationChannelsConfig?.vkConfigured
+                              ? 'Сообщение сообщества во ВКонтакте'
+                              : 'На сервере пока нет токена VK-сообщества',
                             enabled: formData.notifications.vk,
+                            disabled: !notificationChannelsConfig?.vkConfigured,
                           },
                           {
                             name: 'notifications.telegram',
@@ -1143,7 +1204,7 @@ export default function ProfilePage() {
                               ? 'Сообщение от бота в Telegram'
                               : 'Сначала привяжите Telegram-бота',
                             enabled: formData.notifications.telegram,
-                            disabled: !telegramState?.configured,
+                            disabled: !telegramState?.configured || !telegramState?.connected,
                           },
                         ].map(({ name, title, description, enabled, disabled }) => (
                           <label
@@ -1167,6 +1228,13 @@ export default function ProfilePage() {
                           </label>
                         ))}
                       </div>
+                      {(validationErrors.notifyEmail || validationErrors.notifyVk || validationErrors.notifyTelegram) && (
+                        <div className="mt-3 space-y-1 text-sm text-red-600">
+                          {validationErrors.notifyEmail && <p>{validationErrors.notifyEmail}</p>}
+                          {validationErrors.notifyVk && <p>{validationErrors.notifyVk}</p>}
+                          {validationErrors.notifyTelegram && <p>{validationErrors.notifyTelegram}</p>}
+                        </div>
+                      )}
                     </div>
 
                     <div className="border-t border-gray-200 pt-4">

@@ -63,6 +63,13 @@ export type TelegramLinkCreateResponse = {
   expiresAt: string
 }
 
+export type NotificationChannelsConfigResponse = {
+  emailConfigured: boolean
+  vkConfigured: boolean
+  telegramBotConfigured: boolean
+  telegramMessagingConfigured: boolean
+}
+
 const toError = async (response: Response, fallback: string) => {
   const contentType = response.headers.get("content-type") || ""
   if (!contentType.includes("application/json")) return new Error(fallback)
@@ -144,4 +151,17 @@ export const unlinkTelegramApi = async () => {
     connected: boolean
     notifyTelegram: boolean
   }>
+}
+
+export const getNotificationChannelsConfigApi = async () => {
+  const response = await fetch("/api/auth/notification-config", {
+    method: "GET",
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    throw await toError(response, "Ошибка загрузки конфигурации каналов уведомлений")
+  }
+
+  return response.json() as Promise<NotificationChannelsConfigResponse>
 }

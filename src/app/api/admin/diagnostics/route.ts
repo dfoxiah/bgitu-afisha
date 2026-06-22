@@ -20,6 +20,7 @@ import { prisma } from "@/lib/prisma"
 import { PRIVACY_POLICY_VERSION, TERMS_VERSION } from "@/lib/profile-completion"
 import { ensureAdminSession } from "@/server/admin/admin-session"
 import { getAdminDashboardMetrics } from "@/server/admin/admin-metrics-service"
+import { isEmailDeliveryConfigured } from "@/server/notifications/email-delivery"
 import { errorJson } from "@/server/shared/http-response"
 import type { AdminDiagnosticsCheck } from "@/features/admin/types"
 
@@ -206,7 +207,7 @@ export async function GET() {
     vkMessages: ok(Boolean(process.env.VK_GROUP_TOKEN)),
     telegramBot: ok(Boolean(process.env.TELEGRAM_BOT_TOKEN)),
     yandexOAuth: ok(Boolean(process.env.YANDEX_CLIENT_ID && process.env.YANDEX_CLIENT_SECRET)),
-    email: ok(Boolean(process.env.EMAIL_NOTIFICATION_WEBHOOK_URL)),
+    email: ok(isEmailDeliveryConfigured()),
   }
 
   const hasConfiguredOAuthProvider =
@@ -224,7 +225,7 @@ export async function GET() {
       ? "Заполните хотя бы один OAuth-провайдер: VK, MAX или Яндекс."
       : null,
     !hasExternalChannel
-      ? "Для внешних уведомлений заполните VK_GROUP_TOKEN, TELEGRAM_BOT_TOKEN или EMAIL_NOTIFICATION_WEBHOOK_URL."
+      ? "Для внешних уведомлений заполните VK_GROUP_TOKEN, TELEGRAM_BOT_TOKEN или email webhook / SMTP."
       : null,
   ]
     .filter((value): value is string => Boolean(value))

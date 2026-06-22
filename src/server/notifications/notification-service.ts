@@ -16,6 +16,7 @@ import { prisma } from "@/lib/prisma"
 import { prismaUserCompat } from "@/lib/prisma-user-compat"
 import { isTelegramMessagingConfigured, sendTelegramMessage } from "@/lib/telegram"
 import { normalizeVkRecipient } from "@/lib/vk"
+import { isEmailDeliveryConfigured, sendNotificationEmail } from "@/server/notifications/email-delivery"
 
 export type NotificationInput = {
   userId: string
@@ -47,8 +48,6 @@ export type NotificationDispatchResult = {
 
 const vkToken = process.env.VK_GROUP_TOKEN || ""
 const vkApiVersion = process.env.VK_API_VERSION || "5.199"
-const emailWebhookUrl = process.env.EMAIL_NOTIFICATION_WEBHOOK_URL || ""
-const emailFrom = process.env.EMAIL_NOTIFICATION_FROM || "no-reply@bgitu.ru"
 
 const toRandomId = () => Math.floor(Math.random() * 2_000_000_000)
 
@@ -100,23 +99,17 @@ const sendTelegramNotification = async (
 }
 
 const sendEmailNotification = async (recipient: NotificationRecipient, input: NotificationInput) => {
-  if (!emailWebhookUrl || !recipient.notifyEmail) return
+  if (!recipient.notifyEmail) return
 
-  const response = await fetch(emailWebhookUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from: emailFrom,
-      to: recipient.email,
-      subject: input.title,
-      text: `${input.content}${input.link ? `\n\n${input.link}` : ""}`,
-      metadata: input.metadata || {},
-    }),
+  await sendNotificationEmail({
+    to: recipient.email,
+    subject: input.title,
+    text: `${input.content}${input.link ? `\n\n${input.link}` : ""}`,
+    metadata:
+      input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata)
+        ? (input.metadata as Record<string, unknown>)
+        : {},
   })
-
-  if (!response.ok) {
-    throw new Error(`Email notification failed: ${response.status}`)
-  }
 }
 
 const dispatchExternalChannels = async (
@@ -137,7 +130,7 @@ const dispatchExternalChannels = async (
         attempted += 1
         tasks.push(sendTelegramNotification(recipient, input))
       }
-      if (emailWebhookUrl && recipient.notifyEmail) {
+      if (isEmailDeliveryConfigured() && recipient.notifyEmail) {
         attempted += 1
         tasks.push(sendEmailNotification(recipient, input))
       }
