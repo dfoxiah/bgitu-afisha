@@ -20,7 +20,14 @@ import Image from 'next/image'
 import { useAppContext } from '@/contexts/AppContext'
 import Button from '@/components/ui/Button'
 import { showToast } from '@/lib/toast'
-import { getProfileStatsApi, type ProfileStatsResponse } from '@/features/profile/client/profile-api'
+import {
+  createTelegramLinkApi,
+  getProfileStatsApi,
+  getTelegramLinkStatusApi,
+  unlinkTelegramApi,
+  type ProfileStatsResponse,
+  type TelegramLinkStatusResponse,
+} from '@/features/profile/client/profile-api'
 import { CategoryDisplayMap } from '@/types'
 import { EventCategory } from '@prisma/client'
 import { toRoleLabel } from '@/lib/roles'
@@ -40,9 +47,12 @@ interface ProfileFormData {
     inApp: boolean
     email: boolean
     vk: boolean
+    telegram: boolean
     categories: EventCategory[]
   }
 }
+
+type TelegramLinkState = TelegramLinkStatusResponse
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -72,6 +82,7 @@ export default function ProfilePage() {
       inApp: true,
       email: false,
       vk: false,
+      telegram: false,
       categories: []
     }
   })
@@ -88,6 +99,10 @@ export default function ProfilePage() {
   const [profileStatsLoading, setProfileStatsLoading] = useState(false)
   const [profileStatsError, setProfileStatsError] = useState<string | null>(null)
   const [vkProviderAvailable, setVkProviderAvailable] = useState(false)
+  const [telegramState, setTelegramState] = useState<TelegramLinkState | null>(null)
+  const [telegramLoading, setTelegramLoading] = useState(false)
+  const [telegramLinkLoading, setTelegramLinkLoading] = useState(false)
+  const [telegramUnlinkLoading, setTelegramUnlinkLoading] = useState(false)
   const saveEffectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const loadingTimerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -126,6 +141,36 @@ export default function ProfilePage() {
     }
   }, [status])
 
+  const loadTelegramState = useCallback(async () => {
+    if (status !== 'authenticated') return
+
+    setTelegramLoading(true)
+    try {
+      const nextState = await getTelegramLinkStatusApi()
+      setTelegramState(nextState)
+      setFormData(prev => ({
+        ...prev,
+        notifications: {
+          ...prev.notifications,
+          telegram: nextState.connected ? nextState.notifyTelegram : prev.notifications.telegram
+        }
+      }))
+      if (nextState.connected) {
+        setValidationErrors(prev => {
+          if (!prev.notifyTelegram) return prev
+          const nextErrors = { ...prev }
+          delete nextErrors.notifyTelegram
+          return nextErrors
+        })
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Ошибка загрузки Telegram'
+      showToast(message, 'error')
+    } finally {
+      setTelegramLoading(false)
+    }
+  }, [status])
+
   useEffect(() => {
     if (session?.user) {
       const savedCategories = Array.isArray(session.user.notificationCategories)
@@ -148,6 +193,7 @@ export default function ProfilePage() {
           inApp: session.user.notifyInApp ?? true,
           email: session.user.notifyEmail ?? false,
           vk: session.user.notifyVk ?? false,
+          telegram: session.user.notifyTelegram ?? false,
           categories: resolvedCategories
         }
       }
@@ -161,6 +207,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.id) {
       void loadProfileStats()
+      void loadTelegramState()
       return
     }
 
@@ -168,8 +215,10 @@ export default function ProfilePage() {
       setProfileStats(null)
       setProfileStatsError(null)
       setProfileStatsLoading(false)
+      setTelegramState(null)
+      setTelegramLoading(false)
     }
-  }, [status, session?.user?.id, loadProfileStats])
+  }, [status, session?.user?.id, loadProfileStats, loadTelegramState])
 
   useEffect(() => {
     let active = true
@@ -242,6 +291,21 @@ export default function ProfilePage() {
       window.removeEventListener('focus', handleFocus)
     }
   }, [status])
+
+  useEffect(() => {
+    if (status !== 'authenticated') return
+
+    const handleFocus = () => {
+      void loadTelegramState()
+    }
+
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleFocus)
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleFocus)
+    }
+  }, [status, loadTelegramState])
 
   useEffect(() => {
     if (status !== 'loading') return
@@ -338,6 +402,10 @@ export default function ProfilePage() {
       errors.vkUserId = 'Чтобы включить VK-уведомления, укажите VK ID, @username или ссылку на профиль'
     }
 
+    if (formData.notifications.telegram && !telegramState?.connected) {
+      errors.notifyTelegram = 'Чтобы включить Telegram-уведомления, сначала привяжите Telegram-бота'
+    }
+
     setValidationErrors(errors)
     
     return Object.keys(errors).length === 0
@@ -369,6 +437,9 @@ export default function ProfilePage() {
       setValidationErrors(prev => {
         const newErrors = { ...prev }
         delete newErrors[name]
+        if (name === 'notifications.telegram') {
+          delete newErrors.notifyTelegram
+        }
         return newErrors
       })
     }
@@ -429,6 +500,7 @@ export default function ProfilePage() {
           inApp: formData.notifications.inApp,
           email: formData.notifications.email,
           vk: formData.notifications.vk,
+          telegram: formData.notifications.telegram,
           categories: formData.notifications.categories
         }
       })
@@ -451,6 +523,15 @@ export default function ProfilePage() {
           notifyInApp: formData.notifications.inApp,
           notifyEmail: formData.notifications.email,
           notifyVk: formData.notifications.vk,
+          notifyTelegram: response?.user?.notifyTelegram ?? formData.notifications.telegram,
+          telegramChatId:
+            (response?.user?.telegramChatId as string | null | undefined) ??
+            session?.user?.telegramChatId ??
+            null,
+          telegramUsername:
+            (response?.user?.telegramUsername as string | null | undefined) ??
+            session?.user?.telegramUsername ??
+            null,
           notificationCategories: formData.notifications.categories
         }
       })
@@ -548,6 +629,64 @@ export default function ProfilePage() {
       })
     } catch {
       showToast('Не удалось начать привязку VK', 'error')
+    }
+  }
+
+  const handleTelegramConnect = async () => {
+    setTelegramLinkLoading(true)
+    try {
+      const payload = await createTelegramLinkApi()
+      setTelegramState(prev => prev ? { ...prev, pendingExpiresAt: payload.expiresAt } : prev)
+      window.open(payload.url, '_blank', 'noopener,noreferrer')
+      showToast('Открыл бота Telegram. Нажмите Start и вернитесь на сайт.', 'success')
+      void loadTelegramState()
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Не удалось открыть Telegram-бота', 'error')
+    } finally {
+      setTelegramLinkLoading(false)
+    }
+  }
+
+  const handleTelegramDisconnect = async () => {
+    setTelegramUnlinkLoading(true)
+    try {
+      await unlinkTelegramApi()
+      await updateSession({
+        ...session,
+        user: {
+          ...session?.user,
+          notifyTelegram: false,
+          telegramChatId: null,
+          telegramUsername: null,
+        }
+      })
+      setFormData(prev => ({
+        ...prev,
+        notifications: {
+          ...prev.notifications,
+          telegram: false,
+        }
+      }))
+      setOriginalData(prev => prev ? ({
+        ...prev,
+        notifications: {
+          ...prev.notifications,
+          telegram: false,
+        }
+      }) : prev)
+      setTelegramState(prev => prev ? ({
+        ...prev,
+        connected: false,
+        notifyTelegram: false,
+        telegramUsername: null,
+        telegramChatIdMasked: null,
+        pendingExpiresAt: null,
+      }) : prev)
+      showToast('Telegram отвязан', 'success')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Не удалось отвязать Telegram', 'error')
+    } finally {
+      setTelegramUnlinkLoading(false)
     }
   }
 
@@ -845,6 +984,68 @@ export default function ProfilePage() {
                   )}
                 </div>
 
+                <div className="form-group">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <label className="form-label mb-0">Telegram</label>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={handleTelegramConnect}
+                        loading={telegramLinkLoading}
+                        disabled={!telegramState?.configured || telegramLinkLoading}
+                        icon="paper-plane"
+                        className="w-full sm:w-auto"
+                      >
+                        {telegramState?.connected ? 'Перепривязать Telegram' : 'Привязать Telegram'}
+                      </Button>
+                      {telegramState?.connected && (
+                        <Button
+                          type="button"
+                          variant="danger"
+                          onClick={handleTelegramDisconnect}
+                          loading={telegramUnlinkLoading}
+                          disabled={telegramUnlinkLoading}
+                          icon="unlink"
+                          className="w-full sm:w-auto"
+                        >
+                          Отвязать
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 rounded-lg border border-white/70 bg-white/70 p-3 text-sm text-gray-600">
+                    {telegramState && !telegramState.configured && !telegramLoading && (
+                      <p>Telegram-бот пока не настроен на сервере. Нужны `TELEGRAM_BOT_TOKEN` и `TELEGRAM_BOT_USERNAME`.</p>
+                    )}
+                    {telegramLoading && (
+                      <p>Загружаем статус Telegram...</p>
+                    )}
+                    {telegramState?.configured && (
+                      <div className="space-y-2">
+                        <p>
+                          Бот: {telegramState.botUsername ? `@${telegramState.botUsername}` : 'не указан'}.
+                          {telegramState.connected
+                            ? ` Привязан${telegramState.telegramUsername ? ` как @${telegramState.telegramUsername}` : ''}${telegramState.telegramChatIdMasked ? ` (${telegramState.telegramChatIdMasked})` : ''}.`
+                            : ' Пока не привязан.'}
+                        </p>
+                        {telegramState.pendingExpiresAt && !telegramState.connected && (
+                          <p className="text-xs text-gray-500">
+                            Ссылка на привязку активна до {new Date(telegramState.pendingExpiresAt).toLocaleString('ru-RU')}.
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-500">
+                          Нажмите кнопку, откройте бота, отправьте `/start` и вернитесь на эту страницу.
+                        </p>
+                      </div>
+                    )}
+                    {validationErrors.notifyTelegram && (
+                      <p className="mt-2 text-sm text-red-600">{validationErrors.notifyTelegram}</p>
+                    )}
+                  </div>
+                </div>
+
                 <div className="form-group mb-8">
                   <label htmlFor="bio" className="form-label">
                     О себе
@@ -915,7 +1116,7 @@ export default function ProfilePage() {
                       <p className="mt-1 text-xs text-gray-500">
                         Управляет тем, куда отправлять ваши уведомления. Флажки выше определяют, о чем именно уведомлять.
                       </p>
-                      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
                         {[
                           {
                             name: 'notifications.inApp',
@@ -935,16 +1136,28 @@ export default function ProfilePage() {
                             description: 'Сообщение сообщества во ВКонтакте',
                             enabled: formData.notifications.vk,
                           },
-                        ].map(({ name, title, description, enabled }) => (
+                          {
+                            name: 'notifications.telegram',
+                            title: 'Telegram',
+                            description: telegramState?.connected
+                              ? 'Сообщение от бота в Telegram'
+                              : 'Сначала привяжите Telegram-бота',
+                            enabled: formData.notifications.telegram,
+                            disabled: !telegramState?.configured,
+                          },
+                        ].map(({ name, title, description, enabled, disabled }) => (
                           <label
                             key={name}
-                            className="flex items-start gap-3 rounded-lg border border-white/70 bg-white/70 p-3 transition-colors hover:bg-white cursor-pointer"
+                            className={`flex items-start gap-3 rounded-lg border border-white/70 bg-white/70 p-3 transition-colors ${
+                              disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-white'
+                            }`}
                           >
                             <input
                               type="checkbox"
                               name={name}
                               checked={enabled}
                               onChange={handleChange}
+                              disabled={disabled}
                               className="mt-1 h-4 w-4 rounded text-accent focus:ring-2 focus:ring-accent"
                             />
                             <span className="min-w-0 flex-1">

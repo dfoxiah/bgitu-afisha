@@ -501,6 +501,7 @@ export type AdminDiagnostics = {
     maxOAuth: string
     vkOAuth: string
     vkMessages: string
+    telegramBot: string
     yandexOAuth: string
     email: string
   }

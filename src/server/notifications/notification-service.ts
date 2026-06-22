@@ -13,6 +13,8 @@
 
 import { NotificationType, Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { prismaUserCompat } from "@/lib/prisma-user-compat"
+import { isTelegramMessagingConfigured, sendTelegramMessage } from "@/lib/telegram"
 import { normalizeVkRecipient } from "@/lib/vk"
 
 export type NotificationInput = {
@@ -29,9 +31,11 @@ type NotificationRecipient = {
   id: string
   email: string
   vkUserId: string | null
+  telegramChatId: string | null
   notifyInApp: boolean
   notifyEmail: boolean
   notifyVk: boolean
+  notifyTelegram: boolean
 }
 
 export type NotificationDispatchResult = {
@@ -83,6 +87,18 @@ const sendVkNotification = async (recipient: NotificationRecipient, input: Notif
   }
 }
 
+const sendTelegramNotification = async (
+  recipient: NotificationRecipient,
+  input: NotificationInput
+) => {
+  if (!recipient.telegramChatId || !recipient.notifyTelegram) return
+
+  await sendTelegramMessage(
+    recipient.telegramChatId,
+    `${input.title}\n\n${input.content}${input.link ? `\n${input.link}` : ""}`
+  )
+}
+
 const sendEmailNotification = async (recipient: NotificationRecipient, input: NotificationInput) => {
   if (!emailWebhookUrl || !recipient.notifyEmail) return
 
@@ -117,6 +133,10 @@ const dispatchExternalChannels = async (
         attempted += 1
         tasks.push(sendVkNotification(recipient, input))
       }
+      if (isTelegramMessagingConfigured() && recipient.notifyTelegram && recipient.telegramChatId) {
+        attempted += 1
+        tasks.push(sendTelegramNotification(recipient, input))
+      }
       if (emailWebhookUrl && recipient.notifyEmail) {
         attempted += 1
         tasks.push(sendEmailNotification(recipient, input))
@@ -147,15 +167,17 @@ export const createNotifications = async (inputs: NotificationInput[]) => {
   }
 
   const userIds = Array.from(new Set(inputs.map((input) => input.userId)))
-  const recipients = await prisma.user.findMany({
+  const recipients = await prismaUserCompat.findMany<NotificationRecipient>({
     where: { id: { in: userIds } },
     select: {
       id: true,
       email: true,
       vkUserId: true,
+      telegramChatId: true,
       notifyInApp: true,
       notifyEmail: true,
       notifyVk: true,
+      notifyTelegram: true,
     },
   })
 

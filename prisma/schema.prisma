@@ -29,8 +29,11 @@ model User {
   notifyInApp     Boolean       @default(true)
   notifyEmail     Boolean       @default(false)
   notifyVk        Boolean       @default(false)
+  notifyTelegram  Boolean       @default(false)
   notificationCategories EventCategory[] @default([])
   vkUserId      String?
+  telegramChatId String?        @unique
+  telegramUsername String?
   yandexEmail   String?
   privacyConsentAt DateTime?
   privacyConsentVersion String?

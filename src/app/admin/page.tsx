@@ -2031,6 +2031,7 @@ export default function AdminPage() {
                     <span>VK OAuth: {diagnostics.integrationStatus.vkOAuth}</span>
                     <span>MAX OAuth: {diagnostics.integrationStatus.maxOAuth}</span>
                     <span>Внешние сообщения: {diagnostics.integrationStatus.vkMessages}</span>
+                    <span>Telegram: {diagnostics.integrationStatus.telegramBot}</span>
                     <span>Яндекс OAuth: {diagnostics.integrationStatus.yandexOAuth}</span>
                     <span>Email: {diagnostics.integrationStatus.email}</span>
                   </div>

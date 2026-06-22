@@ -204,6 +204,7 @@ export async function GET() {
     ),
     vkOAuth: ok(Boolean(process.env.VK_CLIENT_ID && process.env.VK_CLIENT_SECRET)),
     vkMessages: ok(Boolean(process.env.VK_GROUP_TOKEN)),
+    telegramBot: ok(Boolean(process.env.TELEGRAM_BOT_TOKEN)),
     yandexOAuth: ok(Boolean(process.env.YANDEX_CLIENT_ID && process.env.YANDEX_CLIENT_SECRET)),
     email: ok(Boolean(process.env.EMAIL_NOTIFICATION_WEBHOOK_URL)),
   }
@@ -213,12 +214,17 @@ export async function GET() {
     integrationStatus.maxOAuth === "configured" ||
     integrationStatus.yandexOAuth === "configured"
 
+  const hasExternalChannel =
+    integrationStatus.vkMessages === "configured" ||
+    integrationStatus.telegramBot === "configured" ||
+    integrationStatus.email === "configured"
+
   const integrationsRecommendation = [
     !hasConfiguredOAuthProvider
       ? "Заполните хотя бы один OAuth-провайдер: VK, MAX или Яндекс."
       : null,
-    integrationStatus.vkMessages === "missing" && integrationStatus.email === "missing"
-      ? "Для внешних уведомлений заполните токен канала сообщений или EMAIL_NOTIFICATION_WEBHOOK_URL."
+    !hasExternalChannel
+      ? "Для внешних уведомлений заполните VK_GROUP_TOKEN, TELEGRAM_BOT_TOKEN или EMAIL_NOTIFICATION_WEBHOOK_URL."
       : null,
   ]
     .filter((value): value is string => Boolean(value))
@@ -281,10 +287,10 @@ export async function GET() {
     label: "Внешние интеграции",
     status:
       !hasConfiguredOAuthProvider ||
-      (integrationStatus.vkMessages === "missing" && integrationStatus.email === "missing")
+      !hasExternalChannel
         ? "warning"
         : "ok",
-    detail: `VK OAuth: ${integrationStatus.vkOAuth}, MAX OAuth: ${integrationStatus.maxOAuth}, Яндекс OAuth: ${integrationStatus.yandexOAuth}, сообщения VK: ${integrationStatus.vkMessages}, email: ${integrationStatus.email}.`,
+    detail: `VK OAuth: ${integrationStatus.vkOAuth}, MAX OAuth: ${integrationStatus.maxOAuth}, Яндекс OAuth: ${integrationStatus.yandexOAuth}, сообщения VK: ${integrationStatus.vkMessages}, Telegram: ${integrationStatus.telegramBot}, email: ${integrationStatus.email}.`,
     recommendation: integrationsRecommendation || undefined,
     durationMs: 0,
   }

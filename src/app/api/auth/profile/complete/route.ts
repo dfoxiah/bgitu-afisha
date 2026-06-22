@@ -17,6 +17,7 @@ import { ConsentType } from "@prisma/client"
 import { authOptions } from "@/lib/auth"
 import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
 import { prisma } from "@/lib/prisma"
+import { asPrismaUserCompat, prismaUserCompat, type UserWithTelegram } from "@/lib/prisma-user-compat"
 import {
   PRIVACY_POLICY_VERSION,
   TERMS_VERSION,
@@ -37,6 +38,10 @@ const normalizeAdmissionYear = (value: unknown) => {
 }
 
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+
+type CurrentUserRecord = UserWithTelegram & {
+  accounts: { provider: string }[]
+}
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -94,7 +99,7 @@ export async function POST(req: NextRequest) {
     return errorJson(409, "CONFLICT", "Этот email уже привязан к другому аккаунту")
   }
 
-  const currentUser = await prisma.user.findUnique({
+  const currentUser = await prismaUserCompat.findUnique<CurrentUserRecord>({
     where: { id: session.user.id },
     include: {
       accounts: {
@@ -141,7 +146,8 @@ export async function POST(req: NextRequest) {
 
   const { ip, userAgent } = buildAuditMeta(req)
   const updatedUser = await prisma.$transaction(async (tx) => {
-    const updated = await tx.user.update({
+    const txUser = asPrismaUserCompat(tx.user)
+    const updated = await txUser.update<UserWithTelegram>({
       where: { id: session.user.id },
       data: {
         name,
@@ -153,6 +159,9 @@ export async function POST(req: NextRequest) {
         notifyInApp: body.notifyInApp === undefined ? true : Boolean(body.notifyInApp),
         notifyEmail: Boolean(body.notifyEmail),
         notifyVk: Boolean(body.notifyVk),
+        notifyTelegram: currentUser.notifyTelegram,
+        telegramChatId: currentUser.telegramChatId,
+        telegramUsername: currentUser.telegramUsername,
         privacyConsentAt: now,
         privacyConsentVersion: PRIVACY_POLICY_VERSION,
         termsConsentAt: now,
@@ -217,7 +226,10 @@ export async function POST(req: NextRequest) {
       notifyInApp: updatedUser.notifyInApp,
       notifyEmail: updatedUser.notifyEmail,
       notifyVk: updatedUser.notifyVk,
+      notifyTelegram: updatedUser.notifyTelegram,
       vkUserId: updatedUser.vkUserId,
+      telegramChatId: updatedUser.telegramChatId,
+      telegramUsername: updatedUser.telegramUsername,
       privacyConsentAt: updatedUser.privacyConsentAt,
       privacyConsentVersion: updatedUser.privacyConsentVersion,
       termsConsentAt: updatedUser.termsConsentAt,

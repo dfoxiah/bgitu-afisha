@@ -13,7 +13,7 @@
  */
 "use client"
 
-import { FormEvent, useEffect, useMemo, useState } from "react"
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react"
 import { getProviders, signIn, useSession } from "next-auth/react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -53,7 +53,28 @@ const errorMessages: Record<string, string> = {
 }
 
 type OAuthProviderId = "vk" | "max" | "yandex"
-type LoadingProvider = OAuthProviderId | "credentials" | null
+type LoadingProvider = OAuthProviderId | "telegram" | "credentials" | null
+
+type TelegramLoginConfig = {
+  configured: boolean
+  botUsername: string | null
+}
+
+type TelegramAuthUser = {
+  id: number | string
+  first_name?: string
+  last_name?: string
+  username?: string
+  photo_url?: string
+  auth_date?: number | string
+  hash?: string
+}
+
+declare global {
+  interface Window {
+    onTelegramAuth?: (user: TelegramAuthUser) => void
+  }
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -67,6 +88,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [showPasswordLogin, setShowPasswordLogin] = useState(false)
   const [availableProviders, setAvailableProviders] = useState<Record<string, boolean>>({})
+  const [telegramConfig, setTelegramConfig] = useState<TelegramLoginConfig | null>(null)
+  const telegramWidgetRef = useRef<HTMLDivElement | null>(null)
 
   const displayedError = useMemo(() => {
     if (localError) return localError
@@ -86,12 +109,28 @@ export default function LoginPage() {
       const providers = await getProviders().catch(() => null)
       if (!active) return
 
+      let nextTelegramConfig: TelegramLoginConfig | null = null
+      if (providers?.telegram) {
+        const response = await fetch("/api/auth/telegram/config", {
+          method: "GET",
+          cache: "no-store",
+        }).catch(() => null)
+
+        if (response?.ok) {
+          nextTelegramConfig = (await response.json()) as TelegramLoginConfig
+        }
+      }
+
+      if (!active) return
+
       setAvailableProviders({
         vk: Boolean(providers?.vk),
         max: Boolean(providers?.max),
         yandex: Boolean(providers?.yandex),
+        telegram: Boolean(providers?.telegram),
         credentials: Boolean(providers?.credentials),
       })
+      setTelegramConfig(nextTelegramConfig)
     }
 
     void loadProviders()
@@ -132,6 +171,71 @@ export default function LoginPage() {
       setLoadingProvider(null)
     }
   }
+
+  useEffect(() => {
+    window.onTelegramAuth = async (telegramUser: TelegramAuthUser) => {
+      setLocalError("")
+      setLoadingProvider("telegram")
+
+      try {
+        const result = await signIn("telegram", {
+          id: String(telegramUser.id ?? ""),
+          first_name: telegramUser.first_name ?? "",
+          last_name: telegramUser.last_name ?? "",
+          username: telegramUser.username ?? "",
+          photo_url: telegramUser.photo_url ?? "",
+          auth_date: String(telegramUser.auth_date ?? ""),
+          hash: telegramUser.hash ?? "",
+          callbackUrl,
+          redirect: false,
+        })
+
+        if (!result?.ok) {
+          setLocalError(
+            errorMessages[result?.error || "CredentialsSignin"] || "Не удалось войти через Telegram."
+          )
+          setLoadingProvider(null)
+          return
+        }
+
+        router.replace(result.url ?? callbackUrl)
+        router.refresh()
+      } catch {
+        setLocalError("Не удалось выполнить вход через Telegram.")
+        setLoadingProvider(null)
+      }
+    }
+
+    return () => {
+      delete window.onTelegramAuth
+    }
+  }, [callbackUrl, router])
+
+  useEffect(() => {
+    const container = telegramWidgetRef.current
+    if (!container) return
+
+    container.innerHTML = ""
+
+    if (!availableProviders.telegram || !telegramConfig?.configured || !telegramConfig.botUsername) {
+      return
+    }
+
+    const script = document.createElement("script")
+    script.async = true
+    script.src = "https://telegram.org/js/telegram-widget.js?22"
+    script.setAttribute("data-telegram-login", telegramConfig.botUsername)
+    script.setAttribute("data-size", "large")
+    script.setAttribute("data-radius", "16")
+    script.setAttribute("data-request-access", "write")
+    script.setAttribute("data-onauth", "onTelegramAuth(user)")
+
+    container.appendChild(script)
+
+    return () => {
+      container.innerHTML = ""
+    }
+  }, [availableProviders.telegram, telegramConfig])
 
   const handleCredentials = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -240,6 +344,34 @@ export default function LoginPage() {
           </p>
 
           <div className="mt-6 grid gap-3">
+            <div className="rounded-xl border border-[#229ED9]/20 bg-[#229ED9]/[0.08] p-4 text-primary shadow-[0_12px_24px_rgba(34,158,217,0.12)]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold">Telegram</div>
+                  <div className="mt-1 text-xs text-primary/66">
+                    {telegramConfig?.botUsername
+                      ? `Вход через бота @${telegramConfig.botUsername}`
+                      : "Вход через Telegram пока не настроен"}
+                  </div>
+                </div>
+                {loadingProvider === "telegram" && (
+                  <i className="fas fa-spinner fa-spin text-sm text-[#229ED9]" aria-hidden="true" />
+                )}
+              </div>
+
+              {availableProviders.telegram && telegramConfig?.configured && telegramConfig.botUsername ? (
+                <div ref={telegramWidgetRef} className="mt-3 flex min-h-[42px] items-center justify-center" />
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="mt-3 inline-flex w-full items-center justify-center gap-3 rounded-xl bg-[#229ED9] px-4 py-3 text-sm font-semibold text-white opacity-60"
+                >
+                  Telegram не настроен
+                </button>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={() => handleOAuth("vk")}

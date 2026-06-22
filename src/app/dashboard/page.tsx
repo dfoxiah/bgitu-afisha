@@ -184,13 +184,13 @@ export default function DashboardPage() {
               События, отчеты, календарь и публикации собраны в одном рабочем экране без лишней витрины.
             </p>
             <div className="dashboard-actions">
-              <Link href="/events" className="btn btn-primary px-4 py-2 text-sm">
+              <Link href="/events" className="btn btn-primary w-full px-4 py-2 text-sm sm:w-auto">
                 Открыть события
               </Link>
-              <Link href="/events/create" className="btn btn-secondary px-4 py-2 text-sm">
+              <Link href="/events/create" className="btn btn-secondary w-full px-4 py-2 text-sm sm:w-auto">
                 Создать мероприятие
               </Link>
-              <Link href="/calendar" className="btn btn-outline px-4 py-2 text-sm">
+              <Link href="/calendar" className="btn btn-outline w-full px-4 py-2 text-sm sm:w-auto">
                 Календарь
               </Link>
             </div>
@@ -232,7 +232,7 @@ export default function DashboardPage() {
         )}
 
         <section className="dashboard-workbench">
-          <aside className="dashboard-filter-panel">
+          <aside className="dashboard-filter-panel order-3 xl:order-none">
             <CategoryFilter />
             <div className="dashboard-controls">
               <label>
@@ -268,7 +268,7 @@ export default function DashboardPage() {
             </div>
           </aside>
 
-          <main className="dashboard-feed-panel">
+          <main className="dashboard-feed-panel order-1 xl:order-none">
             {searchQuery.trim() && (
               <section className="dashboard-module">
                 <div className="dashboard-module-head">
@@ -305,7 +305,7 @@ export default function DashboardPage() {
             </section>
           </main>
 
-          <aside className="dashboard-calendar-panel">
+          <aside className="dashboard-calendar-panel order-2 xl:order-none">
             <CalendarSection events={events} compact plain />
           </aside>
         </section>

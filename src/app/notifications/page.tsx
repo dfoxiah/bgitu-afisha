@@ -130,11 +130,11 @@ export default function NotificationsPage() {
               Контролируйте изменения по событиям, быстро фильтруйте сообщения и отмечайте прочитанные уведомления без лишних действий.
             </p>
 
-            <div className="mt-5 flex flex-wrap gap-2.5">
-              <Button variant="secondary" onClick={handleClearAll} disabled={totalCount === 0}>
+            <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap">
+              <Button variant="secondary" onClick={handleClearAll} disabled={totalCount === 0} className="w-full sm:w-auto">
                 Очистить историю
               </Button>
-              <Link href="/dashboard" className="btn btn-outline px-4 py-2 text-sm">
+              <Link href="/dashboard" className="btn btn-outline w-full px-4 py-2 text-center text-sm sm:w-auto">
                 На dashboard
               </Link>
             </div>
@@ -158,7 +158,7 @@ export default function NotificationsPage() {
 
         <section className="grid gap-4 xl:grid-cols-[290px_minmax(0,1fr)]">
           <aside className="space-y-4 xl:sticky xl:top-[124px] xl:h-fit">
-            <section className="liquid-section space-y-4 p-4">
+            <section className="liquid-section space-y-4 p-3.5 sm:p-4">
               <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-primary/64">Фильтры</h2>
 
               <input
@@ -232,13 +232,13 @@ export default function NotificationsPage() {
 
                     <div className="flex flex-wrap items-center gap-3">
                       {!notification.read && (
-                        <Button variant="secondary" onClick={() => handleMarkRead(notification.id)}>
+                        <Button variant="secondary" onClick={() => handleMarkRead(notification.id)} className="w-full sm:w-auto">
                           Отметить как прочитанное
                         </Button>
                       )}
 
                       {eventId && (
-                        <Link href={`/events/${eventId}`} className="rounded-lg border border-primary/16 bg-[#fff8e8] px-3 py-1.5 text-sm font-medium text-primary hover:bg-white">
+                        <Link href={`/events/${eventId}`} className="w-full rounded-lg border border-primary/16 bg-[#fff8e8] px-3 py-1.5 text-center text-sm font-medium text-primary hover:bg-white sm:w-auto">
                           Открыть мероприятие
                         </Link>
                       )}

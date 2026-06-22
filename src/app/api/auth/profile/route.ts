@@ -16,7 +16,7 @@ import { getServerSession } from "next-auth"
 import { EventCategory } from "@prisma/client"
 import { authOptions } from "@/lib/auth"
 import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
-import { prisma } from "@/lib/prisma"
+import { prismaUserCompat, type UserWithTelegram } from "@/lib/prisma-user-compat"
 import { buildProfileUpdates, toProfileResponse } from "@/server/auth/profile-service"
 import { errorJson } from "@/server/shared/http-response"
 
@@ -30,7 +30,9 @@ export async function GET(_req: NextRequest) {
       return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
-    const user = await prisma.user.findUnique({ where: { email: session.user.email } })
+    const user = await prismaUserCompat.findUnique<UserWithTelegram>({
+      where: { email: session.user.email },
+    })
     if (!user) {
       return errorJson(404, "NOT_FOUND", "Пользователь не найден")
     }
@@ -50,7 +52,9 @@ export async function PUT(req: NextRequest) {
       return errorJson(401, "UNAUTHORIZED", "Не авторизован")
     }
 
-    const user = await prisma.user.findUnique({ where: { email: session.user.email } })
+    const user = await prismaUserCompat.findUnique<UserWithTelegram>({
+      where: { email: session.user.email },
+    })
     if (!user) {
       return errorJson(404, "NOT_FOUND", "Пользователь не найден")
     }
@@ -81,7 +85,7 @@ export async function PUT(req: NextRequest) {
       return errorJson(400, "BAD_REQUEST", "Нет данных для обновления")
     }
 
-    const updatedUser = await prisma.user.update({
+    const updatedUser = await prismaUserCompat.update<UserWithTelegram>({
       where: { email: session.user.email },
       data: {
         ...updates,
@@ -120,8 +124,11 @@ export async function PUT(req: NextRequest) {
         notifyInApp: updatedUser.notifyInApp,
         notifyEmail: updatedUser.notifyEmail,
         notifyVk: updatedUser.notifyVk,
+        notifyTelegram: updatedUser.notifyTelegram,
         notificationCategories: updatedUser.notificationCategories,
         vkUserId: updatedUser.vkUserId,
+        telegramChatId: updatedUser.telegramChatId,
+        telegramUsername: updatedUser.telegramUsername,
         yandexEmail: updatedUser.yandexEmail,
         privacyConsentAt: updatedUser.privacyConsentAt,
         privacyConsentVersion: updatedUser.privacyConsentVersion,

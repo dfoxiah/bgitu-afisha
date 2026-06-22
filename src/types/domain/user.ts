@@ -37,8 +37,11 @@ export interface User {
   notifyInApp?: boolean
   notifyEmail?: boolean
   notifyVk?: boolean
+  notifyTelegram?: boolean
   notificationCategories?: EventCategory[]
   vkUserId?: string | null
+  telegramChatId?: string | null
+  telegramUsername?: string | null
   yandexEmail?: string | null
   createdAt: Date
   updatedAt: Date

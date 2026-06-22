@@ -51,6 +51,21 @@ const getHeroImage = (event: Event) =>
 const getPlaceholderImage = (event: Event) =>
   `https://placehold.co/1200x800/1f5fe0/ffffff?text=${encodeURIComponent(event.title.slice(0, 28))}`
 
+const getCategoryColor = (category: EventCategory) => {
+  const colors: Record<EventCategory, string> = {
+    [EventCategory.CONCERT]: "bg-blue-100/95 text-blue-800 border-blue-200",
+    [EventCategory.INTERNAL_ACTIVITY]: "bg-indigo-100/95 text-indigo-800 border-indigo-200",
+    [EventCategory.PUBLIC_EVENT]: "bg-cyan-100/95 text-cyan-800 border-cyan-200",
+    [EventCategory.COMPETITION]: "bg-violet-100/95 text-violet-800 border-violet-200",
+    [EventCategory.LECTURE]: "bg-sky-100/95 text-sky-800 border-sky-200",
+    [EventCategory.MASTERCLASS]: "bg-amber-100/95 text-amber-800 border-amber-200",
+    [EventCategory.VOLUNTEER]: "bg-emerald-100/95 text-emerald-800 border-emerald-200",
+    [EventCategory.NEWS]: "bg-slate-100/95 text-slate-800 border-slate-200",
+  }
+
+  return colors[category] || "bg-white/95 text-primary border-white/70"
+}
+
 const PublicEventCard = ({ event, authenticated }: { event: Event; authenticated: boolean }) => {
   const eventDate = event.date instanceof Date ? event.date : new Date(event.date)
   const status = getEventStatus(event)
@@ -62,7 +77,7 @@ const PublicEventCard = ({ event, authenticated }: { event: Event; authenticated
 
   return (
     <article className="liquid-card liquid-card-hover flex h-full flex-col overflow-hidden">
-      <Link href={eventHref} className="relative block h-44 overflow-hidden border-b border-primary/10">
+      <Link href={eventHref} className="relative block h-40 overflow-hidden border-b border-primary/10 sm:h-44">
         <Image
           src={imageError ? getPlaceholderImage(event) : getHeroImage(event)}
           alt={event.title}
@@ -74,7 +89,11 @@ const PublicEventCard = ({ event, authenticated }: { event: Event; authenticated
         />
         <div className="absolute inset-0 bg-gradient-to-b from-[#041126]/8 via-[#041126]/12 to-[#041126]/70" />
         <div className="absolute left-3 top-3 flex flex-wrap gap-2">
-          <span className="rounded-full border border-white/35 bg-white/92 px-3 py-1 text-xs font-semibold text-primary">
+          <span
+            className={`rounded-full border px-3 py-1 text-xs font-semibold shadow-sm backdrop-blur-sm ${getCategoryColor(
+              event.category as EventCategory
+            )}`}
+          >
             {categoryName}
           </span>
           <span className="rounded-full border border-white/25 bg-[#06172e]/72 px-3 py-1 text-xs font-semibold text-white">
@@ -117,17 +136,17 @@ const PublicEventCard = ({ event, authenticated }: { event: Event; authenticated
           </div>
         </div>
 
-        <div className="mt-auto flex flex-wrap gap-2 pt-5">
+        <div className="mt-auto flex flex-col gap-2 pt-5 sm:flex-row sm:flex-wrap">
           <Link
             href={eventHref}
-            className="inline-flex flex-1 items-center justify-center rounded-xl border border-primary/14 bg-white px-4 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/5"
+            className="inline-flex w-full flex-1 items-center justify-center rounded-xl border border-primary/14 bg-white px-4 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/5"
           >
             Подробнее
           </Link>
           {status === "upcoming" && (
             <Link
               href={authenticated ? eventHref : loginHref}
-              className="inline-flex flex-1 items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90"
+              className="inline-flex w-full flex-1 items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90"
             >
               {authenticated ? "Участвовать" : "Войти"}
             </Link>
@@ -206,6 +225,20 @@ export default function PublicAfishaPage() {
 
   const upcomingCount = events.filter((event) => getEventStatus(event) === "upcoming").length
   const pastCount = events.length - upcomingCount
+  const hasActiveFilters =
+    Boolean(search.trim()) ||
+    statusFilter !== "upcoming" ||
+    categoryFilter !== "all" ||
+    departmentFilter !== "all" ||
+    Boolean(dateFilter)
+
+  const resetFilters = () => {
+    setSearch("")
+    setStatusFilter("upcoming")
+    setCategoryFilter("all")
+    setDepartmentFilter("all")
+    setDateFilter("")
+  }
 
   return (
     <div className="page-shell min-h-screen px-4 py-8 md:px-[5%]">
@@ -224,7 +257,7 @@ export default function PublicAfishaPage() {
                 личные уведомления и закрытые разделы открываются после входа.
               </p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
               <article className="liquid-card px-4 py-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/55">Скоро</p>
                 <p className="mt-1 text-3xl font-semibold text-primary">{upcomingCount}</p>
@@ -233,7 +266,7 @@ export default function PublicAfishaPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/55">Архив</p>
                 <p className="mt-1 text-3xl font-semibold text-primary">{pastCount}</p>
               </article>
-              <article className="liquid-card px-4 py-3">
+              <article className="liquid-card col-span-2 px-4 py-3 lg:col-span-1">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/55">Доступ</p>
                 <p className="mt-1 text-sm font-semibold text-primary">{authenticated ? "Вы вошли" : "Гостевой"}</p>
               </article>
@@ -242,6 +275,19 @@ export default function PublicAfishaPage() {
         </section>
 
         <section className="liquid-section p-4">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-primary/64">
+              Показано: <span className="font-semibold text-primary">{filteredEvents.length}</span>
+            </div>
+            <button
+              type="button"
+              onClick={resetFilters}
+              disabled={!hasActiveFilters}
+              className="inline-flex w-full items-center justify-center rounded-xl border border-primary/14 bg-white px-3 py-2 text-sm font-semibold text-primary transition hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            >
+              Сбросить фильтры
+            </button>
+          </div>
           <div className="grid gap-3 md:grid-cols-[1.3fr_0.75fr_0.75fr] xl:grid-cols-[1.5fr_0.7fr_0.7fr_0.8fr_0.8fr]">
             <label className="block">
               <span className="text-xs font-semibold uppercase tracking-[0.1em] text-primary/55">Поиск</span>

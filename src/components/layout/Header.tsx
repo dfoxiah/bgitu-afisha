@@ -26,6 +26,7 @@ type HeaderMenuItem = {
   href: string
   label: string
   icon: string
+  badge?: string | null
 }
 
 const BASE_NAV: HeaderMenuItem[] = [
@@ -46,7 +47,8 @@ export default function Header() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const pathname = usePathname()
-  const { setSearchQuery, categories, selectedCategory, setSelectedCategory } = useAppContext()
+  const { notifications, setSearchQuery, categories, selectedCategory, setSelectedCategory } =
+    useAppContext()
 
   const forceHardNavigate = pathname === "/profile"
   const [menuOpen, setMenuOpen] = useState(false)
@@ -61,13 +63,22 @@ export default function Header() {
     !pathname.startsWith("/news")
   const shouldHideHeader = isHeaderHidden && !isHeaderHovered && !menuOpen
   const homeHref = session ? "/dashboard" : "/afisha"
+  const unreadCount = useMemo(
+    () => notifications.filter((notification) => !notification.read).length,
+    [notifications]
+  )
+  const unreadLabel = unreadCount > 99 ? "99+" : String(unreadCount)
 
   const desktopNavItems = useMemo<HeaderMenuItem[]>(() => {
     if (!session) {
       return PUBLIC_NAV
     }
 
-    const items = [...BASE_NAV]
+    const items = BASE_NAV.map((item) =>
+      item.href === "/notifications"
+        ? { ...item, badge: unreadCount > 0 ? unreadLabel : null }
+        : item
+    )
 
     if (isContentManagerRole(session?.user?.role)) {
       items.push({ href: "/events/create", label: "Создать", icon: "plus" })
@@ -78,7 +89,7 @@ export default function Header() {
     }
 
     return items
-  }, [session])
+  }, [session, unreadCount, unreadLabel])
 
   const menuItems = useMemo<HeaderMenuItem[]>(() => {
     const items = [...desktopNavItems]
@@ -200,28 +211,36 @@ export default function Header() {
         }}
       >
         <div className="border-b border-primary/10 bg-gradient-to-r from-primary/7 via-white to-accent/7">
-          <div className="mx-auto grid max-w-7xl grid-cols-[1fr_auto_1fr] items-center px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-primary/60 sm:px-6">
+          <div className="mx-auto grid max-w-7xl grid-cols-[1fr_auto_1fr] items-center px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-primary/60 sm:px-6 sm:py-2 sm:text-[11px]">
             <span className="hidden sm:inline">БГИТУ • Афиша кампуса</span>
-            <span className="liquid-chip justify-self-center px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.1em]">
+            <span className="liquid-chip justify-self-center px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] sm:px-3 sm:text-[11px]">
               Брянск Кампус 2026
             </span>
             <span className="hidden justify-self-end sm:inline">Единое пространство событий</span>
           </div>
         </div>
 
-        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
-          <div className="flex items-center justify-between gap-4">
-            <Link href={homeHref} className="group flex min-w-0 items-center gap-3" onClick={hardNavigate(homeHref)}>
-              <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent text-xs font-bold text-white shadow-lg">
+        <div className="mx-auto max-w-7xl px-3 py-2.5 sm:px-6 sm:py-3">
+          <div className="flex items-center justify-between gap-2 sm:gap-4">
+            <Link
+              href={homeHref}
+              className="group flex min-w-0 items-center gap-2 sm:gap-3"
+              onClick={hardNavigate(homeHref)}
+            >
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent text-xs font-bold text-white shadow-lg sm:h-12 sm:w-12 sm:rounded-2xl">
                 БГ
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-base font-semibold text-primary">БГИТУ Афиша</span>
-                <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-primary/56">Campus Events</span>
+                <span className="block truncate text-sm font-semibold text-primary sm:text-base">
+                  БГИТУ Афиша
+                </span>
+                <span className="hidden truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-primary/56 sm:block">
+                  Campus Events
+                </span>
               </span>
             </Link>
 
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
               <NotificationBell />
 
               {session ? (
@@ -235,7 +254,7 @@ export default function Header() {
                   </Link>
                   <Link
                     href="/profile"
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-white shadow-md"
+                    className="hidden h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-white shadow-md sm:inline-flex md:hidden"
                     title="Профиль"
                     onClick={hardNavigate("/profile")}
                   >
@@ -260,7 +279,7 @@ export default function Header() {
             </div>
           </div>
 
-          <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-center">
+          <div className="mt-3 hidden gap-3 sm:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:items-center">
             <nav className="hidden items-center gap-2 overflow-x-auto rounded-2xl border border-primary/12 bg-white/72 p-1.5 lg:flex">
               {desktopNavItems.map((item) => (
                 <Link
@@ -275,6 +294,11 @@ export default function Header() {
                 >
                   <i className={`fas fa-${item.icon} text-[11px]`} />
                   <span>{item.label}</span>
+                  {item.badge && (
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                      {item.badge}
+                    </span>
+                  )}
                 </Link>
               ))}
             </nav>
@@ -333,7 +357,14 @@ export default function Header() {
                       <i className={`fas fa-${item.icon} text-[12px]`} />
                       {item.label}
                     </span>
-                    <i className="fas fa-chevron-right text-[10px] opacity-70" />
+                    <span className="flex items-center gap-2">
+                      {item.badge && (
+                        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                          {item.badge}
+                        </span>
+                      )}
+                      <i className="fas fa-chevron-right text-[10px] opacity-70" />
+                    </span>
                   </Link>
                 ))}
               </nav>

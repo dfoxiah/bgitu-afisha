@@ -20,8 +20,10 @@ import type { OAuthConfig } from "next-auth/providers/oauth";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto"
 import { EventCategory, Role } from "@prisma/client";
 import { logAuditEvent } from "@/lib/audit";
+import { asPrismaUserCompat, type UserWithTelegram } from "@/lib/prisma-user-compat"
 import { buildEmailInsensitiveFilter, normalizeEmailAddress } from "@/server/shared/user-email";
 import { normalizeVkRecipient } from "@/lib/vk";
 
@@ -44,12 +46,15 @@ const yandexClientId = process.env.YANDEX_CLIENT_ID ?? "";
 const yandexClientSecret = process.env.YANDEX_CLIENT_SECRET ?? "";
 const vkClientId = process.env.VK_CLIENT_ID ?? "";
 const vkClientSecret = process.env.VK_CLIENT_SECRET ?? "";
+const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN ?? ""
+const telegramBotUsername = process.env.TELEGRAM_BOT_USERNAME ?? ""
 const maxClientId = process.env.MAX_CLIENT_ID ?? "";
 const maxClientSecret = process.env.MAX_CLIENT_SECRET ?? "";
 const maxAuthorizationUrl = process.env.MAX_AUTHORIZATION_URL ?? "";
 const maxTokenUrl = process.env.MAX_TOKEN_URL ?? "";
 const maxUserInfoUrl = process.env.MAX_USERINFO_URL ?? "";
 const maxScope = process.env.MAX_SCOPE || "openid profile email";
+const prismaUser = asPrismaUserCompat(prisma.user)
 
 const toSyntheticProviderEmail = (provider: string, providerAccountId: string | number) =>
   `${provider}-${providerAccountId}@oauth.local`.toLowerCase()
@@ -85,6 +90,47 @@ type OAuthAccountLike = {
   providerAccountId?: string | number | null
 } | null
 
+type TelegramAuthPayload = {
+  id: string
+  first_name: string
+  last_name: string | null
+  username: string | null
+  photo_url: string | null
+  auth_date: number
+  hash: string
+}
+
+type SessionUserRecord = Pick<
+  UserWithTelegram,
+  | "id"
+  | "email"
+  | "name"
+  | "image"
+  | "role"
+  | "department"
+  | "group"
+  | "admissionYear"
+  | "groupChangeCount"
+  | "bio"
+  | "notifyNewEvents"
+  | "notifyChanges"
+  | "notifyNews"
+  | "notifyInApp"
+  | "notifyEmail"
+  | "notifyVk"
+  | "notifyTelegram"
+  | "notificationCategories"
+  | "vkUserId"
+  | "telegramChatId"
+  | "telegramUsername"
+  | "yandexEmail"
+  | "privacyConsentAt"
+  | "privacyConsentVersion"
+  | "termsConsentAt"
+  | "termsConsentVersion"
+  | "profileCompletedAt"
+>
+
 const extractVkUserId = (profile: unknown, account?: OAuthAccountLike) => {
   const vkProfile = getVkProfileUser(profile)
   const resolvedValue =
@@ -94,6 +140,136 @@ const extractVkUserId = (profile: unknown, account?: OAuthAccountLike) => {
     toNullableString(vkProfile?.domain)
 
   return normalizeVkRecipient(resolvedValue).storageValue
+}
+
+const telegramAuthMaxAgeSeconds = 60 * 60 * 24
+
+const readTelegramAuthValue = (value: unknown) => {
+  if (typeof value === "string") return value.trim()
+  if (typeof value === "number" && Number.isFinite(value)) return String(value)
+  return ""
+}
+
+const parseTelegramAuthPayload = (
+  credentials: Record<string, unknown> | undefined
+): TelegramAuthPayload | null => {
+  if (!credentials) return null
+
+  const id = readTelegramAuthValue(credentials.id)
+  const firstName = readTelegramAuthValue(credentials.first_name)
+  const authDateRaw = Number(readTelegramAuthValue(credentials.auth_date))
+  const hash = readTelegramAuthValue(credentials.hash).toLowerCase()
+
+  if (!id || !firstName || !Number.isInteger(authDateRaw) || !/^[a-f0-9]{64}$/i.test(hash)) {
+    return null
+  }
+
+  return {
+    id,
+    first_name: firstName,
+    last_name: readTelegramAuthValue(credentials.last_name) || null,
+    username: readTelegramAuthValue(credentials.username) || null,
+    photo_url: readTelegramAuthValue(credentials.photo_url) || null,
+    auth_date: authDateRaw,
+    hash,
+  }
+}
+
+const buildTelegramDisplayName = (payload: TelegramAuthPayload) =>
+  [payload.first_name, payload.last_name].filter(Boolean).join(" ").trim() || payload.username || null
+
+const verifyTelegramAuthPayload = (payload: TelegramAuthPayload) => {
+  if (!telegramBotToken || !telegramBotUsername) return false
+
+  const now = Math.floor(Date.now() / 1000)
+  if (payload.auth_date < now - telegramAuthMaxAgeSeconds) {
+    return false
+  }
+
+  const data = {
+    auth_date: String(payload.auth_date),
+    first_name: payload.first_name,
+    id: payload.id,
+    last_name: payload.last_name,
+    photo_url: payload.photo_url,
+    username: payload.username,
+  }
+
+  const dataCheckString = Object.entries(data)
+    .filter(([, value]) => typeof value === "string" && value.length > 0)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n")
+
+  const secretKey = createHash("sha256").update(telegramBotToken).digest()
+  const expectedHash = createHmac("sha256", secretKey).update(dataCheckString).digest("hex")
+
+  if (expectedHash.length !== payload.hash.length) return false
+
+  return timingSafeEqual(Buffer.from(expectedHash, "hex"), Buffer.from(payload.hash, "hex"))
+}
+
+const resolveTelegramUser = async (payload: TelegramAuthPayload) => {
+  const linkedAccount = await prisma.account.findUnique({
+    where: {
+      provider_providerAccountId: {
+        provider: "telegram",
+        providerAccountId: payload.id,
+      },
+    },
+    select: { userId: true },
+  })
+
+  let user = linkedAccount
+    ? await prismaUser.findUnique<UserWithTelegram>({ where: { id: linkedAccount.userId } })
+    : null
+
+  const displayName = buildTelegramDisplayName(payload)
+  const telegramUsername = payload.username || null
+
+  if (!user) {
+    const syntheticEmail = toSyntheticProviderEmail("telegram", payload.id)
+    user = await prismaUser.findUnique<UserWithTelegram>({
+      where: { email: syntheticEmail },
+    })
+
+    if (!user) {
+      user = await prismaUser.create<UserWithTelegram>({
+        data: {
+          email: syntheticEmail,
+          name: displayName,
+          image: payload.photo_url,
+          role: Role.STUDENT,
+          telegramUsername,
+        },
+      })
+    }
+  }
+
+  const userUpdates: Record<string, unknown> = {}
+  if (!user.name && displayName) userUpdates.name = displayName
+  if (!user.image && payload.photo_url) userUpdates.image = payload.photo_url
+  if (telegramUsername) userUpdates.telegramUsername = telegramUsername
+
+  if (Object.keys(userUpdates).length > 0) {
+    user = await prismaUser.update<UserWithTelegram>({
+      where: { id: user.id },
+      data: userUpdates,
+    })
+  }
+
+  if (!linkedAccount) {
+    await prisma.account.create({
+      data: {
+        userId: user.id,
+        type: "oauth",
+        provider: "telegram",
+        providerAccountId: payload.id,
+      },
+    })
+  }
+
+  return user
 }
 
 const maxProvider =
@@ -195,7 +371,10 @@ declare module "next-auth" {
       notifyInApp?: boolean;
       notifyEmail?: boolean;
       notifyVk?: boolean;
+      notifyTelegram?: boolean;
       vkUserId?: string | null;
+      telegramChatId?: string | null;
+      telegramUsername?: string | null;
       yandexEmail?: string | null;
       privacyConsentAt?: Date | null;
       privacyConsentVersion?: string | null;
@@ -220,7 +399,10 @@ declare module "next-auth" {
     notifyInApp?: boolean;
     notifyEmail?: boolean;
     notifyVk?: boolean;
+    notifyTelegram?: boolean;
     vkUserId?: string | null;
+    telegramChatId?: string | null;
+    telegramUsername?: string | null;
     yandexEmail?: string | null;
     privacyConsentVersion?: string | null;
     termsConsentVersion?: string | null;
@@ -247,7 +429,10 @@ declare module "next-auth/jwt" {
     notifyInApp?: boolean;
     notifyEmail?: boolean;
     notifyVk?: boolean;
+    notifyTelegram?: boolean;
     vkUserId?: string | null;
+    telegramChatId?: string | null;
+    telegramUsername?: string | null;
     yandexEmail?: string | null;
     privacyConsentAt?: string | null;
     privacyConsentVersion?: string | null;
@@ -275,7 +460,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          const user = await prisma.user.findFirst({
+          const user = await prismaUser.findFirst<UserWithTelegram>({
             where: buildEmailInsensitiveFilter(normalizedEmail),
           });
 
@@ -310,7 +495,10 @@ export const authOptions: NextAuthOptions = {
             notifyInApp: user.notifyInApp ?? true,
             notifyEmail: user.notifyEmail ?? false,
             notifyVk: user.notifyVk ?? false,
+            notifyTelegram: user.notifyTelegram ?? false,
             vkUserId: user.vkUserId ?? null,
+            telegramChatId: user.telegramChatId ?? null,
+            telegramUsername: user.telegramUsername ?? null,
             yandexEmail: user.yandexEmail ?? null,
             privacyConsentAt: user.privacyConsentAt ?? null,
             privacyConsentVersion: user.privacyConsentVersion ?? null,
@@ -322,6 +510,62 @@ export const authOptions: NextAuthOptions = {
         } catch (error) {
           console.error("Auth error:", error);
           return null;
+        }
+      },
+    }),
+    CredentialsProvider({
+      id: "telegram",
+      name: "telegram",
+      credentials: {
+        id: { label: "ID", type: "text" },
+        first_name: { label: "First Name", type: "text" },
+        last_name: { label: "Last Name", type: "text" },
+        username: { label: "Username", type: "text" },
+        photo_url: { label: "Photo URL", type: "text" },
+        auth_date: { label: "Auth Date", type: "text" },
+        hash: { label: "Hash", type: "text" },
+      },
+      async authorize(credentials): Promise<User | null> {
+        const payload = parseTelegramAuthPayload(credentials)
+        if (!payload || !verifyTelegramAuthPayload(payload)) {
+          return null
+        }
+
+        try {
+          const user = await resolveTelegramUser(payload)
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            image: user.image,
+            department: user.department,
+            group: user.group,
+            admissionYear: user.admissionYear,
+            groupChangeCount: user.groupChangeCount ?? 0,
+            bio: user.bio,
+            notifyNewEvents: user.notifyNewEvents ?? true,
+            notifyChanges: user.notifyChanges ?? true,
+            notifyNews: user.notifyNews ?? false,
+            notifyInApp: user.notifyInApp ?? true,
+            notifyEmail: user.notifyEmail ?? false,
+            notifyVk: user.notifyVk ?? false,
+            notifyTelegram: user.notifyTelegram ?? false,
+            vkUserId: user.vkUserId ?? null,
+            telegramChatId: user.telegramChatId ?? null,
+            telegramUsername: user.telegramUsername ?? payload.username ?? null,
+            yandexEmail: user.yandexEmail ?? null,
+            privacyConsentAt: user.privacyConsentAt ?? null,
+            privacyConsentVersion: user.privacyConsentVersion ?? null,
+            termsConsentAt: user.termsConsentAt ?? null,
+            termsConsentVersion: user.termsConsentVersion ?? null,
+            profileCompletedAt: user.profileCompletedAt ?? null,
+            notificationCategories: user.notificationCategories ?? [],
+          }
+        } catch (error) {
+          console.error("Telegram auth error:", error)
+          return null
         }
       },
     }),
@@ -403,7 +647,10 @@ export const authOptions: NextAuthOptions = {
         token.notifyInApp = user.notifyInApp ?? true;
         token.notifyEmail = user.notifyEmail ?? false;
         token.notifyVk = user.notifyVk ?? false;
+        token.notifyTelegram = user.notifyTelegram ?? false;
         token.vkUserId = user.vkUserId ?? null;
+        token.telegramChatId = user.telegramChatId ?? null;
+        token.telegramUsername = user.telegramUsername ?? null;
         token.yandexEmail = user.yandexEmail ?? null;
         token.privacyConsentAt = user.privacyConsentAt ? user.privacyConsentAt.toISOString() : null;
         token.privacyConsentVersion = user.privacyConsentVersion ?? null;
@@ -436,7 +683,10 @@ export const authOptions: NextAuthOptions = {
         token.notifyInApp = session.user.notifyInApp ?? token.notifyInApp ?? true;
         token.notifyEmail = session.user.notifyEmail ?? token.notifyEmail ?? false;
         token.notifyVk = session.user.notifyVk ?? token.notifyVk ?? false;
+        token.notifyTelegram = session.user.notifyTelegram ?? token.notifyTelegram ?? false;
         token.vkUserId = session.user.vkUserId ?? token.vkUserId ?? null;
+        token.telegramChatId = session.user.telegramChatId ?? token.telegramChatId ?? null;
+        token.telegramUsername = session.user.telegramUsername ?? token.telegramUsername ?? null;
         token.yandexEmail = session.user.yandexEmail ?? token.yandexEmail ?? null;
         token.privacyConsentAt = session.user.privacyConsentAt
           ? session.user.privacyConsentAt.toISOString()
@@ -461,7 +711,7 @@ export const authOptions: NextAuthOptions = {
       const tokenEmail = typeof token.email === "string" ? token.email : null;
 
       if (tokenId || tokenEmail) {
-        const existingUser = await prisma.user.findUnique({
+        const existingUser = await prismaUser.findUnique<SessionUserRecord>({
           where: tokenId ? { id: tokenId } : { email: tokenEmail! },
           select: {
             id: true,
@@ -480,8 +730,11 @@ export const authOptions: NextAuthOptions = {
             notifyInApp: true,
             notifyEmail: true,
             notifyVk: true,
+            notifyTelegram: true,
             notificationCategories: true,
             vkUserId: true,
+            telegramChatId: true,
+            telegramUsername: true,
             yandexEmail: true,
             privacyConsentAt: true,
             privacyConsentVersion: true,
@@ -511,8 +764,11 @@ export const authOptions: NextAuthOptions = {
         token.notifyInApp = existingUser.notifyInApp
         token.notifyEmail = existingUser.notifyEmail
         token.notifyVk = existingUser.notifyVk
+        token.notifyTelegram = existingUser.notifyTelegram
         token.notificationCategories = existingUser.notificationCategories
         token.vkUserId = existingUser.vkUserId
+        token.telegramChatId = existingUser.telegramChatId
+        token.telegramUsername = existingUser.telegramUsername
         token.yandexEmail = existingUser.yandexEmail
         token.privacyConsentAt = existingUser.privacyConsentAt?.toISOString() ?? null
         token.privacyConsentVersion = existingUser.privacyConsentVersion
@@ -552,7 +808,13 @@ export const authOptions: NextAuthOptions = {
           typeof token.notifyEmail === "boolean" ? token.notifyEmail : false;
         session.user.notifyVk =
           typeof token.notifyVk === "boolean" ? token.notifyVk : false;
+        session.user.notifyTelegram =
+          typeof token.notifyTelegram === "boolean" ? token.notifyTelegram : false;
         session.user.vkUserId = typeof token.vkUserId === "string" ? token.vkUserId : null;
+        session.user.telegramChatId =
+          typeof token.telegramChatId === "string" ? token.telegramChatId : null;
+        session.user.telegramUsername =
+          typeof token.telegramUsername === "string" ? token.telegramUsername : null;
         session.user.yandexEmail = typeof token.yandexEmail === "string" ? token.yandexEmail : null;
         session.user.privacyConsentAt =
           typeof token.privacyConsentAt === "string" ? new Date(token.privacyConsentAt) : null;

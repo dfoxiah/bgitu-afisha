@@ -10,7 +10,8 @@
  * - src/app/api/auth/profile/route.ts
  */
 
-import type { EventCategory, Role, User } from "@prisma/client"
+import type { EventCategory, Role } from "@prisma/client"
+import type { UserWithTelegram } from "@/lib/prisma-user-compat"
 import { isVkRecipientConfigured, normalizeVkRecipient } from "@/lib/vk"
 
 type ProfileNotificationsInput = {
@@ -20,6 +21,7 @@ type ProfileNotificationsInput = {
   inApp?: boolean
   email?: boolean
   vk?: boolean
+  telegram?: boolean
   categories?: unknown
 }
 
@@ -36,6 +38,7 @@ type ProfileUpdateInput = {
   notifyInApp?: unknown
   notifyEmail?: unknown
   notifyVk?: unknown
+  notifyTelegram?: unknown
   vkUserId?: unknown
   notificationCategories?: unknown
   notifications?: ProfileNotificationsInput
@@ -49,7 +52,7 @@ const toOptionalString = (value: unknown, trim = true) => {
   return trim ? text.trim() : text
 }
 
-export const toProfileResponse = (user: User) => ({
+export const toProfileResponse = (user: UserWithTelegram) => ({
   id: user.id,
   name: user.name,
   email: user.email,
@@ -67,7 +70,10 @@ export const toProfileResponse = (user: User) => ({
   notifyInApp: user.notifyInApp,
   notifyEmail: user.notifyEmail,
   notifyVk: user.notifyVk,
+  notifyTelegram: user.notifyTelegram,
   vkUserId: user.vkUserId,
+  telegramChatId: user.telegramChatId,
+  telegramUsername: user.telegramUsername,
   yandexEmail: user.yandexEmail,
   privacyConsentAt: user.privacyConsentAt,
   privacyConsentVersion: user.privacyConsentVersion,
@@ -103,7 +109,7 @@ const normalizeAdmissionYear = (value: unknown) => {
 
 type BuildUpdatesParams = {
   body: ProfileUpdateInput
-  user: User
+  user: UserWithTelegram
   role: Role
   validCategories: EventCategory[]
 }
@@ -142,6 +148,7 @@ export const buildProfileUpdates = (params: BuildUpdatesParams) => {
   if (body.notifyInApp !== undefined) updates.notifyInApp = Boolean(body.notifyInApp)
   if (body.notifyEmail !== undefined) updates.notifyEmail = Boolean(body.notifyEmail)
   if (body.notifyVk !== undefined) updates.notifyVk = Boolean(body.notifyVk)
+  if (body.notifyTelegram !== undefined) updates.notifyTelegram = Boolean(body.notifyTelegram)
   if (body.vkUserId !== undefined) {
     const nextVkRecipient = normalizeVkRecipient(body.vkUserId)
     if (nextVkRecipient.storageValue && !isVkRecipientConfigured(nextVkRecipient.storageValue)) {
@@ -163,6 +170,7 @@ export const buildProfileUpdates = (params: BuildUpdatesParams) => {
     if (typeof notifications.inApp === "boolean") updates.notifyInApp = notifications.inApp
     if (typeof notifications.email === "boolean") updates.notifyEmail = notifications.email
     if (typeof notifications.vk === "boolean") updates.notifyVk = notifications.vk
+    if (typeof notifications.telegram === "boolean") updates.notifyTelegram = notifications.telegram
 
     const nestedCategories = normalizeCategories(notifications.categories, validCategories)
     if (nestedCategories) updates.notificationCategories = nestedCategories
@@ -174,6 +182,14 @@ export const buildProfileUpdates = (params: BuildUpdatesParams) => {
   if (effectiveNotifyVk && !isVkRecipientConfigured(effectiveVkUserId)) {
     validationError ??=
       "Чтобы включить VK-уведомления, укажите корректный VK ID, @username или ссылку на профиль VK."
+  }
+
+  const effectiveNotifyTelegram =
+    typeof updates.notifyTelegram === "boolean" ? updates.notifyTelegram : user.notifyTelegram
+  const effectiveTelegramChatId =
+    updates.telegramChatId !== undefined ? updates.telegramChatId : user.telegramChatId
+  if (effectiveNotifyTelegram && typeof effectiveTelegramChatId !== "string") {
+    validationError ??= "Чтобы включить Telegram-уведомления, сначала привяжите Telegram в профиле."
   }
 
   if (updates.group !== undefined) {
