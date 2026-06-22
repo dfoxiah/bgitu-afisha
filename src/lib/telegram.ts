@@ -4,6 +4,12 @@ const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN ?? ""
 const telegramBotUsername = (process.env.TELEGRAM_BOT_USERNAME ?? "").replace(/^@+/, "").trim()
 const telegramWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET ?? ""
 
+export const TELEGRAM_LINK_PREFIX = "telegram-link:"
+export const TELEGRAM_LOGIN_PREFIX = "telegram-login:"
+export const TELEGRAM_LOGIN_COMPLETE_PREFIX = "telegram-login-complete:"
+export const TELEGRAM_LOGIN_TTL_MS = 15 * 60 * 1000
+export const TELEGRAM_LOGIN_COMPLETE_TTL_MS = 5 * 60 * 1000
+
 export type TelegramWebhookMessage = {
   message_id?: number
   text?: string
@@ -35,6 +41,8 @@ export const getTelegramWebhookSecret = () => telegramWebhookSecret || null
 
 export const createTelegramLinkToken = () => `tg_${randomBytes(18).toString("base64url")}`
 
+export const createTelegramRequestId = () => `tgr_${randomBytes(18).toString("base64url")}`
+
 export const createTelegramDeepLink = (token: string) => {
   if (!telegramBotUsername) return null
   return `https://t.me/${telegramBotUsername}?start=${encodeURIComponent(token)}`
@@ -57,6 +65,45 @@ export const normalizeTelegramChatId = (value: unknown) => {
   if (typeof value !== "string") return null
   const normalized = value.trim()
   return /^-?\d{5,32}$/.test(normalized) ? normalized : null
+}
+
+export const normalizeTelegramUserId = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return String(Math.trunc(value))
+  }
+
+  if (typeof value !== "string") return null
+  const normalized = value.trim()
+  return /^\d{5,32}$/.test(normalized) ? normalized : null
+}
+
+export const getTelegramLinkIdentifier = (userId: string) => `${TELEGRAM_LINK_PREFIX}${userId}`
+
+export const getTelegramUserIdFromLinkIdentifier = (identifier: string) =>
+  identifier.startsWith(TELEGRAM_LINK_PREFIX)
+    ? identifier.slice(TELEGRAM_LINK_PREFIX.length)
+    : null
+
+export const getTelegramLoginIdentifier = (requestId: string) =>
+  `${TELEGRAM_LOGIN_PREFIX}${requestId}`
+
+export const getTelegramLoginRequestId = (identifier: string) =>
+  identifier.startsWith(TELEGRAM_LOGIN_PREFIX)
+    ? identifier.slice(TELEGRAM_LOGIN_PREFIX.length)
+    : null
+
+export const getTelegramLoginCompleteIdentifier = (requestId: string, userId: string) =>
+  `${TELEGRAM_LOGIN_COMPLETE_PREFIX}${requestId}:${userId}`
+
+export const getTelegramLoginCompletePrefix = (requestId: string) =>
+  `${TELEGRAM_LOGIN_COMPLETE_PREFIX}${requestId}:`
+
+export const getTelegramUserIdFromLoginCompleteIdentifier = (identifier: string) => {
+  if (!identifier.startsWith(TELEGRAM_LOGIN_COMPLETE_PREFIX)) return null
+  const value = identifier.slice(TELEGRAM_LOGIN_COMPLETE_PREFIX.length)
+  const separatorIndex = value.indexOf(":")
+  if (separatorIndex < 0) return null
+  return value.slice(separatorIndex + 1) || null
 }
 
 export const maskTelegramChatId = (chatId: string | null | undefined) => {

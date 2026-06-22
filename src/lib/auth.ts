@@ -26,6 +26,7 @@ import { logAuditEvent } from "@/lib/audit";
 import { asPrismaUserCompat, type UserWithTelegram } from "@/lib/prisma-user-compat"
 import { buildEmailInsensitiveFilter, normalizeEmailAddress } from "@/server/shared/user-email";
 import { normalizeVkRecipient } from "@/lib/vk";
+import { getTelegramUserIdFromLoginCompleteIdentifier, TELEGRAM_LOGIN_COMPLETE_PREFIX } from "@/lib/telegram"
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -98,6 +99,10 @@ type TelegramAuthPayload = {
   photo_url: string | null
   auth_date: number
   hash: string
+}
+
+type TelegramBotLoginPayload = {
+  loginToken: string
 }
 
 type SessionUserRecord = Pick<
@@ -177,6 +182,15 @@ const parseTelegramAuthPayload = (
 
 const buildTelegramDisplayName = (payload: TelegramAuthPayload) =>
   [payload.first_name, payload.last_name].filter(Boolean).join(" ").trim() || payload.username || null
+
+const parseTelegramBotLoginPayload = (
+  credentials: Record<string, unknown> | undefined
+): TelegramBotLoginPayload | null => {
+  if (!credentials) return null
+  const loginToken = readTelegramAuthValue(credentials.loginToken)
+  if (!loginToken || loginToken.length < 12) return null
+  return { loginToken }
+}
 
 const verifyTelegramAuthPayload = (payload: TelegramAuthPayload) => {
   if (!telegramBotToken || !telegramBotUsername) return false
@@ -565,6 +579,84 @@ export const authOptions: NextAuthOptions = {
           }
         } catch (error) {
           console.error("Telegram auth error:", error)
+          return null
+        }
+      },
+    }),
+    CredentialsProvider({
+      id: "telegram-bot",
+      name: "telegram-bot",
+      credentials: {
+        loginToken: { label: "Login Token", type: "text" },
+      },
+      async authorize(credentials): Promise<User | null> {
+        const payload = parseTelegramBotLoginPayload(credentials)
+        if (!payload) return null
+
+        try {
+          const verificationToken = await prisma.verificationToken.findUnique({
+            where: { token: payload.loginToken },
+            select: {
+              identifier: true,
+              expires: true,
+            },
+          })
+
+          if (
+            !verificationToken ||
+            verificationToken.expires <= new Date() ||
+            !verificationToken.identifier.startsWith(TELEGRAM_LOGIN_COMPLETE_PREFIX)
+          ) {
+            return null
+          }
+
+          const userId = getTelegramUserIdFromLoginCompleteIdentifier(verificationToken.identifier)
+          if (!userId) {
+            await prisma.verificationToken.deleteMany({ where: { token: payload.loginToken } })
+            return null
+          }
+
+          const user = await prismaUser.findUnique<UserWithTelegram>({
+            where: { id: userId },
+          })
+
+          await prisma.verificationToken.deleteMany({ where: { token: payload.loginToken } })
+
+          if (!user) {
+            return null
+          }
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            image: user.image,
+            department: user.department,
+            group: user.group,
+            admissionYear: user.admissionYear,
+            groupChangeCount: user.groupChangeCount ?? 0,
+            bio: user.bio,
+            notifyNewEvents: user.notifyNewEvents ?? true,
+            notifyChanges: user.notifyChanges ?? true,
+            notifyNews: user.notifyNews ?? false,
+            notifyInApp: user.notifyInApp ?? true,
+            notifyEmail: user.notifyEmail ?? false,
+            notifyVk: user.notifyVk ?? false,
+            notifyTelegram: user.notifyTelegram ?? false,
+            vkUserId: user.vkUserId ?? null,
+            telegramChatId: user.telegramChatId ?? null,
+            telegramUsername: user.telegramUsername ?? null,
+            yandexEmail: user.yandexEmail ?? null,
+            privacyConsentAt: user.privacyConsentAt ?? null,
+            privacyConsentVersion: user.privacyConsentVersion ?? null,
+            termsConsentAt: user.termsConsentAt ?? null,
+            termsConsentVersion: user.termsConsentVersion ?? null,
+            profileCompletedAt: user.profileCompletedAt ?? null,
+            notificationCategories: user.notificationCategories ?? [],
+          }
+        } catch (error) {
+          console.error("Telegram bot login error:", error)
           return null
         }
       },

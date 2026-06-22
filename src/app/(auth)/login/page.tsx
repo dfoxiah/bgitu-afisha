@@ -53,11 +53,27 @@ const errorMessages: Record<string, string> = {
 }
 
 type OAuthProviderId = "vk" | "max" | "yandex"
-type LoadingProvider = OAuthProviderId | "telegram" | "credentials" | null
+type LoadingProvider = OAuthProviderId | "telegram" | "telegram-bot" | "credentials" | null
 
 type TelegramLoginConfig = {
   configured: boolean
   botUsername: string | null
+}
+
+type TelegramBotLoginCreateResponse = {
+  success: boolean
+  requestId: string
+  url: string
+  botUsername: string | null
+  expiresAt: string
+}
+
+type TelegramBotLoginStatusResponse = {
+  configured: boolean
+  botUsername: string | null
+  status: "pending" | "ready" | "expired"
+  expiresAt: string | null
+  loginToken?: string
 }
 
 type TelegramAuthUser = {
@@ -76,6 +92,20 @@ declare global {
   }
 }
 
+const toTelegramApiError = async (response: Response, fallback: string) => {
+  const contentType = response.headers.get("content-type") || ""
+  if (!contentType.includes("application/json")) return fallback
+
+  const payload = await response.json().catch(() => null)
+  if (typeof payload?.error === "string" && payload.error.trim()) {
+    return payload.error
+  }
+  if (typeof payload?.errorPayload?.message === "string" && payload.errorPayload.message.trim()) {
+    return payload.errorPayload.message
+  }
+  return fallback
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -89,6 +119,10 @@ export default function LoginPage() {
   const [showPasswordLogin, setShowPasswordLogin] = useState(false)
   const [availableProviders, setAvailableProviders] = useState<Record<string, boolean>>({})
   const [telegramConfig, setTelegramConfig] = useState<TelegramLoginConfig | null>(null)
+  const [telegramBotRequestId, setTelegramBotRequestId] = useState<string | null>(null)
+  const [telegramBotLink, setTelegramBotLink] = useState<string | null>(null)
+  const [telegramBotPendingUntil, setTelegramBotPendingUntil] = useState<string | null>(null)
+  const [telegramBotStatus, setTelegramBotStatus] = useState<"idle" | "pending" | "ready" | "expired">("idle")
   const telegramWidgetRef = useRef<HTMLDivElement | null>(null)
 
   const displayedError = useMemo(() => {
@@ -237,6 +271,123 @@ export default function LoginPage() {
     }
   }, [availableProviders.telegram, telegramConfig])
 
+  useEffect(() => {
+    if (!telegramBotRequestId || telegramBotStatus !== "pending") {
+      return
+    }
+
+    let active = true
+    let intervalId: number | null = null
+
+    const pollTelegramBotLogin = async () => {
+      const response = await fetch(
+        `/api/auth/telegram/login?requestId=${encodeURIComponent(telegramBotRequestId)}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      ).catch(() => null)
+
+      if (!active || !response) return
+
+      if (!response.ok) {
+        setLocalError(await toTelegramApiError(response, "Не удалось проверить статус Telegram-входа."))
+        setLoadingProvider(null)
+        return
+      }
+
+      const payload = (await response.json()) as TelegramBotLoginStatusResponse
+      if (!active) return
+
+      if (payload.status === "expired") {
+        setTelegramBotStatus("expired")
+        setTelegramBotPendingUntil(null)
+        setLoadingProvider(null)
+        setLocalError("Ссылка для входа через Telegram истекла. Нажмите кнопку ещё раз.")
+        return
+      }
+
+      setTelegramBotPendingUntil(payload.expiresAt)
+
+      if (payload.status !== "ready" || !payload.loginToken) {
+        return
+      }
+
+      setTelegramBotStatus("ready")
+      setLoadingProvider("telegram-bot")
+
+      try {
+        const result = await signIn("telegram-bot", {
+          loginToken: payload.loginToken,
+          callbackUrl,
+          redirect: false,
+        })
+
+        if (!active) return
+
+        if (!result?.ok) {
+          setLocalError("Не удалось завершить вход через Telegram-бота.")
+          setLoadingProvider(null)
+          return
+        }
+
+        router.replace(result.url ?? callbackUrl)
+        router.refresh()
+      } catch {
+        if (!active) return
+        setLocalError("Не удалось завершить вход через Telegram-бота.")
+        setLoadingProvider(null)
+      }
+    }
+
+    void pollTelegramBotLogin()
+    intervalId = window.setInterval(() => {
+      void pollTelegramBotLogin()
+    }, 2500)
+
+    return () => {
+      active = false
+      if (intervalId !== null) {
+        window.clearInterval(intervalId)
+      }
+    }
+  }, [callbackUrl, router, telegramBotRequestId, telegramBotStatus])
+
+  const handleTelegramBotFallback = async () => {
+    setLocalError("")
+
+    if (!telegramConfig?.configured || !telegramConfig.botUsername) {
+      setLocalError("Telegram-бот для входа пока не настроен на сервере.")
+      return
+    }
+
+    setLoadingProvider("telegram-bot")
+    setTelegramBotStatus("pending")
+
+    try {
+      const response = await fetch("/api/auth/telegram/login", {
+        method: "POST",
+      })
+
+      if (!response.ok) {
+        setTelegramBotStatus("idle")
+        setLoadingProvider(null)
+        setLocalError(await toTelegramApiError(response, "Не удалось создать ссылку для Telegram-бота."))
+        return
+      }
+
+      const payload = (await response.json()) as TelegramBotLoginCreateResponse
+      setTelegramBotRequestId(payload.requestId)
+      setTelegramBotLink(payload.url)
+      setTelegramBotPendingUntil(payload.expiresAt)
+      window.open(payload.url, "_blank", "noopener,noreferrer")
+    } catch {
+      setTelegramBotStatus("idle")
+      setLoadingProvider(null)
+      setLocalError("Не удалось открыть Telegram-бота для входа.")
+    }
+  }
+
   const handleCredentials = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setLocalError("")
@@ -370,6 +521,43 @@ export default function LoginPage() {
                   Telegram не настроен
                 </button>
               )}
+              {telegramConfig?.configured && telegramConfig.botUsername && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleTelegramBotFallback}
+                    disabled={loadingProvider === "telegram" || telegramBotStatus === "ready"}
+                    className="mt-3 inline-flex w-full items-center justify-center gap-3 rounded-xl border border-[#229ED9]/30 bg-white/80 px-4 py-3 text-sm font-semibold text-[#229ED9] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {loadingProvider === "telegram-bot" || telegramBotStatus === "pending"
+                      ? "Ожидаем подтверждение в боте…"
+                      : "Если подтверждение не приходит — войти через бота"}
+                  </button>
+
+                  {telegramBotLink && telegramBotStatus === "pending" && (
+                    <div className="mt-2 text-center text-xs text-primary/66">
+                      <a
+                        href={telegramBotLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-[#229ED9] underline underline-offset-2"
+                      >
+                        Открыть бота ещё раз
+                      </a>
+                      {telegramBotPendingUntil && (
+                        <span>
+                          {" "}
+                          · ссылка активна до {new Date(telegramBotPendingUntil).toLocaleTimeString("ru-RU", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
               <p className="mt-3 text-xs leading-5 text-primary/66">
                 РџРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ РІС…РѕРґР° РїСЂРёС…РѕРґРёС‚ РІ РїСЂРёР»РѕР¶РµРЅРёРµ Telegram РґР»СЏ СЌС‚РѕРіРѕ РЅРѕРјРµСЂР°, Р° РЅРµ РІ С‡Р°С‚ СЃ Р±РѕС‚РѕРј.
                 Р•СЃР»Рё Р·Р°РїСЂРѕСЃ РЅРµ РїРѕСЏРІР»СЏРµС‚СЃСЏ, РІРѕР№РґРёС‚Рµ С‡РµСЂРµР· РЇРЅРґРµРєСЃ Рё Р·Р°С‚РµРј РІ РїСЂРѕС„РёР»Рµ
