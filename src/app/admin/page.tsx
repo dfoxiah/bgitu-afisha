@@ -20,6 +20,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import type { EventCategory, Role } from "@prisma/client"
 import Button from "@/components/ui/Button"
+import { ADMIN_SIMULATION_SCENARIOS } from "@/features/admin/simulation-catalog"
 import { showToast } from "@/lib/toast"
 import { CategoryDisplayMap } from "@/types"
 import {
@@ -43,6 +44,7 @@ import {
   generateAdminNewsDraft,
   importAdminData,
   promoteAdminGroupsAfterSummer,
+  runAdminDiagnosticsSimulation,
   updateAdminEvent,
   updateAdminNewsTemplate,
   updateAdminStructure,
@@ -61,6 +63,8 @@ import type {
   AdminImportMode,
   AdminImportResult,
   AdminNewsTemplate,
+  AdminSimulationResult,
+  AdminSimulationScenarioId,
   AdminStructureField,
   AdminStructureSnapshot,
   AdminUser,
@@ -76,6 +80,16 @@ const LIVE_UPDATE_INTERVAL_MS = Math.max(
   parsePositiveInt(process.env.NEXT_PUBLIC_ADMIN_LIVE_INTERVAL_MS, 30000),
   15000
 )
+
+const getDiagnosticStatusClass = (status: "ok" | "warning" | "error") =>
+  status === "ok"
+    ? "rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"
+    : status === "warning"
+      ? "rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700"
+      : "rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700"
+
+const getDiagnosticStatusLabel = (status: "ok" | "warning" | "error") =>
+  status === "ok" ? "OK" : status === "warning" ? "Внимание" : "Ошибка"
 
 type EditableEvent = {
   id: string
@@ -271,6 +285,13 @@ export default function AdminPage() {
   const [diagnostics, setDiagnostics] = useState<AdminDiagnostics | null>(null)
   const [diagnosticsLoading, setDiagnosticsLoading] = useState(false)
   const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null)
+  const [simulationResults, setSimulationResults] = useState<
+    Partial<Record<AdminSimulationScenarioId, AdminSimulationResult>>
+  >({})
+  const [simulationLoadingId, setSimulationLoadingId] = useState<
+    AdminSimulationScenarioId | "all" | null
+  >(null)
+  const [simulationError, setSimulationError] = useState<string | null>(null)
 
   const [importUsersFile, setImportUsersFile] = useState<File | null>(null)
   const [importEventsFile, setImportEventsFile] = useState<File | null>(null)
@@ -410,6 +431,37 @@ export default function AdminPage() {
       setDiagnosticsLoading(false)
     }
   }, [])
+
+  const handleRunDiagnosticsSimulation = useCallback(
+    async (scenario: AdminSimulationScenarioId | "all") => {
+      try {
+        setSimulationLoadingId(scenario)
+        setSimulationError(null)
+        const response = await runAdminDiagnosticsSimulation(scenario)
+        setSimulationResults((previous) => {
+          const next = { ...previous }
+          response.results.forEach((result) => {
+            next[result.scenarioId] = result
+          })
+          return next
+        })
+        showToast(
+          scenario === "all"
+            ? `Симуляция выполнена: ${response.results.length} сценария`
+            : "Сценарий симуляции выполнен",
+          "success"
+        )
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Не удалось выполнить симуляцию сценария"
+        setSimulationError(message)
+        showToast(message, "error")
+      } finally {
+        setSimulationLoadingId(null)
+      }
+    },
+    []
+  )
 
   const loadImportHistory = useCallback(async () => {
     try {
@@ -1979,6 +2031,88 @@ export default function AdminPage() {
             </div>
 
             <div className="admin-panel p-4 space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-white/75 p-3">
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold uppercase tracking-[0.08em] text-slate-500">
+                        Симуляция сценариев
+                      </div>
+                      <p className="mt-1 text-sm text-slate-600">
+                        Dry-run без изменения данных и без отправки реальных сообщений.
+                      </p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      loading={simulationLoadingId === "all"}
+                      onClick={() => void handleRunDiagnosticsSimulation("all")}
+                      className="w-full sm:w-auto"
+                    >
+                      Запустить все
+                    </Button>
+                  </div>
+
+                  {simulationError && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                      {simulationError}
+                    </div>
+                  )}
+
+                  <div className="grid gap-3">
+                    {ADMIN_SIMULATION_SCENARIOS.map((scenario) => {
+                      const result = simulationResults[scenario.id]
+                      return (
+                        <div
+                          key={scenario.id}
+                          className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3"
+                        >
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                              <div className="font-semibold text-slate-900">{scenario.label}</div>
+                              <div className="mt-1 text-sm text-slate-600">{scenario.description}</div>
+                            </div>
+                            <Button
+                              variant="secondary"
+                              loading={simulationLoadingId === scenario.id}
+                              onClick={() => void handleRunDiagnosticsSimulation(scenario.id)}
+                              className="w-full sm:w-auto"
+                            >
+                              Прогнать
+                            </Button>
+                          </div>
+
+                          {result ? (
+                            <div className="mt-3 space-y-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className={getDiagnosticStatusClass(result.status)}>
+                                  {getDiagnosticStatusLabel(result.status)}
+                                </span>
+                                <span className="text-xs text-slate-400">
+                                  {result.durationMs} мс ·{" "}
+                                  {new Date(result.generatedAt).toLocaleString("ru-RU")}
+                                </span>
+                              </div>
+                              <div className="text-sm font-medium text-slate-900">
+                                {result.summary}
+                              </div>
+                              <div className="space-y-1 text-xs text-slate-600">
+                                {result.details.map((detail, index) => (
+                                  <div key={`${result.scenarioId}-${index}`}>• {detail}</div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-white/70 px-3 py-2 text-xs text-slate-500">
+                              Сценарий ещё не запускался.
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-slate-500">Сводка</h3>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-sm">

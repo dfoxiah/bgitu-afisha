@@ -28,6 +28,8 @@ import type {
   AdminNewsDraftResult,
   AdminNewsTemplate,
   AdminNewsTemplateInput,
+  AdminSimulationResponse,
+  AdminSimulationScenarioId,
   AdminStructureSnapshot,
   AdminStructureUpdateInput,
   AdminStructureUpdateResult,
@@ -197,6 +199,14 @@ export const getAdminMetrics = (query: AdminMetricsQuery = {}) => {
 
 export const getAdminDiagnostics = () =>
   request<AdminDiagnostics>("/api/admin/diagnostics")
+
+export const runAdminDiagnosticsSimulation = (
+  scenario: AdminSimulationScenarioId | "all" = "all"
+) =>
+  request<AdminSimulationResponse>("/api/admin/diagnostics/simulate", {
+    method: "POST",
+    body: { scenario },
+  })
 
 const extractFileName = (response: Response, fallback: string) => {
   const contentDisposition = response.headers.get("content-disposition") || ""

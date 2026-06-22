@@ -521,3 +521,31 @@ export type AdminDiagnostics = {
     actor: string | null
   } | null
 }
+
+export type AdminSimulationScenarioId =
+  | "public-feed"
+  | "registration-flow"
+  | "telegram-auth"
+  | "notification-delivery"
+
+export type AdminSimulationScenario = {
+  id: AdminSimulationScenarioId
+  label: string
+  description: string
+}
+
+export type AdminSimulationResult = {
+  scenarioId: AdminSimulationScenarioId
+  label: string
+  status: "ok" | "warning" | "error"
+  summary: string
+  details: string[]
+  durationMs: number
+  generatedAt: string
+}
+
+export type AdminSimulationResponse = {
+  generatedAt: string
+  requestedScenario: AdminSimulationScenarioId | "all"
+  results: AdminSimulationResult[]
+}
