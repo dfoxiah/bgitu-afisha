@@ -16,7 +16,7 @@ import { getToken } from 'next-auth/jwt'
 import { PRIVACY_POLICY_VERSION, TERMS_VERSION } from '@/lib/profile-completion'
 
 const STATIC_FILE_PATTERN = /\.(?:js|css|png|jpg|jpeg|gif|ico|svg|woff2?|ttf|eot)$/i
-const PUBLIC_PATHS = ['/login', '/legal', '/afisha', '/forbidden', '/api/auth', '/api/events']
+const PUBLIC_PATHS = ['/login', '/legal', '/afisha', '/forbidden', '/api/auth', '/api/events', '/api/telegram']
 
 const isPublicPath = (pathname: string) => {
   if (pathname.startsWith('/_next') || pathname.startsWith('/public')) return true
