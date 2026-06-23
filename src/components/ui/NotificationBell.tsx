@@ -159,22 +159,17 @@ const NotificationBell = () => {
   }
 
   return (
-    <div className="notification-container relative" ref={dropdownRef}>
+    <div className="notification-container relative z-10" ref={dropdownRef}>
       <button
         type="button"
-        className="header-icon pressable relative inline-flex h-10 min-w-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-primary/20 bg-white/90 px-2.5 text-primary shadow-[0_8px_16px_rgba(18,39,76,0.12)] transition-colors hover:border-accent/60 hover:bg-primary/5 sm:w-10 sm:px-0"
+        className="header-icon pressable relative z-10 inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-primary/20 bg-white/90 !overflow-visible text-primary shadow-[0_8px_16px_rgba(18,39,76,0.12)] transition-colors hover:border-accent/60 hover:bg-primary/5"
         onClick={() => void openDropdown()}
         aria-label={`Уведомления${unreadCount ? `, непрочитанных: ${unreadLabel}` : ""}`}
         aria-expanded={isDropdownOpen}
       >
         <i className="fas fa-bell shrink-0" aria-hidden="true" />
         {unreadCount > 0 && (
-          <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white sm:hidden">
-            {unreadLabel}
-          </span>
-        )}
-        {unreadCount > 0 && (
-          <span className="notification-count absolute right-0 top-0 hidden h-5 min-w-5 translate-x-1/3 -translate-y-1/3 items-center justify-center rounded-full border-2 border-white bg-red-500 px-1 text-[10px] font-bold leading-none text-white shadow-sm sm:flex">
+          <span className="notification-count pointer-events-none absolute -right-1 -top-1 z-20 inline-flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-red-500 px-1 text-[10px] font-bold leading-none text-white shadow-sm">
             {unreadLabel}
           </span>
         )}
