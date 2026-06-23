@@ -218,9 +218,4 @@ docs/            технические и защитные материалы �
 3. Выполнить миграции через `npx prisma migrate deploy`.
 4. Проверить `npm run build` перед релизом.
 
-## Документация
 
-- `docs/PROJECT_TECHNICAL_DEFENSE_RU.md` — техническая защита проекта
-- `docs/PROJECT_DEFENSE_PRESENTATION_RU.md` — план презентации
-- `docs/bgitu-afisha-article.md` — расширенное описание решения
-- `docs/external-notifications.md` — заметки по внешним уведомлениям
