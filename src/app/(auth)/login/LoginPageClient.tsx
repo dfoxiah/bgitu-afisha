@@ -332,6 +332,7 @@ export default function LoginPageClient({
 
     setLoadingProvider("telegram-bot")
     setTelegramBotStatus("pending")
+    const telegramWindow = typeof window !== "undefined" ? window.open("", "_blank") : null
 
     try {
       const response = await fetch("/api/auth/telegram/login", {
@@ -339,6 +340,7 @@ export default function LoginPageClient({
       })
 
       if (!response.ok) {
+        telegramWindow?.close()
         setTelegramBotStatus("idle")
         setLoadingProvider(null)
         setLocalError(await toTelegramApiError(response, "Не удалось создать ссылку для Telegram-бота."))
@@ -349,8 +351,14 @@ export default function LoginPageClient({
       setTelegramBotRequestId(payload.requestId)
       setTelegramBotLink(payload.url)
       setTelegramBotPendingUntil(payload.expiresAt)
-      window.open(payload.url, "_blank", "noopener,noreferrer")
+      if (telegramWindow) {
+        telegramWindow.opener = null
+        telegramWindow.location.href = payload.url
+      } else {
+        window.open(payload.url, "_blank", "noopener,noreferrer")
+      }
     } catch {
+      telegramWindow?.close()
       setTelegramBotStatus("idle")
       setLoadingProvider(null)
       setLocalError("Не удалось открыть Telegram-бота для входа.")

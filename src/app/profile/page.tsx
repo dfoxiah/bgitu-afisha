@@ -681,13 +681,20 @@ export default function ProfilePage() {
 
   const handleTelegramConnect = async () => {
     setTelegramLinkLoading(true)
+    const telegramWindow = typeof window !== 'undefined' ? window.open('', '_blank') : null
     try {
       const payload = await createTelegramLinkApi()
       setTelegramState(prev => prev ? { ...prev, pendingExpiresAt: payload.expiresAt } : prev)
-      window.open(payload.url, '_blank', 'noopener,noreferrer')
+      if (telegramWindow) {
+        telegramWindow.opener = null
+        telegramWindow.location.href = payload.url
+      } else {
+        window.open(payload.url, '_blank', 'noopener,noreferrer')
+      }
       showToast('Открыл бота Telegram. Нажмите Start и вернитесь на сайт.', 'success')
       void loadTelegramState()
     } catch (error) {
+      telegramWindow?.close()
       showToast(error instanceof Error ? error.message : 'Не удалось открыть Telegram-бота', 'error')
     } finally {
       setTelegramLinkLoading(false)

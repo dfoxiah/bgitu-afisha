@@ -20,7 +20,12 @@ import { usePathname, useRouter } from "next/navigation"
 import NotificationBell from "@/components/ui/NotificationBell"
 import SearchInput from "@/components/ui/SearchInput"
 import { useAppContext } from "@/contexts/AppContext"
-import { isContentManagerRole } from "@/lib/roles"
+import {
+  ensureAdminScenarioAccounts,
+  getAdminScenarioAccounts,
+} from "@/features/admin/client/admin-api"
+import type { AdminScenarioAccount } from "@/features/admin/types"
+import { isContentManagerRole, ROLE_OPTIONS, toRoleLabel } from "@/lib/roles"
 import { showToast } from "@/lib/toast"
 
 type HeaderMenuItem = {
@@ -44,6 +49,11 @@ const PUBLIC_NAV: HeaderMenuItem[] = [
   { href: "/legal/terms", label: "Соглашение", icon: "file-contract" },
 ]
 
+const SCENARIO_ROLE_ORDER = ROLE_OPTIONS.reduce<Record<string, number>>((acc, option, index) => {
+  acc[option.value] = index
+  return acc
+}, {})
+
 export default function Header() {
   const { data: session, status, update: updateSession } = useSession()
   const router = useRouter()
@@ -55,8 +65,14 @@ export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [isHeaderHidden, setIsHeaderHidden] = useState(false)
   const [isHeaderHovered, setIsHeaderHovered] = useState(false)
+  const [scenarioMenuOpen, setScenarioMenuOpen] = useState(false)
+  const [scenarioAccounts, setScenarioAccounts] = useState<AdminScenarioAccount[]>([])
+  const [scenarioAccountsLoading, setScenarioAccountsLoading] = useState(false)
+  const [scenarioAccountsSyncing, setScenarioAccountsSyncing] = useState(false)
+  const [scenarioSwitchingId, setScenarioSwitchingId] = useState<string | null>(null)
   const [stoppingScenario, setStoppingScenario] = useState(false)
   const lastScrollYRef = useRef(0)
+  const scenarioMenuRef = useRef<HTMLDivElement | null>(null)
 
   const showSearch =
     status === "authenticated" &&
@@ -70,6 +86,20 @@ export default function Header() {
     [notifications]
   )
   const unreadLabel = unreadCount > 99 ? "99+" : String(unreadCount)
+  const canUseScenarioSwitcher = Boolean(
+    session?.user && (session.user.role === "ADMIN" || session.user.impersonatorId)
+  )
+  const isScenarioActive = Boolean(session?.user?.isScenarioPersona)
+  const scenarioAccountsSorted = useMemo(
+    () =>
+      [...scenarioAccounts].sort(
+        (left, right) =>
+          (SCENARIO_ROLE_ORDER[left.role] ?? Number.MAX_SAFE_INTEGER) -
+          (SCENARIO_ROLE_ORDER[right.role] ?? Number.MAX_SAFE_INTEGER)
+      ),
+    [scenarioAccounts]
+  )
+  const currentScenarioLabel = isScenarioActive ? toRoleLabel(session?.user?.role) : null
 
   const desktopNavItems = useMemo<HeaderMenuItem[]>(() => {
     if (!session) {
@@ -116,14 +146,88 @@ export default function Header() {
 
   const handleMenuNavigate = (href: string) => (event: React.MouseEvent) => {
     setMenuOpen(false)
+    setScenarioMenuOpen(false)
     if (!forceHardNavigate) return
     event.preventDefault()
     window.location.href = href
   }
 
+  const loadScenarioAccounts = async (options: {
+    ensureComplete?: boolean
+    silent?: boolean
+    suppressErrorToast?: boolean
+  } = {}) => {
+    const { ensureComplete = false, silent = false, suppressErrorToast = false } = options
+
+    try {
+      if (!silent) setScenarioAccountsLoading(true)
+
+      let accounts = await getAdminScenarioAccounts()
+      if (ensureComplete) {
+        const existingRoles = new Set(accounts.map((account) => account.role))
+        const needsSync = ROLE_OPTIONS.some((option) => !existingRoles.has(option.value))
+
+        if (needsSync) {
+          setScenarioAccountsSyncing(true)
+          accounts = await ensureAdminScenarioAccounts()
+        }
+      }
+
+      setScenarioAccounts(accounts)
+    } catch (error) {
+      if (suppressErrorToast) return
+      showToast(
+        error instanceof Error ? error.message : "Не удалось загрузить сценарные аккаунты",
+        "error"
+      )
+    } finally {
+      if (!silent) setScenarioAccountsLoading(false)
+      setScenarioAccountsSyncing(false)
+    }
+  }
+
+  const handleSyncScenarioAccounts = async () => {
+    try {
+      setScenarioAccountsSyncing(true)
+      const accounts = await ensureAdminScenarioAccounts()
+      setScenarioAccounts(accounts)
+      showToast("Сценарные аккаунты синхронизированы", "success")
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Не удалось синхронизировать сценарные аккаунты",
+        "error"
+      )
+    } finally {
+      setScenarioAccountsSyncing(false)
+    }
+  }
+
+  const handleSwitchScenarioAccount = async (account: AdminScenarioAccount) => {
+    try {
+      setScenarioSwitchingId(account.id)
+      setScenarioMenuOpen(false)
+      setMenuOpen(false)
+      await updateSession({
+        impersonation: {
+          action: "start",
+          targetUserId: account.id,
+        },
+      })
+      window.location.href = account.role === "ADMIN" ? "/admin" : "/dashboard"
+    } catch (error) {
+      setScenarioSwitchingId(null)
+      showToast(
+        error instanceof Error ? error.message : "Не удалось переключить сценарный аккаунт",
+        "error"
+      )
+    }
+  }
+
   const handleStopScenario = async () => {
     try {
       setStoppingScenario(true)
+      setScenarioMenuOpen(false)
+      setMenuOpen(false)
       await updateSession({
         impersonation: {
           action: "stop",
@@ -152,6 +256,7 @@ export default function Header() {
     setMenuOpen(false)
     setIsHeaderHidden(false)
     setIsHeaderHovered(false)
+    setScenarioMenuOpen(false)
   }, [pathname])
 
   useEffect(() => {
@@ -167,6 +272,32 @@ export default function Header() {
       setIsHeaderHovered(false)
     }
   }, [menuOpen])
+
+  useEffect(() => {
+    if (!canUseScenarioSwitcher) {
+      setScenarioAccounts([])
+      setScenarioMenuOpen(false)
+      return
+    }
+
+    void loadScenarioAccounts({ ensureComplete: true, suppressErrorToast: true })
+  }, [canUseScenarioSwitcher, session?.user?.id, session?.user?.impersonatorId])
+
+  useEffect(() => {
+    if (!scenarioMenuOpen) return
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!scenarioMenuRef.current) return
+      if (!scenarioMenuRef.current.contains(event.target as Node)) {
+        setScenarioMenuOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown)
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown)
+    }
+  }, [scenarioMenuOpen])
 
   useEffect(() => {
     lastScrollYRef.current = window.scrollY
@@ -198,6 +329,96 @@ export default function Header() {
       window.removeEventListener("scroll", handleScroll)
     }
   }, [menuOpen])
+
+  const renderScenarioAccountsList = () => {
+    if (!canUseScenarioSwitcher) return null
+
+    return (
+      <div className="space-y-2">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-slate-900">Сценарные аккаунты</div>
+            <div className="mt-1 text-xs text-slate-500">
+              Переключение ролей для проверки пользовательских сценариев.
+            </div>
+          </div>
+          <button
+            type="button"
+            className="inline-flex items-center rounded-lg border border-primary/14 bg-white px-2.5 py-1.5 text-xs font-semibold text-primary transition hover:border-primary/34"
+            onClick={() => void handleSyncScenarioAccounts()}
+            disabled={scenarioAccountsSyncing}
+          >
+            <i
+              className={`fas ${scenarioAccountsSyncing ? "fa-spinner fa-spin" : "fa-rotate"} mr-1.5 text-[11px]`}
+              aria-hidden="true"
+            />
+            Синхронизировать
+          </button>
+        </div>
+
+        {isScenarioActive && session?.user?.email && (
+          <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+            Активен сценарий: {currentScenarioLabel} · {session.user.email}
+          </div>
+        )}
+
+        {scenarioAccountsLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div
+                key={`header-scenario-skeleton-${index}`}
+                className="rounded-xl border border-slate-200 p-3 animate-pulse"
+              >
+                <div className="h-3 w-24 rounded bg-slate-200" />
+                <div className="mt-2 h-3 w-40 rounded bg-slate-200" />
+              </div>
+            ))}
+          </div>
+        ) : scenarioAccountsSorted.length > 0 ? (
+          <div className="space-y-2">
+            {scenarioAccountsSorted.map((account) => {
+              const isActiveScenario =
+                session?.user?.isScenarioPersona && session.user.id === account.id
+
+              return (
+                <div
+                  key={account.id}
+                  className="rounded-xl border border-slate-200 bg-white/90 px-3 py-2"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900">{toRoleLabel(account.role)}</div>
+                      <div className="truncate text-xs text-slate-500">{account.email}</div>
+                    </div>
+                    <button
+                      type="button"
+                      className={`inline-flex min-w-[116px] items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                        isActiveScenario
+                          ? "cursor-default border border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "bg-gradient-to-r from-primary to-accent text-white shadow-[0_8px_16px_rgba(36,88,198,0.2)]"
+                      } ${scenarioSwitchingId === account.id ? "opacity-70" : ""}`}
+                      onClick={() => void handleSwitchScenarioAccount(account)}
+                      disabled={isActiveScenario || scenarioSwitchingId === account.id}
+                    >
+                      {scenarioSwitchingId === account.id
+                        ? "Загрузка..."
+                        : isActiveScenario
+                          ? "Активен"
+                          : "Переключить"}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-500">
+            Сценарные аккаунты ещё не созданы.
+          </div>
+        )}
+      </div>
+    )
+  }
 
   if (status === "loading") {
     return (
@@ -235,11 +456,9 @@ export default function Header() {
           <div className="mx-auto grid max-w-7xl grid-cols-[1fr_auto_1fr] items-center px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-primary/60 sm:px-6 sm:py-2 sm:text-[11px]">
             <span className="hidden sm:inline">БГИТУ • Афиша кампуса</span>
             <span className="liquid-chip justify-self-center px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] sm:px-3 sm:text-[11px]">
-              Кампус БГИТУ 2026
+              Брянск Кампус 2026
             </span>
-            <span className="hidden justify-self-end sm:inline">
-              События, новости и уведомления
-            </span>
+            <span className="hidden justify-self-end sm:inline">Единое пространство событий</span>
           </div>
         </div>
 
@@ -263,7 +482,38 @@ export default function Header() {
               </span>
             </Link>
 
-            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+              {canUseScenarioSwitcher && (
+                <div className="relative hidden sm:block" ref={scenarioMenuRef}>
+                  <button
+                    type="button"
+                    className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-[13px] font-semibold shadow-[0_8px_16px_rgba(18,39,76,0.08)] transition-all hover:-translate-y-0.5 ${
+                      isScenarioActive
+                        ? "border-sky-200 bg-sky-50 text-sky-800"
+                        : "border-primary/16 bg-white/90 text-primary"
+                    }`}
+                    onClick={() => setScenarioMenuOpen((prev) => !prev)}
+                    aria-expanded={scenarioMenuOpen}
+                    aria-label="Сценарные аккаунты"
+                  >
+                    <i className="fas fa-user-gear text-[12px]" aria-hidden="true" />
+                    <span className="hidden lg:inline">
+                      {currentScenarioLabel ? `Сценарий: ${currentScenarioLabel}` : "Сценарии"}
+                    </span>
+                    <i
+                      className={`fas ${scenarioMenuOpen ? "fa-chevron-up" : "fa-chevron-down"} text-[10px]`}
+                      aria-hidden="true"
+                    />
+                  </button>
+
+                  {scenarioMenuOpen && (
+                    <div className="absolute right-0 top-[calc(100%+0.75rem)] z-[970] w-[360px] rounded-2xl border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(244,249,255,0.98))] p-3 shadow-[0_24px_48px_rgba(13,29,58,0.18)] backdrop-blur-xl">
+                      {renderScenarioAccountsList()}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {session?.user?.impersonatorId && (
                 <>
                   <button
@@ -305,41 +555,25 @@ export default function Header() {
                 <>
                   <Link
                     href="/profile"
-                    className="hidden h-10 max-w-[12rem] items-center gap-2 rounded-xl border border-primary/16 bg-white/90 pl-1.5 pr-3 text-[13px] font-semibold text-primary shadow-[0_8px_16px_rgba(18,39,76,0.08)] transition-all hover:-translate-y-0.5 hover:border-primary/34 xl:inline-flex"
+                    className="hidden rounded-xl border border-primary/16 bg-white px-3 py-2 text-sm font-semibold text-primary transition-all hover:-translate-y-0.5 hover:border-primary/34 md:block"
                     onClick={hardNavigate("/profile")}
                   >
-                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent text-[11px] font-bold text-white">
-                      {session.user?.name?.charAt(0)?.toUpperCase() || "U"}
-                    </span>
-                    <span className="truncate">{session.user?.name || "Профиль"}</span>
+                    {session.user?.name || "Профиль"}
                   </Link>
                   <Link
                     href="/profile"
-                    className="hidden h-10 w-10 items-center justify-center rounded-xl border border-primary/16 bg-white/90 text-sm font-semibold text-primary shadow-[0_8px_16px_rgba(18,39,76,0.08)] sm:inline-flex xl:hidden"
-                    title={session.user?.name || "Профиль"}
+                    className="hidden h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-white shadow-md sm:inline-flex md:hidden"
+                    title="Профиль"
                     onClick={hardNavigate("/profile")}
                   >
                     {session.user?.name?.charAt(0)?.toUpperCase() || "U"}
                   </Link>
                 </>
               ) : (
-                <>
-                  <Link
-                    href="/login"
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-r from-primary to-accent text-white shadow-[0_10px_18px_rgba(36,88,198,0.24)] sm:hidden"
-                    aria-label="Войти"
-                    onClick={hardNavigate("/login")}
-                  >
-                    <i className="fas fa-right-to-bracket text-sm" aria-hidden="true" />
-                  </Link>
-                  <Link
-                    href="/login"
-                    className="btn btn-primary hidden px-4 py-2 text-sm sm:inline-flex"
-                    onClick={hardNavigate("/login")}
-                  >
-                    Войти
-                  </Link>
-                </>
+                <Link href="/login" className="btn btn-primary px-4 py-2 text-sm" onClick={hardNavigate("/login")}>
+                  <i className="fas fa-right-to-bracket text-xs" aria-hidden="true" />
+                  Войти
+                </Link>
               )}
 
               <button
@@ -381,15 +615,13 @@ export default function Header() {
             <div className="rounded-2xl border border-primary/14 bg-white/84 p-1.5">
               {showSearch ? (
                 <SearchInput
-                  placeholder="Поиск мероприятий, новостей и аудиторий..."
+                  placeholder="Поиск мероприятий, аудиторий, тем..."
                   onSearch={setSearchQuery}
                   className="w-full"
                   inputClassName="border-none bg-transparent py-2 text-sm shadow-none focus:ring-0"
                 />
               ) : (
-                <div className="px-2 py-2 text-xs text-primary/55">
-                  Поиск и подборки доступны после входа
-                </div>
+                <div className="px-2 py-2 text-xs text-primary/55">Поиск доступен после входа</div>
               )}
             </div>
           </div>
@@ -470,6 +702,12 @@ export default function Header() {
                   </Link>
                 ))}
               </nav>
+
+              {canUseScenarioSwitcher && (
+                <div className="mt-5 rounded-2xl border border-primary/14 bg-white/75 p-3">
+                  {renderScenarioAccountsList()}
+                </div>
+              )}
 
               {categories.length > 0 && (
                 <div className="mt-5">
