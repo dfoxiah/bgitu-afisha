@@ -18,6 +18,8 @@ export type AdminUser = {
   name: string | null
   email: string
   role: Role
+  isScenarioPersona: boolean
+  scenarioOwnerId: string | null
   department: string | null
   group: string | null
   admissionYear: number | null
@@ -28,6 +30,8 @@ export type AdminUser = {
   createdAt: string
   updatedAt?: string
 }
+
+export type AdminScenarioAccount = AdminUser
 
 export type AdminUserCreateInput = {
   name: string

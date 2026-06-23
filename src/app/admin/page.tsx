@@ -39,8 +39,10 @@ import {
   getAdminLogs,
   getAdminMetrics,
   getAdminNewsTemplates,
+  getAdminScenarioAccounts,
   getAdminStructure,
   getAdminUsers,
+  ensureAdminScenarioAccounts,
   generateAdminNewsDraft,
   importAdminData,
   promoteAdminGroupsAfterSummer,
@@ -63,6 +65,7 @@ import type {
   AdminImportMode,
   AdminImportResult,
   AdminNewsTemplate,
+  AdminScenarioAccount,
   AdminSimulationResult,
   AdminSimulationScenarioId,
   AdminStructureField,
@@ -173,6 +176,14 @@ const roleOptions: Array<{ value: "ALL" | Role; label: string }> = [
   ...ROLE_OPTIONS,
 ]
 
+const SCENARIO_ROLE_ORDER: Record<Role, number> = {
+  STUDENT: 0,
+  TEACHER: 1,
+  MODERATOR: 2,
+  EDITOR: 3,
+  ADMIN: 4,
+}
+
 const categoryOptions = (Object.entries(CategoryDisplayMap) as Array<[EventCategory, string]>).map(
   ([value, label]) => ({ value, label })
 )
@@ -193,8 +204,9 @@ const renderImportResult = (result: AdminImportResult | null) => {
 
 export default function AdminPage() {
   const router = useRouter()
-  const { data: session, status } = useSession()
+  const { data: session, status, update: updateSession } = useSession()
   const canAccess = session?.user?.role === "ADMIN"
+  const isImpersonating = Boolean(session?.user?.impersonatorId)
 
   const [activeTab, setActiveTab] = useState<AdminTab>("metrics")
   const [compactMode, setCompactMode] = useState(false)
@@ -216,6 +228,10 @@ export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
   const [usersVisibleCount, setUsersVisibleCount] = useState(60)
+  const [scenarioAccounts, setScenarioAccounts] = useState<AdminScenarioAccount[]>([])
+  const [scenarioAccountsLoading, setScenarioAccountsLoading] = useState(false)
+  const [scenarioAccountsSyncing, setScenarioAccountsSyncing] = useState(false)
+  const [scenarioSwitchingId, setScenarioSwitchingId] = useState<string | null>(null)
   const [userSearch, setUserSearch] = useState("")
   const [userRole, setUserRole] = useState<"ALL" | Role>("ALL")
   const [newUser, setNewUser] = useState({
@@ -360,6 +376,77 @@ export default function AdminPage() {
     }
   }, [userSearch, userRole])
 
+  const loadScenarioAccounts = useCallback(
+    async (options: { ensureComplete?: boolean; silent?: boolean; suppressErrorToast?: boolean } = {}) => {
+      const { ensureComplete = false, silent = false, suppressErrorToast = false } = options
+
+      try {
+        if (!silent) setScenarioAccountsLoading(true)
+
+        let accounts = await getAdminScenarioAccounts()
+        if (ensureComplete) {
+          const existingRoles = new Set(accounts.map((account) => account.role))
+          const requiresSync = ROLE_OPTIONS.some((option) => !existingRoles.has(option.value))
+
+          if (requiresSync) {
+            setScenarioAccountsSyncing(true)
+            accounts = await ensureAdminScenarioAccounts()
+          }
+        }
+
+        setScenarioAccounts(accounts)
+      } catch (error) {
+        if (suppressErrorToast) return
+        showToast(
+          error instanceof Error ? error.message : "Ошибка загрузки сценарных аккаунтов",
+          "error"
+        )
+      } finally {
+        if (!silent) setScenarioAccountsLoading(false)
+        setScenarioAccountsSyncing(false)
+      }
+    },
+    []
+  )
+
+  const handleSyncScenarioAccounts = useCallback(async () => {
+    try {
+      setScenarioAccountsSyncing(true)
+      const accounts = await ensureAdminScenarioAccounts()
+      setScenarioAccounts(accounts)
+      showToast("Сценарные аккаунты синхронизированы", "success")
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Не удалось синхронизировать сценарные аккаунты",
+        "error"
+      )
+    } finally {
+      setScenarioAccountsSyncing(false)
+    }
+  }, [])
+
+  const handleSwitchScenarioAccount = useCallback(
+    async (account: AdminScenarioAccount) => {
+      try {
+        setScenarioSwitchingId(account.id)
+        await updateSession({
+          impersonation: {
+            action: "start",
+            targetUserId: account.id,
+          },
+        })
+        window.location.href = account.role === "ADMIN" ? "/admin" : "/dashboard"
+      } catch (error) {
+        setScenarioSwitchingId(null)
+        showToast(
+          error instanceof Error ? error.message : "Не удалось переключить сценарный аккаунт",
+          "error"
+        )
+      }
+    },
+    [updateSession]
+  )
+
   const loadStructure = useCallback(async () => {
     try {
       setStructureLoading(true)
@@ -475,6 +562,13 @@ export default function AdminPage() {
   }, [])
 
   const visibleUsers = useMemo(() => users.slice(0, usersVisibleCount), [users, usersVisibleCount])
+  const scenarioAccountsSorted = useMemo(
+    () =>
+      [...scenarioAccounts].sort(
+        (left, right) => SCENARIO_ROLE_ORDER[left.role] - SCENARIO_ROLE_ORDER[right.role]
+      ),
+    [scenarioAccounts]
+  )
   const visibleEvents = useMemo(() => events.slice(0, eventsVisibleCount), [events, eventsVisibleCount])
   const visibleLogs = useMemo(() => logs.slice(0, logsVisibleCount), [logs, logsVisibleCount])
   const loadMetrics = useCallback(async (options: LoadOptions = {}) => {
@@ -508,7 +602,11 @@ export default function AdminPage() {
     if (!canAccess) return
     if (activeTab === "metrics") void loadMetrics()
     if (activeTab === "users") {
-      void Promise.all([loadUsers(), loadStructure()])
+      void Promise.all([
+        loadUsers(),
+        loadStructure(),
+        loadScenarioAccounts({ ensureComplete: true, suppressErrorToast: true }),
+      ])
     }
     if (activeTab === "events") void loadEvents()
     if (activeTab === "templates") {
@@ -518,7 +616,7 @@ export default function AdminPage() {
     if (activeTab === "import") void loadImportHistory()
     if (activeTab === "logs") void loadLogs()
     if (activeTab === "diagnostics") void loadDiagnostics()
-  }, [activeTab, canAccess, loadMetrics, loadUsers, loadStructure, loadEvents, loadNewsTemplates, loadImportHistory, loadLogs, loadDiagnostics])
+  }, [activeTab, canAccess, loadMetrics, loadUsers, loadScenarioAccounts, loadStructure, loadEvents, loadNewsTemplates, loadImportHistory, loadLogs, loadDiagnostics])
 
   useEffect(() => {
     if (!editingEvent || editingEvent.responsibleId || responsibleOptions.length === 0) return
@@ -617,7 +715,11 @@ export default function AdminPage() {
         acceptPrivacy: false,
         acceptTerms: false,
       })
-      await Promise.all([loadUsers(), loadStructure()])
+      await Promise.all([
+        loadUsers(),
+        loadStructure(),
+        loadScenarioAccounts({ silent: true, suppressErrorToast: true }),
+      ])
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Ошибка создания пользователя", "error")
     }
@@ -641,7 +743,11 @@ export default function AdminPage() {
       showToast("Пользователь обновлен", "success")
       setEditingUser(null)
       setEditingPassword("")
-      await Promise.all([loadUsers(), loadStructure()])
+      await Promise.all([
+        loadUsers(),
+        loadStructure(),
+        loadScenarioAccounts({ silent: true, suppressErrorToast: true }),
+      ])
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Ошибка обновления пользователя", "error")
     }
@@ -652,7 +758,11 @@ export default function AdminPage() {
     try {
       await deleteAdminUser(id)
       showToast("Пользователь удален", "success")
-      await Promise.all([loadUsers(), loadStructure()])
+      await Promise.all([
+        loadUsers(),
+        loadStructure(),
+        loadScenarioAccounts({ silent: true, suppressErrorToast: true }),
+      ])
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Ошибка удаления пользователя", "error")
     }
@@ -974,7 +1084,13 @@ export default function AdminPage() {
     try {
       setResult(await importAdminData(type, mode, file))
       showToast("Импорт завершен", "success")
-      if (type === "users") await Promise.all([loadUsers(), loadStructure()])
+      if (type === "users") {
+        await Promise.all([
+          loadUsers(),
+          loadStructure(),
+          loadScenarioAccounts({ silent: true, suppressErrorToast: true }),
+        ])
+      }
       if (type === "events" || type === "news") await loadEvents()
       await loadImportHistory()
     } catch (error) {
@@ -1156,6 +1272,11 @@ export default function AdminPage() {
                             Активность: {new Date(user.updatedAt).toLocaleDateString("ru-RU")}
                           </div>
                         )}
+                        {user.isScenarioPersona && (
+                          <div className="mt-1 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                            Сценарный аккаунт
+                          </div>
+                        )}
                       </td>
                       <td className="text-slate-700">{user.email}</td>
                       <td>
@@ -1185,6 +1306,92 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="space-y-4">
+            <div className="admin-panel p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold">Сценарные аккаунты</h3>
+                  <p className="text-xs text-gray-500">
+                    Быстрое переключение по ролям для проверки пользовательских сценариев.
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  className="shrink-0"
+                  loading={scenarioAccountsSyncing}
+                  onClick={() => void handleSyncScenarioAccounts()}
+                >
+                  Синхронизировать
+                </Button>
+              </div>
+
+              {isImpersonating && session?.user?.isScenarioPersona && (
+                <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+                  Активен сценарий: {toRoleLabel(session.user.role)} · {session.user.email}
+                </div>
+              )}
+
+              {scenarioAccountsLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <div
+                      key={`scenario-account-skeleton-${index}`}
+                      className="rounded-xl border border-slate-200 p-3 animate-pulse"
+                    >
+                      <div className="h-3 w-28 rounded bg-slate-200" />
+                      <div className="mt-2 h-3 w-40 rounded bg-slate-200" />
+                    </div>
+                  ))}
+                </div>
+              ) : scenarioAccountsSorted.length > 0 ? (
+                <div className="space-y-2">
+                  {scenarioAccountsSorted.map((account) => {
+                    const isActiveScenario =
+                      session?.user?.isScenarioPersona && session.user.id === account.id
+
+                    return (
+                      <div
+                        key={account.id}
+                        className="rounded-2xl border border-slate-200 bg-white/80 p-3"
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="font-semibold text-slate-900">
+                                {toRoleLabel(account.role)}
+                              </div>
+                              <span className="rounded-full border border-primary/14 bg-primary/5 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                                {account.name || "Без имени"}
+                              </span>
+                            </div>
+                            <div className="mt-1 truncate text-xs text-slate-500">
+                              {account.email}
+                            </div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              {[account.department, account.group, account.admissionYear ? String(account.admissionYear) : null]
+                                .filter(Boolean)
+                                .join(" · ") || "Профиль подготовлен для проверки роли"}
+                            </div>
+                          </div>
+                          <Button
+                            variant={isActiveScenario ? "success" : "primary"}
+                            className="sm:min-w-[180px]"
+                            disabled={isActiveScenario}
+                            loading={scenarioSwitchingId === account.id}
+                            onClick={() => void handleSwitchScenarioAccount(account)}
+                          >
+                            {isActiveScenario ? "Активен сейчас" : "Переключиться"}
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-500">
+                  Сценарные аккаунты ещё не созданы. Нажмите «Синхронизировать».
+                </div>
+              )}
+            </div>
             <div className="admin-panel p-4 space-y-2">
               <h3 className="font-semibold">Создать пользователя</h3>
               <input className="w-full px-3 py-2 border rounded" placeholder="Имя" value={newUser.name} onChange={(event) => setNewUser((previous) => ({ ...previous, name: event.target.value }))} />

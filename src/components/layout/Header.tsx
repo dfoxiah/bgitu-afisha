@@ -21,6 +21,7 @@ import NotificationBell from "@/components/ui/NotificationBell"
 import SearchInput from "@/components/ui/SearchInput"
 import { useAppContext } from "@/contexts/AppContext"
 import { isContentManagerRole } from "@/lib/roles"
+import { showToast } from "@/lib/toast"
 
 type HeaderMenuItem = {
   href: string
@@ -44,7 +45,7 @@ const PUBLIC_NAV: HeaderMenuItem[] = [
 ]
 
 export default function Header() {
-  const { data: session, status } = useSession()
+  const { data: session, status, update: updateSession } = useSession()
   const router = useRouter()
   const pathname = usePathname()
   const { notifications, setSearchQuery, categories, selectedCategory, setSelectedCategory } =
@@ -54,6 +55,7 @@ export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [isHeaderHidden, setIsHeaderHidden] = useState(false)
   const [isHeaderHovered, setIsHeaderHovered] = useState(false)
+  const [stoppingScenario, setStoppingScenario] = useState(false)
   const lastScrollYRef = useRef(0)
 
   const showSearch =
@@ -103,7 +105,8 @@ export default function Header() {
     return items
   }, [desktopNavItems, session])
 
-  const isRouteActive = (href: string) => pathname === href || (href !== "/" && pathname.startsWith(href))
+  const isRouteActive = (href: string) =>
+    pathname === href || (href !== "/" && pathname.startsWith(href))
 
   const hardNavigate = (href: string) => (event: React.MouseEvent) => {
     if (!forceHardNavigate) return
@@ -116,6 +119,24 @@ export default function Header() {
     if (!forceHardNavigate) return
     event.preventDefault()
     window.location.href = href
+  }
+
+  const handleStopScenario = async () => {
+    try {
+      setStoppingScenario(true)
+      await updateSession({
+        impersonation: {
+          action: "stop",
+        },
+      })
+      window.location.href = "/admin"
+    } catch (error) {
+      setStoppingScenario(false)
+      showToast(
+        error instanceof Error ? error.message : "Не удалось вернуться в основной аккаунт",
+        "error"
+      )
+    }
   }
 
   const handleCategorySelect = (category: string) => {
@@ -214,9 +235,11 @@ export default function Header() {
           <div className="mx-auto grid max-w-7xl grid-cols-[1fr_auto_1fr] items-center px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-primary/60 sm:px-6 sm:py-2 sm:text-[11px]">
             <span className="hidden sm:inline">БГИТУ • Афиша кампуса</span>
             <span className="liquid-chip justify-self-center px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] sm:px-3 sm:text-[11px]">
-              Брянск Кампус 2026
+              Кампус БГИТУ 2026
             </span>
-            <span className="hidden justify-self-end sm:inline">Единое пространство событий</span>
+            <span className="hidden justify-self-end sm:inline">
+              События, новости и уведомления
+            </span>
           </div>
         </div>
 
@@ -240,32 +263,83 @@ export default function Header() {
               </span>
             </Link>
 
-            <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
+              {session?.user?.impersonatorId && (
+                <>
+                  <button
+                    type="button"
+                    className="hidden h-10 items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 text-[13px] font-semibold text-sky-800 shadow-[0_8px_16px_rgba(14,116,144,0.12)] transition-all hover:-translate-y-0.5 sm:inline-flex"
+                    onClick={() => void handleStopScenario()}
+                    disabled={stoppingScenario}
+                    title="Вернуться в основной аккаунт администратора"
+                  >
+                    <i
+                      className={`fas ${
+                        stoppingScenario ? "fa-spinner fa-spin" : "fa-user-shield"
+                      } text-[12px]`}
+                      aria-hidden="true"
+                    />
+                    <span>Вернуться к админу</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-sky-200 bg-sky-50 text-sky-800 shadow-[0_8px_16px_rgba(14,116,144,0.12)] sm:hidden"
+                    onClick={() => void handleStopScenario()}
+                    disabled={stoppingScenario}
+                    title="Вернуться к админу"
+                    aria-label="Вернуться к админу"
+                  >
+                    <i
+                      className={`fas ${
+                        stoppingScenario ? "fa-spinner fa-spin" : "fa-user-shield"
+                      } text-sm`}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </>
+              )}
+
               <NotificationBell />
 
               {session ? (
                 <>
                   <Link
                     href="/profile"
-                    className="hidden rounded-xl border border-primary/16 bg-white px-3 py-2 text-sm font-semibold text-primary transition-all hover:-translate-y-0.5 hover:border-primary/34 md:block"
+                    className="hidden h-10 max-w-[12rem] items-center gap-2 rounded-xl border border-primary/16 bg-white/90 pl-1.5 pr-3 text-[13px] font-semibold text-primary shadow-[0_8px_16px_rgba(18,39,76,0.08)] transition-all hover:-translate-y-0.5 hover:border-primary/34 xl:inline-flex"
                     onClick={hardNavigate("/profile")}
                   >
-                    {session.user?.name || "Профиль"}
+                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent text-[11px] font-bold text-white">
+                      {session.user?.name?.charAt(0)?.toUpperCase() || "U"}
+                    </span>
+                    <span className="truncate">{session.user?.name || "Профиль"}</span>
                   </Link>
                   <Link
                     href="/profile"
-                    className="hidden h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-white shadow-md sm:inline-flex md:hidden"
-                    title="Профиль"
+                    className="hidden h-10 w-10 items-center justify-center rounded-xl border border-primary/16 bg-white/90 text-sm font-semibold text-primary shadow-[0_8px_16px_rgba(18,39,76,0.08)] sm:inline-flex xl:hidden"
+                    title={session.user?.name || "Профиль"}
                     onClick={hardNavigate("/profile")}
                   >
                     {session.user?.name?.charAt(0)?.toUpperCase() || "U"}
                   </Link>
                 </>
               ) : (
-                <Link href="/login" className="btn btn-primary px-4 py-2 text-sm" onClick={hardNavigate("/login")}>
-                  <i className="fas fa-right-to-bracket text-xs" aria-hidden="true" />
-                  Войти
-                </Link>
+                <>
+                  <Link
+                    href="/login"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-r from-primary to-accent text-white shadow-[0_10px_18px_rgba(36,88,198,0.24)] sm:hidden"
+                    aria-label="Войти"
+                    onClick={hardNavigate("/login")}
+                  >
+                    <i className="fas fa-right-to-bracket text-sm" aria-hidden="true" />
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="btn btn-primary hidden px-4 py-2 text-sm sm:inline-flex"
+                    onClick={hardNavigate("/login")}
+                  >
+                    Войти
+                  </Link>
+                </>
               )}
 
               <button
@@ -307,13 +381,15 @@ export default function Header() {
             <div className="rounded-2xl border border-primary/14 bg-white/84 p-1.5">
               {showSearch ? (
                 <SearchInput
-                  placeholder="Поиск мероприятий, аудиторий, тем..."
+                  placeholder="Поиск мероприятий, новостей и аудиторий..."
                   onSearch={setSearchQuery}
                   className="w-full"
                   inputClassName="border-none bg-transparent py-2 text-sm shadow-none focus:ring-0"
                 />
               ) : (
-                <div className="px-2 py-2 text-xs text-primary/55">Поиск доступен после входа</div>
+                <div className="px-2 py-2 text-xs text-primary/55">
+                  Поиск и подборки доступны после входа
+                </div>
               )}
             </div>
           </div>
@@ -322,15 +398,40 @@ export default function Header() {
 
       {menuOpen && (
         <div className="fixed inset-0 z-[950] lg:hidden">
-          <div className="absolute inset-0 bg-slate-950/48 backdrop-blur-sm" onClick={() => setMenuOpen(false)} aria-hidden="true" />
+          <div
+            className="absolute inset-0 bg-slate-950/48 backdrop-blur-sm"
+            onClick={() => setMenuOpen(false)}
+            aria-hidden="true"
+          />
 
           <aside className="absolute right-0 top-0 flex h-full w-full max-w-sm flex-col overflow-hidden border-l border-primary/16 bg-[linear-gradient(180deg,rgba(250,252,255,0.98),rgba(241,247,255,0.98))] shadow-[-18px_0_42px_rgba(13,29,58,0.22)]">
             <div className="border-b border-primary/14 px-5 pb-4 pt-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary/56">Навигация</p>
-              <p className="mt-2 text-lg font-semibold text-primary">{session?.user?.name || "БГИТУ Афиша"}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary/56">
+                Навигация
+              </p>
+              <p className="mt-2 text-lg font-semibold text-primary">
+                {session?.user?.name || "БГИТУ Афиша"}
+              </p>
             </div>
 
             <div className="px-4 pt-4">
+              {session?.user?.impersonatorId && (
+                <button
+                  type="button"
+                  className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-800"
+                  onClick={() => void handleStopScenario()}
+                  disabled={stoppingScenario}
+                >
+                  <i
+                    className={`fas ${
+                      stoppingScenario ? "fa-spinner fa-spin" : "fa-user-shield"
+                    } text-[12px]`}
+                    aria-hidden="true"
+                  />
+                  Вернуться к админу
+                </button>
+              )}
+
               {showSearch && (
                 <SearchInput
                   placeholder="Поиск..."
@@ -372,7 +473,9 @@ export default function Header() {
 
               {categories.length > 0 && (
                 <div className="mt-5">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary/56">Категории</p>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary/56">
+                    Категории
+                  </p>
                   <div className="space-y-2">
                     {categories.map((category) => (
                       <button
@@ -386,7 +489,11 @@ export default function Header() {
                         onClick={() => handleCategorySelect(category)}
                       >
                         <span className="line-clamp-1">{category}</span>
-                        <i className={`fas ${selectedCategory === category ? "fa-check" : "fa-chevron-right"} text-[10px]`} />
+                        <i
+                          className={`fas ${
+                            selectedCategory === category ? "fa-check" : "fa-chevron-right"
+                          } text-[10px]`}
+                        />
                       </button>
                     ))}
                   </div>

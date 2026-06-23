@@ -43,6 +43,7 @@ const nextAuthUrl = process.env.NEXTAUTH_URL ?? "";
 if (isProduction && !nextAuthUrl) {
   throw new Error("NEXTAUTH_URL is required in production.");
 }
+const useSecureAuthCookies = /^https:\/\//i.test(nextAuthUrl)
 const yandexClientId = process.env.YANDEX_CLIENT_ID ?? "";
 const yandexClientSecret = process.env.YANDEX_CLIENT_SECRET ?? "";
 const vkClientId = process.env.VK_CLIENT_ID ?? "";
@@ -112,6 +113,8 @@ type SessionUserRecord = Pick<
   | "name"
   | "image"
   | "role"
+  | "isScenarioPersona"
+  | "scenarioOwnerId"
   | "department"
   | "group"
   | "admissionYear"
@@ -135,6 +138,134 @@ type SessionUserRecord = Pick<
   | "termsConsentVersion"
   | "profileCompletedAt"
 >
+
+type ImpersonationUpdatePayload =
+  | { action: "start"; targetUserId: string }
+  | { action: "stop" }
+
+const readImpersonationUpdatePayload = (value: unknown): ImpersonationUpdatePayload | null => {
+  if (!value || typeof value !== "object") return null
+
+  const payload = value as Record<string, unknown>
+  const actionValue = payload.action
+  if (actionValue === "stop") {
+    return { action: "stop" }
+  }
+
+  const targetUserIdValue = payload.targetUserId
+  const targetUserId = typeof targetUserIdValue === "string" ? targetUserIdValue.trim() : ""
+
+  if (actionValue === "start" && targetUserId) {
+    return { action: "start", targetUserId }
+  }
+
+  return null
+}
+
+const selectSessionUserRecord = {
+  id: true,
+  email: true,
+  name: true,
+  image: true,
+  role: true,
+  isScenarioPersona: true,
+  scenarioOwnerId: true,
+  department: true,
+  group: true,
+  admissionYear: true,
+  groupChangeCount: true,
+  bio: true,
+  notifyNewEvents: true,
+  notifyChanges: true,
+  notifyNews: true,
+  notifyInApp: true,
+  notifyEmail: true,
+  notifyVk: true,
+  notifyTelegram: true,
+  notificationCategories: true,
+  vkUserId: true,
+  telegramChatId: true,
+  telegramUsername: true,
+  yandexEmail: true,
+  privacyConsentAt: true,
+  privacyConsentVersion: true,
+  termsConsentAt: true,
+  termsConsentVersion: true,
+  profileCompletedAt: true,
+} as const
+
+const applyUserRecordToToken = (
+  token: Record<string, unknown>,
+  user: Pick<
+    SessionUserRecord,
+    | "id"
+    | "email"
+    | "name"
+    | "image"
+    | "role"
+    | "isScenarioPersona"
+    | "scenarioOwnerId"
+    | "department"
+    | "group"
+    | "admissionYear"
+    | "groupChangeCount"
+    | "bio"
+    | "notifyNewEvents"
+    | "notifyChanges"
+    | "notifyNews"
+    | "notifyInApp"
+    | "notifyEmail"
+    | "notifyVk"
+    | "notifyTelegram"
+    | "notificationCategories"
+    | "vkUserId"
+    | "telegramChatId"
+    | "telegramUsername"
+    | "yandexEmail"
+    | "privacyConsentAt"
+    | "privacyConsentVersion"
+    | "termsConsentAt"
+    | "termsConsentVersion"
+    | "profileCompletedAt"
+  >
+) => {
+  token.id = user.id
+  token.email = user.email
+  token.name = user.name
+  token.picture = user.image
+  token.role = user.role
+  token.isScenarioPersona = user.isScenarioPersona
+  token.scenarioOwnerId = user.scenarioOwnerId
+  token.department = user.department
+  token.group = user.group
+  token.admissionYear = user.admissionYear
+  token.groupChangeCount = user.groupChangeCount ?? 0
+  token.bio = user.bio
+  token.notifyNewEvents = user.notifyNewEvents ?? true
+  token.notifyChanges = user.notifyChanges ?? true
+  token.notifyNews = user.notifyNews ?? false
+  token.notifyInApp = user.notifyInApp ?? true
+  token.notifyEmail = user.notifyEmail ?? false
+  token.notifyVk = user.notifyVk ?? false
+  token.notifyTelegram = user.notifyTelegram ?? false
+  token.notificationCategories = user.notificationCategories ?? []
+  token.vkUserId = user.vkUserId ?? null
+  token.telegramChatId = user.telegramChatId ?? null
+  token.telegramUsername = user.telegramUsername ?? null
+  token.yandexEmail = user.yandexEmail ?? null
+  token.privacyConsentAt = user.privacyConsentAt ? user.privacyConsentAt.toISOString() : null
+  token.privacyConsentVersion = user.privacyConsentVersion ?? null
+  token.termsConsentAt = user.termsConsentAt ? user.termsConsentAt.toISOString() : null
+  token.termsConsentVersion = user.termsConsentVersion ?? null
+  token.profileCompletedAt = user.profileCompletedAt ? user.profileCompletedAt.toISOString() : null
+}
+
+const clearImpersonationTokenState = (token: Record<string, unknown>) => {
+  token.impersonatorId = null
+  token.impersonatorEmail = null
+  token.impersonatorName = null
+  token.impersonatorRole = null
+}
 
 const extractVkUserId = (profile: unknown, account?: OAuthAccountLike) => {
   const vkProfile = getVkProfileUser(profile)
@@ -373,6 +504,12 @@ declare module "next-auth" {
       name?: string | null;
       role: Role;
       image?: string | null;
+      isScenarioPersona?: boolean;
+      scenarioOwnerId?: string | null;
+      impersonatorId?: string | null;
+      impersonatorEmail?: string | null;
+      impersonatorName?: string | null;
+      impersonatorRole?: Role | null;
       department?: string | null;
       group?: string | null;
       admissionYear?: number | null;
@@ -400,6 +537,8 @@ declare module "next-auth" {
 
   interface User {
     role: Role;
+    isScenarioPersona?: boolean;
+    scenarioOwnerId?: string | null;
     department?: string | null;
     group?: string | null;
     admissionYear?: number | null;
@@ -431,6 +570,12 @@ declare module "next-auth/jwt" {
     email: string;
     role: Role;
     name?: string | null;
+    isScenarioPersona?: boolean;
+    scenarioOwnerId?: string | null;
+    impersonatorId?: string | null;
+    impersonatorEmail?: string | null;
+    impersonatorName?: string | null;
+    impersonatorRole?: Role | null;
     department?: string | null;
     group?: string | null;
     admissionYear?: number | null;
@@ -497,6 +642,8 @@ export const authOptions: NextAuthOptions = {
             email: user.email,
             name: user.name,
             role: user.role,
+            isScenarioPersona: user.isScenarioPersona ?? false,
+            scenarioOwnerId: user.scenarioOwnerId ?? null,
             image: user.image,
             department: user.department,
             group: user.group,
@@ -553,6 +700,8 @@ export const authOptions: NextAuthOptions = {
             email: user.email,
             name: user.name,
             role: user.role,
+            isScenarioPersona: user.isScenarioPersona ?? false,
+            scenarioOwnerId: user.scenarioOwnerId ?? null,
             image: user.image,
             department: user.department,
             group: user.group,
@@ -631,6 +780,8 @@ export const authOptions: NextAuthOptions = {
             email: user.email,
             name: user.name,
             role: user.role,
+            isScenarioPersona: user.isScenarioPersona ?? false,
+            scenarioOwnerId: user.scenarioOwnerId ?? null,
             image: user.image,
             department: user.department,
             group: user.group,
@@ -723,33 +874,38 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, account, profile, trigger, session }) {
       // При первом входе добавляем данные пользователя в токен.
       if (user) {
-        token.id = user.id;
-        token.email = user.email ?? "";
-        token.role = user.role ?? Role.STUDENT;
-        token.department = user.department;
-        token.group = user.group;
-        token.admissionYear = user.admissionYear;
-        token.name = user.name;
-        token.picture = user.image;
-        token.groupChangeCount = user.groupChangeCount ?? 0;
-        token.bio = user.bio;
-        token.notifyNewEvents = user.notifyNewEvents ?? true;
-        token.notifyChanges = user.notifyChanges ?? true;
-        token.notifyNews = user.notifyNews ?? false;
-        token.notifyInApp = user.notifyInApp ?? true;
-        token.notifyEmail = user.notifyEmail ?? false;
-        token.notifyVk = user.notifyVk ?? false;
-        token.notifyTelegram = user.notifyTelegram ?? false;
-        token.vkUserId = user.vkUserId ?? null;
-        token.telegramChatId = user.telegramChatId ?? null;
-        token.telegramUsername = user.telegramUsername ?? null;
-        token.yandexEmail = user.yandexEmail ?? null;
-        token.privacyConsentAt = user.privacyConsentAt ? user.privacyConsentAt.toISOString() : null;
-        token.privacyConsentVersion = user.privacyConsentVersion ?? null;
-        token.termsConsentAt = user.termsConsentAt ? user.termsConsentAt.toISOString() : null;
-        token.termsConsentVersion = user.termsConsentVersion ?? null;
-        token.profileCompletedAt = user.profileCompletedAt ? user.profileCompletedAt.toISOString() : null;
-        token.notificationCategories = user.notificationCategories ?? [];
+        applyUserRecordToToken(token, {
+          id: user.id,
+          email: user.email ?? "",
+          name: user.name ?? null,
+          image: user.image ?? null,
+          role: user.role ?? Role.STUDENT,
+          isScenarioPersona: user.isScenarioPersona ?? false,
+          scenarioOwnerId: user.scenarioOwnerId ?? null,
+          department: user.department ?? null,
+          group: user.group ?? null,
+          admissionYear: user.admissionYear ?? null,
+          groupChangeCount: user.groupChangeCount ?? 0,
+          bio: user.bio ?? null,
+          notifyNewEvents: user.notifyNewEvents ?? true,
+          notifyChanges: user.notifyChanges ?? true,
+          notifyNews: user.notifyNews ?? false,
+          notifyInApp: user.notifyInApp ?? true,
+          notifyEmail: user.notifyEmail ?? false,
+          notifyVk: user.notifyVk ?? false,
+          notifyTelegram: user.notifyTelegram ?? false,
+          notificationCategories: user.notificationCategories ?? [],
+          vkUserId: user.vkUserId ?? null,
+          telegramChatId: user.telegramChatId ?? null,
+          telegramUsername: user.telegramUsername ?? null,
+          yandexEmail: user.yandexEmail ?? null,
+          privacyConsentAt: user.privacyConsentAt ?? null,
+          privacyConsentVersion: user.privacyConsentVersion ?? null,
+          termsConsentAt: user.termsConsentAt ?? null,
+          termsConsentVersion: user.termsConsentVersion ?? null,
+          profileCompletedAt: user.profileCompletedAt ?? null,
+        })
+        clearImpersonationTokenState(token)
       }
 
       if (account?.provider === "vk") {
@@ -761,38 +917,111 @@ export const authOptions: NextAuthOptions = {
       }
 
       // При client-side update() синхронизируем измененные поля с токеном.
-      if (trigger === "update" && session?.user) {
-        token.name = session.user.name;
-        token.picture = session.user.image;
-        token.department = session.user.department;
-        token.group = session.user.group;
-        token.admissionYear = session.user.admissionYear;
-        token.groupChangeCount = session.user.groupChangeCount ?? token.groupChangeCount ?? 0;
-        token.bio = session.user.bio;
-        token.notifyNewEvents = session.user.notifyNewEvents ?? token.notifyNewEvents ?? true;
-        token.notifyChanges = session.user.notifyChanges ?? token.notifyChanges ?? true;
-        token.notifyNews = session.user.notifyNews ?? token.notifyNews ?? false;
-        token.notifyInApp = session.user.notifyInApp ?? token.notifyInApp ?? true;
-        token.notifyEmail = session.user.notifyEmail ?? token.notifyEmail ?? false;
-        token.notifyVk = session.user.notifyVk ?? token.notifyVk ?? false;
-        token.notifyTelegram = session.user.notifyTelegram ?? token.notifyTelegram ?? false;
-        token.vkUserId = session.user.vkUserId ?? token.vkUserId ?? null;
-        token.telegramChatId = session.user.telegramChatId ?? token.telegramChatId ?? null;
-        token.telegramUsername = session.user.telegramUsername ?? token.telegramUsername ?? null;
-        token.yandexEmail = session.user.yandexEmail ?? token.yandexEmail ?? null;
-        token.privacyConsentAt = session.user.privacyConsentAt
-          ? session.user.privacyConsentAt.toISOString()
-          : token.privacyConsentAt ?? null;
-        token.privacyConsentVersion =
-          session.user.privacyConsentVersion ?? token.privacyConsentVersion ?? null;
-        token.termsConsentAt = session.user.termsConsentAt
-          ? session.user.termsConsentAt.toISOString()
-          : token.termsConsentAt ?? null;
-        token.termsConsentVersion = session.user.termsConsentVersion ?? token.termsConsentVersion ?? null;
-        token.profileCompletedAt = session.user.profileCompletedAt
-          ? session.user.profileCompletedAt.toISOString()
-          : token.profileCompletedAt ?? null;
-        token.notificationCategories = session.user.notificationCategories ?? token.notificationCategories ?? [];
+      if (trigger === "update") {
+        const impersonation = readImpersonationUpdatePayload(
+          (session as (typeof session & { impersonation?: unknown }) | undefined)?.impersonation
+        )
+
+        if (impersonation) {
+          const actingAdminId =
+            typeof token.impersonatorId === "string" && token.impersonatorId
+              ? token.impersonatorId
+              : token.role === Role.ADMIN && typeof token.id === "string"
+                ? token.id
+                : null
+
+          if (actingAdminId) {
+            const adminUser = await prismaUser.findUnique<SessionUserRecord>({
+              where: { id: actingAdminId },
+              select: selectSessionUserRecord,
+            })
+
+            if (adminUser?.role === Role.ADMIN) {
+              if (impersonation.action === "start") {
+                const targetUser = await prisma.user.findFirst({
+                  where: {
+                    id: impersonation.targetUserId,
+                    isScenarioPersona: true,
+                    scenarioOwnerId: actingAdminId,
+                  },
+                  select: selectSessionUserRecord,
+                })
+
+                if (targetUser) {
+                  token.impersonatorId = adminUser.id
+                  token.impersonatorEmail = adminUser.email
+                  token.impersonatorName = adminUser.name
+                  token.impersonatorRole = adminUser.role
+                  applyUserRecordToToken(token, targetUser)
+
+                  await logAuditEvent({
+                    actorId: adminUser.id,
+                    action: "ADMIN_SCENARIO_SWITCH_START",
+                    entityType: "User",
+                    entityId: targetUser.id,
+                    metadata: {
+                      targetRole: targetUser.role,
+                      targetEmail: targetUser.email,
+                    },
+                  })
+                }
+              }
+
+              if (impersonation.action === "stop" && typeof token.impersonatorId === "string") {
+                applyUserRecordToToken(token, adminUser)
+                clearImpersonationTokenState(token)
+
+                await logAuditEvent({
+                  actorId: adminUser.id,
+                  action: "ADMIN_SCENARIO_SWITCH_STOP",
+                  entityType: "User",
+                  entityId: adminUser.id,
+                  metadata: {
+                    restoredRole: adminUser.role,
+                  },
+                })
+              }
+            }
+          }
+
+          return token
+        }
+
+        if (session?.user) {
+          token.name = session.user.name;
+          token.picture = session.user.image;
+          token.isScenarioPersona = session.user.isScenarioPersona ?? token.isScenarioPersona ?? false;
+          token.scenarioOwnerId = session.user.scenarioOwnerId ?? token.scenarioOwnerId ?? null;
+          token.department = session.user.department;
+          token.group = session.user.group;
+          token.admissionYear = session.user.admissionYear;
+          token.groupChangeCount = session.user.groupChangeCount ?? token.groupChangeCount ?? 0;
+          token.bio = session.user.bio;
+          token.notifyNewEvents = session.user.notifyNewEvents ?? token.notifyNewEvents ?? true;
+          token.notifyChanges = session.user.notifyChanges ?? token.notifyChanges ?? true;
+          token.notifyNews = session.user.notifyNews ?? token.notifyNews ?? false;
+          token.notifyInApp = session.user.notifyInApp ?? token.notifyInApp ?? true;
+          token.notifyEmail = session.user.notifyEmail ?? token.notifyEmail ?? false;
+          token.notifyVk = session.user.notifyVk ?? token.notifyVk ?? false;
+          token.notifyTelegram = session.user.notifyTelegram ?? token.notifyTelegram ?? false;
+          token.vkUserId = session.user.vkUserId ?? token.vkUserId ?? null;
+          token.telegramChatId = session.user.telegramChatId ?? token.telegramChatId ?? null;
+          token.telegramUsername = session.user.telegramUsername ?? token.telegramUsername ?? null;
+          token.yandexEmail = session.user.yandexEmail ?? token.yandexEmail ?? null;
+          token.privacyConsentAt = session.user.privacyConsentAt
+            ? session.user.privacyConsentAt.toISOString()
+            : token.privacyConsentAt ?? null;
+          token.privacyConsentVersion =
+            session.user.privacyConsentVersion ?? token.privacyConsentVersion ?? null;
+          token.termsConsentAt = session.user.termsConsentAt
+            ? session.user.termsConsentAt.toISOString()
+            : token.termsConsentAt ?? null;
+          token.termsConsentVersion = session.user.termsConsentVersion ?? token.termsConsentVersion ?? null;
+          token.profileCompletedAt = session.user.profileCompletedAt
+            ? session.user.profileCompletedAt.toISOString()
+            : token.profileCompletedAt ?? null;
+          token.notificationCategories = session.user.notificationCategories ?? token.notificationCategories ?? [];
+        }
       }
 
       return token;
@@ -805,68 +1034,14 @@ export const authOptions: NextAuthOptions = {
       if (tokenId || tokenEmail) {
         const existingUser = await prismaUser.findUnique<SessionUserRecord>({
           where: tokenId ? { id: tokenId } : { email: tokenEmail! },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            image: true,
-            role: true,
-            department: true,
-            group: true,
-            admissionYear: true,
-            groupChangeCount: true,
-            bio: true,
-            notifyNewEvents: true,
-            notifyChanges: true,
-            notifyNews: true,
-            notifyInApp: true,
-            notifyEmail: true,
-            notifyVk: true,
-            notifyTelegram: true,
-            notificationCategories: true,
-            vkUserId: true,
-            telegramChatId: true,
-            telegramUsername: true,
-            yandexEmail: true,
-            privacyConsentAt: true,
-            privacyConsentVersion: true,
-            termsConsentAt: true,
-            termsConsentVersion: true,
-            profileCompletedAt: true,
-          },
+          select: selectSessionUserRecord,
         });
 
         if (!existingUser) {
           return null as unknown as typeof session;
         }
 
-        token.id = existingUser.id
-        token.email = existingUser.email
-        token.name = existingUser.name
-        token.picture = existingUser.image
-        token.role = existingUser.role
-        token.department = existingUser.department
-        token.group = existingUser.group
-        token.admissionYear = existingUser.admissionYear
-        token.groupChangeCount = existingUser.groupChangeCount
-        token.bio = existingUser.bio
-        token.notifyNewEvents = existingUser.notifyNewEvents
-        token.notifyChanges = existingUser.notifyChanges
-        token.notifyNews = existingUser.notifyNews
-        token.notifyInApp = existingUser.notifyInApp
-        token.notifyEmail = existingUser.notifyEmail
-        token.notifyVk = existingUser.notifyVk
-        token.notifyTelegram = existingUser.notifyTelegram
-        token.notificationCategories = existingUser.notificationCategories
-        token.vkUserId = existingUser.vkUserId
-        token.telegramChatId = existingUser.telegramChatId
-        token.telegramUsername = existingUser.telegramUsername
-        token.yandexEmail = existingUser.yandexEmail
-        token.privacyConsentAt = existingUser.privacyConsentAt?.toISOString() ?? null
-        token.privacyConsentVersion = existingUser.privacyConsentVersion
-        token.termsConsentAt = existingUser.termsConsentAt?.toISOString() ?? null
-        token.termsConsentVersion = existingUser.termsConsentVersion
-        token.profileCompletedAt = existingUser.profileCompletedAt?.toISOString() ?? null
+        applyUserRecordToToken(token, existingUser)
       } else {
         return null as unknown as typeof session;
       }
@@ -879,6 +1054,18 @@ export const authOptions: NextAuthOptions = {
           session.user.email = token.email;
         }
         session.user.role = (token.role as Role) ?? Role.STUDENT;
+        session.user.isScenarioPersona =
+          typeof token.isScenarioPersona === "boolean" ? token.isScenarioPersona : false;
+        session.user.scenarioOwnerId =
+          typeof token.scenarioOwnerId === "string" ? token.scenarioOwnerId : null;
+        session.user.impersonatorId =
+          typeof token.impersonatorId === "string" ? token.impersonatorId : null;
+        session.user.impersonatorEmail =
+          typeof token.impersonatorEmail === "string" ? token.impersonatorEmail : null;
+        session.user.impersonatorName =
+          typeof token.impersonatorName === "string" ? token.impersonatorName : null;
+        session.user.impersonatorRole =
+          typeof token.impersonatorRole === "string" ? (token.impersonatorRole as Role) : null;
         session.user.department = typeof token.department === "string" ? token.department : null;
         session.user.group = typeof token.group === "string" ? token.group : null;
         session.user.admissionYear =
@@ -988,14 +1175,14 @@ export const authOptions: NextAuthOptions = {
   cookies: {
     sessionToken: {
       name:
-        process.env.NODE_ENV === "production"
+        useSecureAuthCookies
           ? "__Secure-next-auth.session-token"
           : "next-auth.session-token",
       options: {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: process.env.NODE_ENV === "production",
+        secure: useSecureAuthCookies,
         // Domain задаем только в проде для реального домена.
         // domain: process.env.NODE_ENV === "production" ? ".your-domain.ru" : undefined,
       },

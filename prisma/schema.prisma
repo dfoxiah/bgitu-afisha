@@ -17,6 +17,8 @@ model User {
   image         String?
   role          Role           @default(STUDENT)
   password      String?
+  isScenarioPersona Boolean    @default(false)
+  scenarioOwnerId String?
   department    String?
   group         String?
   admissionYear Int?
@@ -43,6 +45,8 @@ model User {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   
+  scenarioOwner     User?            @relation("ScenarioOwner", fields: [scenarioOwnerId], references: [id], onDelete: SetNull)
+  scenarioAccounts  User[]           @relation("ScenarioOwner")
   accounts          Account[]
   sessions          Session[]
   consents          UserConsent[]
@@ -53,6 +57,8 @@ model User {
   eventParticipants EventParticipant[]
   notifications     Notification[]
   auditLogs         AuditLog[]          @relation("AuditActor")
+
+  @@index([scenarioOwnerId, isScenarioPersona])
 }
 
 model Account {

@@ -17,3 +17,12 @@ export const ensureAdminSession = (session: SessionLike) => {
   if (!isAdminSession(session) || !hasSessionUser(session)) return null
   return session.user.id
 }
+
+export const resolveScenarioAdminOwnerId = (session: SessionLike) => {
+  if (!hasSessionUser(session)) return null
+  if (isAdminSession(session)) return session.user.id
+  if (typeof session.user.impersonatorId === "string" && session.user.impersonatorId) {
+    return session.user.impersonatorId
+  }
+  return null
+}

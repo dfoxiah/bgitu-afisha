@@ -30,6 +30,7 @@ import type {
   AdminNewsTemplateInput,
   AdminSimulationResponse,
   AdminSimulationScenarioId,
+  AdminScenarioAccount,
   AdminStructureSnapshot,
   AdminStructureUpdateInput,
   AdminStructureUpdateResult,
@@ -97,6 +98,12 @@ export const updateAdminUser = (id: string, payload: AdminUserUpdateInput) =>
 
 export const deleteAdminUser = (id: string) =>
   request<{ success: true }>(`/api/admin/users/${id}`, { method: "DELETE" })
+
+export const getAdminScenarioAccounts = () =>
+  request<AdminScenarioAccount[]>("/api/admin/scenario-accounts")
+
+export const ensureAdminScenarioAccounts = () =>
+  request<AdminScenarioAccount[]>("/api/admin/scenario-accounts", { method: "POST" })
 
 export const getAdminStructure = () =>
   request<AdminStructureSnapshot>("/api/admin/structure")

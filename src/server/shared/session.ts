@@ -21,11 +21,15 @@ export type SessionLike = {
     role?: Role | string | null
     email?: string | null
     name?: string | null
+    impersonatorId?: string | null
   } | null
 } | null | undefined
 
-export const hasSessionUser = (session: SessionLike): session is { user: { id: string; role?: Role | string | null } } =>
-  Boolean(session?.user?.id)
+type SessionUserLike = NonNullable<NonNullable<SessionLike>["user"]>
+
+export const hasSessionUser = (
+  session: SessionLike
+): session is { user: SessionUserLike & { id: string } } => Boolean(session?.user?.id)
 
 export const isAdminSession = (session: SessionLike) =>
   hasSessionUser(session) && isAdminRole(session.user.role)
