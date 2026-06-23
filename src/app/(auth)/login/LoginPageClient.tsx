@@ -199,12 +199,18 @@ const FeatureCard = ({
   text: string
   icon: ReactNode
 }) => (
-  <article className="rounded-[1.45rem] border border-white/10 bg-white/8 p-4 backdrop-blur-sm">
-    <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 text-cyan-100">
-      {icon}
+  <article className="rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-3 backdrop-blur-sm">
+    <div className="flex items-start gap-3">
+      <div className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-cyan-100">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-white" style={{ fontFamily: "var(--font-body)" }}>
+          {title}
+        </p>
+        <p className="mt-1 text-sm leading-5 text-white/68">{text}</p>
+      </div>
     </div>
-    <p className="mt-3 text-sm font-semibold text-white">{title}</p>
-    <p className="mt-1 text-sm leading-6 text-white/70">{text}</p>
   </article>
 )
 
@@ -409,17 +415,17 @@ export default function LoginPageClient({
   const heroFeatures = [
     {
       title: "Один профиль",
-      text: "После входа студент, преподаватель и администратор попадают в один кабинет с сохранением ролей и настроек.",
+      text: "Единый кабинет для студента, преподавателя и администратора.",
       icon: <CheckIcon className="h-4 w-4" />,
     },
     {
       title: "Три рабочих сценария",
-      text: "Telegram для быстрого входа, Яндекс для OAuth и пароль для уже созданных аккаунтов.",
+      text: "Telegram для быстрого входа, Яндекс и пароль — как альтернативы.",
       icon: <ArrowIcon className="h-4 w-4" />,
     },
     {
       title: "Уведомления и доступы",
-      text: "После авторизации можно сразу продолжить настройку Telegram, email и остальных каналов в профиле.",
+      text: "После входа можно сразу включить каналы уведомлений в профиле.",
       icon: <SparkIcon className="h-4 w-4" />,
     },
   ]
@@ -443,29 +449,32 @@ export default function LoginPageClient({
         <div className="absolute bottom-[-12%] left-[35%] h-64 w-64 rounded-full bg-sky-300/16 blur-3xl" />
       </div>
 
-      <div className="mx-auto grid w-full max-w-7xl gap-6 lg:grid-cols-[1.04fr_0.96fr]">
-        <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#0b1220] px-5 py-6 text-white shadow-[0_30px_90px_rgba(8,15,32,0.42)] sm:px-7 sm:py-8">
+      <div className="mx-auto grid w-full max-w-6xl gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
+        <section className="order-2 relative self-start overflow-hidden rounded-[1.9rem] border border-white/10 bg-[#0b1220] px-5 py-5 text-white shadow-[0_30px_90px_rgba(8,15,32,0.28)] sm:px-6 sm:py-6 xl:order-1">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.22),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.18),transparent_30%)]" />
 
-          <div className="relative flex h-full flex-col justify-between gap-8">
-            <div>
+          <div className="relative flex flex-col gap-5">
+            <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80">
                 <SparkIcon className="h-3.5 w-3.5" />
                 БГИТУ Афиша
               </div>
 
-              <h1 className="mt-5 max-w-2xl text-3xl font-semibold leading-tight sm:text-4xl lg:text-[3.2rem] lg:leading-[1.05]">
+              <h1
+                className="max-w-md text-[clamp(1.7rem,2.4vw,2.5rem)] font-semibold leading-[1.05] tracking-[-0.03em] text-white"
+                style={{ fontFamily: "var(--font-body)" }}
+              >
                 Вход для кампусной афиши — через Telegram, Яндекс или email.
               </h1>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-white/74 sm:text-base">
-                Мы оставили три понятных сценария: быстрый вход через Telegram-бота, OAuth через Яндекс и парольный доступ для существующих аккаунтов.
+              <p className="max-w-md text-sm leading-6 text-white/72 sm:text-[15px]">
+                Три понятных сценария: Telegram для быстрого входа, Яндекс для OAuth и пароль для существующих аккаунтов.
               </p>
 
-              <div className="mt-6 flex flex-wrap gap-2.5">
+              <div className="flex flex-wrap gap-2">
                 {["Telegram bot", "Яндекс OAuth", "Email / пароль"].map((item) => (
                   <span
                     key={item}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3.5 py-2 text-xs font-medium text-white/80"
+                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3 py-1.5 text-[11px] font-medium text-white/80"
                   >
                     <CheckIcon className="h-3.5 w-3.5 text-cyan-200" />
                     {item}
@@ -474,7 +483,7 @@ export default function LoginPageClient({
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <div className="hidden gap-2.5 sm:grid">
               {heroFeatures.map((item) => (
                 <FeatureCard key={item.title} title={item.title} text={item.text} icon={item.icon} />
               ))}
@@ -482,11 +491,11 @@ export default function LoginPageClient({
           </div>
         </section>
 
-        <section className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-white/90 p-5 shadow-[0_28px_80px_rgba(15,23,42,0.15)] backdrop-blur-xl sm:p-7">
+        <section className="order-1 relative overflow-hidden rounded-[1.9rem] border border-white/70 bg-white/90 p-5 shadow-[0_28px_80px_rgba(15,23,42,0.13)] backdrop-blur-xl sm:p-7 xl:order-2">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(34,158,217,0.08),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(29,78,216,0.06),transparent_36%)]" />
 
           <div className="relative">
-            <div className="mb-7 flex items-center justify-between gap-3">
+            <div className="mb-6 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="inline-flex h-14 w-14 items-center justify-center rounded-[1.2rem] bg-gradient-to-br from-primary to-accent text-white shadow-[0_18px_36px_rgba(29,78,216,0.25)]">
                   <LogoMark className="h-6 w-6" />
@@ -503,7 +512,10 @@ export default function LoginPageClient({
               </div>
             </div>
 
-            <h2 className="text-2xl font-semibold tracking-tight text-primary sm:text-[2rem]">
+            <h2
+              className="text-2xl font-semibold tracking-tight text-primary sm:text-[2rem]"
+              style={{ fontFamily: "var(--font-body)" }}
+            >
               Выберите удобный вход
             </h2>
             <p className="mt-3 max-w-xl text-sm leading-6 text-primary/66">
@@ -511,14 +523,16 @@ export default function LoginPageClient({
             </p>
 
             <div className="mt-6 space-y-4">
-              <div className="rounded-[1.7rem] border border-[#229ED9]/20 bg-gradient-to-br from-[#229ED9]/14 via-white to-[#229ED9]/8 p-5 text-primary shadow-[0_18px_40px_rgba(34,158,217,0.14)]">
+              <div className="rounded-[1.55rem] border border-[#229ED9]/20 bg-gradient-to-br from-[#229ED9]/14 via-white to-[#229ED9]/8 p-5 text-primary shadow-[0_18px_40px_rgba(34,158,217,0.14)]">
                 <div className="flex items-start gap-4">
                   <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#229ED9] text-white shadow-[0_14px_26px_rgba(34,158,217,0.3)]">
                     <TelegramIcon className="h-5 w-5" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-base font-semibold text-primary">Telegram</h3>
+                      <h3 className="text-base font-semibold text-primary" style={{ fontFamily: "var(--font-body)" }}>
+                        Telegram
+                      </h3>
                       {initialConfig.telegram.botUsername && (
                         <span className="rounded-full bg-[#229ED9]/10 px-2.5 py-1 text-[11px] font-semibold text-[#229ED9]">
                           @{initialConfig.telegram.botUsername}
@@ -579,101 +593,108 @@ export default function LoginPageClient({
                 </div>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-2">
+              <button
+                type="button"
+                onClick={handleYandexLogin}
+                disabled={Boolean(loadingProvider) || !initialConfig.yandex.configured}
+                className="group w-full rounded-[1.55rem] border border-red-500/18 bg-gradient-to-br from-white via-white to-red-50 p-5 text-left shadow-[0_18px_38px_rgba(15,23,42,0.08)] transition hover:shadow-[0_22px_42px_rgba(15,23,42,0.12)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500 text-white shadow-[0_14px_26px_rgba(239,68,68,0.22)]">
+                    {loadingProvider === "yandex" ? (
+                      <SpinnerIcon className="h-4 w-4 text-white" />
+                    ) : (
+                      <YandexIcon className="h-5 w-5" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base font-semibold text-primary" style={{ fontFamily: "var(--font-body)" }}>
+                        Яндекс
+                      </h3>
+                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${initialConfig.yandex.configured ? "bg-primary/8 text-primary/72" : "bg-amber-500/12 text-amber-700"}`}>
+                        {initialConfig.yandex.configured ? "OAuth" : "env"}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-primary/66">
+                      Вход через Яндекс-аккаунт для быстрого доступа к профилю, событиям и уведомлениям.
+                    </p>
+                    <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                      {loadingProvider === "yandex" ? "Перенаправляем…" : "Войти через Яндекс"}
+                      <ArrowIcon className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+              </button>
+
+              <form
+                onSubmit={handleCredentialsLogin}
+                className="rounded-[1.55rem] border border-primary/10 bg-white/80 p-5 shadow-[0_18px_38px_rgba(15,23,42,0.08)]"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/8 text-primary">
+                    <MailIcon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base font-semibold text-primary" style={{ fontFamily: "var(--font-body)" }}>
+                        Email и пароль
+                      </h3>
+                      <span className="rounded-full bg-primary/8 px-2.5 py-1 text-[11px] font-semibold text-primary/72">
+                        Для существующих аккаунтов
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm leading-6 text-primary/66">
+                      Для существующих аккаунтов, администраторов и пользователей, которым уже выдавали пароль.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/54">
+                      Email
+                    </span>
+                    <div className="mt-1 flex items-center gap-3 rounded-2xl border border-primary/14 bg-white px-3 py-2.5 transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
+                      <MailIcon className="h-4 w-4 text-primary/45" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        autoComplete="email"
+                        className="w-full bg-transparent text-sm text-primary outline-none"
+                        placeholder="name@example.com"
+                      />
+                    </div>
+                  </label>
+
+                  <label className="block">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/54">
+                      Пароль
+                    </span>
+                    <div className="mt-1 flex items-center gap-3 rounded-2xl border border-primary/14 bg-white px-3 py-2.5 transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
+                      <LockIcon className="h-4 w-4 text-primary/45" />
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        autoComplete="current-password"
+                        className="w-full bg-transparent text-sm text-primary outline-none"
+                        placeholder="Введите пароль"
+                      />
+                    </div>
+                  </label>
+                </div>
+
                 <button
-                  type="button"
-                  onClick={handleYandexLogin}
-                  disabled={Boolean(loadingProvider) || !initialConfig.yandex.configured}
-                  className="group rounded-[1.6rem] border border-red-500/18 bg-gradient-to-br from-white via-white to-red-50 p-5 text-left shadow-[0_18px_38px_rgba(15,23,42,0.1)] transition hover:shadow-[0_22px_42px_rgba(15,23,42,0.16)] disabled:cursor-not-allowed disabled:opacity-60"
+                  type="submit"
+                  disabled={Boolean(loadingProvider)}
+                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-[0_16px_32px_rgba(29,78,216,0.22)] transition hover:bg-primary/90 disabled:opacity-60"
                 >
-                  <div className="flex items-start gap-4">
-                    <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500 text-white shadow-[0_14px_26px_rgba(239,68,68,0.22)]">
-                      {loadingProvider === "yandex" ? (
-                        <SpinnerIcon className="h-4 w-4 text-white" />
-                      ) : (
-                        <YandexIcon className="h-5 w-5" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-base font-semibold text-primary">Яндекс</h3>
-                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${initialConfig.yandex.configured ? "bg-primary/8 text-primary/72" : "bg-amber-500/12 text-amber-700"}`}>
-                          {initialConfig.yandex.configured ? "OAuth" : "env"}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-primary/66">
-                        Вход через Яндекс-аккаунт для быстрого доступа к профилю, событиям и уведомлениям.
-                      </p>
-                      <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary">
-                        {loadingProvider === "yandex" ? "Перенаправляем…" : "Войти через Яндекс"}
-                        <ArrowIcon className="h-4 w-4" />
-                      </div>
-                    </div>
-                  </div>
+                  {loadingProvider === "credentials" && <SpinnerIcon className="h-4 w-4 text-white" />}
+                  {loadingProvider === "credentials" ? "Проверяем…" : "Войти по паролю"}
                 </button>
-
-                <form
-                  onSubmit={handleCredentialsLogin}
-                  className="rounded-[1.6rem] border border-primary/10 bg-white/80 p-5 shadow-[0_18px_38px_rgba(15,23,42,0.08)]"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/8 text-primary">
-                      <MailIcon className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold text-primary">Email и пароль</h3>
-                      <p className="mt-1 text-sm leading-6 text-primary/66">
-                        Для существующих аккаунтов, администраторов и пользователей, которым уже выдавали пароль.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 space-y-3">
-                    <label className="block">
-                      <span className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/54">
-                        Email
-                      </span>
-                      <div className="mt-1 flex items-center gap-3 rounded-2xl border border-primary/14 bg-white px-3 py-2.5 transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
-                        <MailIcon className="h-4 w-4 text-primary/45" />
-                        <input
-                          type="email"
-                          value={email}
-                          onChange={(event) => setEmail(event.target.value)}
-                          autoComplete="email"
-                          className="w-full bg-transparent text-sm text-primary outline-none"
-                          placeholder="name@example.com"
-                        />
-                      </div>
-                    </label>
-
-                    <label className="block">
-                      <span className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/54">
-                        Пароль
-                      </span>
-                      <div className="mt-1 flex items-center gap-3 rounded-2xl border border-primary/14 bg-white px-3 py-2.5 transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
-                        <LockIcon className="h-4 w-4 text-primary/45" />
-                        <input
-                          type="password"
-                          value={password}
-                          onChange={(event) => setPassword(event.target.value)}
-                          autoComplete="current-password"
-                          className="w-full bg-transparent text-sm text-primary outline-none"
-                          placeholder="Введите пароль"
-                        />
-                      </div>
-                    </label>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={Boolean(loadingProvider)}
-                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-[0_16px_32px_rgba(29,78,216,0.22)] transition hover:bg-primary/90 disabled:opacity-60"
-                  >
-                    {loadingProvider === "credentials" && <SpinnerIcon className="h-4 w-4 text-white" />}
-                    {loadingProvider === "credentials" ? "Проверяем…" : "Войти по паролю"}
-                  </button>
-                </form>
-              </div>
+              </form>
             </div>
 
             {displayedError && (

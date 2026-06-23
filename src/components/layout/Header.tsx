@@ -263,6 +263,7 @@ export default function Header() {
                 </>
               ) : (
                 <Link href="/login" className="btn btn-primary px-4 py-2 text-sm" onClick={hardNavigate("/login")}>
+                  <i className="fas fa-right-to-bracket text-xs" aria-hidden="true" />
                   Войти
                 </Link>
               )}
