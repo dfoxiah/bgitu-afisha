@@ -56,9 +56,6 @@ const legalLinks: FooterLink[] = [
   },
 ]
 
-const cardClassName =
-  "rounded-[1.7rem] border border-primary/12 bg-white/74 p-5 shadow-[0_18px_36px_rgba(18,39,76,0.08)] backdrop-blur-xl sm:p-6"
-
 export default function Footer() {
   const botUsername = getTelegramBotUsername()
   const telegramLink = botUsername ? `https://t.me/${botUsername}` : null
@@ -66,7 +63,7 @@ export default function Footer() {
   const currentYear = new Date().getFullYear()
 
   return (
-    <footer className="footer-sky mt-10 border-t border-primary/12 bg-white/82 shadow-[0_-10px_28px_rgba(17,39,74,0.08)] backdrop-blur-xl">
+    <footer className="footer-sky mt-10 border-t border-primary/12 bg-white/84 shadow-[0_-10px_28px_rgba(17,39,74,0.08)] backdrop-blur-xl">
       <div className="border-b border-primary/10 bg-gradient-to-r from-primary/7 via-white to-accent/7">
         <div className="mx-auto grid max-w-7xl grid-cols-[1fr_auto_1fr] items-center px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-primary/60 sm:px-6 sm:py-2 sm:text-[11px]">
           <span className="hidden sm:inline">БГИТУ • Афиша кампуса</span>
@@ -77,9 +74,9 @@ export default function Footer() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-6">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.18fr)_minmax(0,1fr)_360px]">
-          <section className={cardClassName}>
+      <div className="mx-auto max-w-7xl px-3 sm:px-6">
+        <div className="grid gap-8 py-6 lg:grid-cols-[minmax(0,1.18fr)_minmax(0,1fr)_360px] lg:gap-6 lg:py-7">
+          <section className="lg:border-r lg:border-primary/10 lg:pr-6">
             <Link href="/" className="group flex min-w-0 items-center gap-3">
               <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent text-xs font-bold text-white shadow-[0_16px_28px_rgba(36,88,198,0.24)]">
                 БГ
@@ -126,8 +123,8 @@ export default function Footer() {
             </div>
           </section>
 
-          <section className={`${cardClassName} grid gap-3 sm:grid-cols-2`}>
-            <div className="space-y-3">
+          <section className="grid gap-5 sm:grid-cols-2 lg:pr-6">
+            <div className="space-y-3 lg:border-r lg:border-primary/10 lg:pr-5">
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-primary/48">
                 Основные разделы
               </div>
@@ -135,7 +132,7 @@ export default function Footer() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="group block rounded-2xl border border-primary/10 bg-white/72 px-4 py-3 transition-all hover:-translate-y-0.5 hover:border-primary/24 hover:bg-white"
+                  className="group block rounded-2xl border border-primary/10 bg-white/66 px-4 py-3 transition-all hover:-translate-y-0.5 hover:border-primary/24 hover:bg-white"
                 >
                   <div className="flex items-center gap-2 text-sm font-semibold text-primary">
                     <i className={`fas fa-${link.icon} text-[12px] text-primary/70`} aria-hidden="true" />
@@ -154,7 +151,7 @@ export default function Footer() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="group block rounded-2xl border border-primary/10 bg-white/72 px-4 py-3 transition-all hover:-translate-y-0.5 hover:border-primary/24 hover:bg-white"
+                  className="group block rounded-2xl border border-primary/10 bg-white/66 px-4 py-3 transition-all hover:-translate-y-0.5 hover:border-primary/24 hover:bg-white"
                 >
                   <div className="flex items-center gap-2 text-sm font-semibold text-primary">
                     <i className={`fas fa-${link.icon} text-[12px] text-primary/70`} aria-hidden="true" />
@@ -177,12 +174,12 @@ export default function Footer() {
             </div>
           </section>
 
-          <section className={`${cardClassName} bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(244,249,255,0.88))]`}>
+          <section>
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-primary/48">
               Быстрый доступ
             </div>
 
-            <div className="mt-3 rounded-[1.45rem] border border-primary/10 bg-gradient-to-br from-primary/[0.08] via-white to-accent/[0.08] p-4">
+            <div className="mt-3 rounded-[1.6rem] border border-primary/12 bg-gradient-to-br from-primary/[0.08] via-white to-accent/[0.08] p-4 shadow-[0_16px_32px_rgba(18,39,76,0.08)]">
               <div className="text-sm font-semibold text-primary">Telegram и вход без лишних шагов</div>
               <p className="mt-2 text-sm leading-6 text-primary/68">
                 Откройте Telegram-бота, получите ссылку входа и вернитесь в афишу уже с готовыми
@@ -212,7 +209,7 @@ export default function Footer() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-primary/10 bg-white/72 px-4 py-3">
+            <div className="mt-4 rounded-2xl border border-primary/10 bg-white/66 px-4 py-3">
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary/50">
                 Что внутри
               </div>
@@ -230,7 +227,7 @@ export default function Footer() {
           </section>
         </div>
 
-        <div className="mt-4 flex flex-col gap-2 rounded-2xl border border-primary/10 bg-white/66 px-4 py-3 text-xs text-primary/56 sm:px-5 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-2 border-t border-primary/10 py-4 text-xs text-primary/56 md:flex-row md:items-center md:justify-between">
           <p>© {currentYear} Брянский государственный инженерно-технологический университет</p>
           <p>Публичная афиша, личный кабинет, уведомления и кампусные сценарии</p>
         </div>
