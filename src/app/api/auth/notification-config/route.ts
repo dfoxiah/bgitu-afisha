@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
 import { authOptions } from "@/lib/auth"
-import { isTelegramLinkingConfigured, isTelegramMessagingConfigured } from "@/lib/telegram"
+import { isTelegramMessagingConfigured, resolveTelegramLinkingConfigured } from "@/lib/telegram"
 import { isEmailDeliveryConfigured } from "@/server/notifications/email-delivery"
 
 export const dynamic = "force-dynamic"
@@ -13,11 +13,13 @@ export async function GET() {
     return NextResponse.json({ error: "Не авторизован" }, { status: 401 })
   }
 
+  const telegramBotConfigured = await resolveTelegramLinkingConfigured()
+
   return NextResponse.json(
     {
       emailConfigured: isEmailDeliveryConfigured(),
       vkConfigured: Boolean(process.env.VK_GROUP_TOKEN),
-      telegramBotConfigured: isTelegramLinkingConfigured(),
+      telegramBotConfigured,
       telegramMessagingConfigured: isTelegramMessagingConfigured(),
     },
     {
@@ -25,4 +27,3 @@ export async function GET() {
     }
   )
 }
-

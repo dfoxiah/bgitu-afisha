@@ -3,6 +3,8 @@ import { randomBytes } from "crypto"
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN ?? ""
 const telegramBotUsername = (process.env.TELEGRAM_BOT_USERNAME ?? "").replace(/^@+/, "").trim()
 const telegramWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET ?? ""
+let resolvedTelegramBotUsername: string | null | undefined = telegramBotUsername || undefined
+let resolvingTelegramBotUsername: Promise<string | null> | null = null
 
 export const TELEGRAM_LINK_PREFIX = "telegram-link:"
 export const TELEGRAM_LOGIN_PREFIX = "telegram-login:"
@@ -37,6 +39,52 @@ export const isTelegramLinkingConfigured = () =>
 
 export const getTelegramBotUsername = () => telegramBotUsername || null
 
+const fetchTelegramBotUsername = async () => {
+  if (!telegramBotToken) return null
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${telegramBotToken}/getMe`, {
+      method: "GET",
+      cache: "no-store",
+    })
+
+    if (!response.ok) return null
+
+    const payload = (await response.json()) as {
+      ok?: boolean
+      result?: {
+        username?: string
+      }
+    }
+
+    if (!payload.ok) return null
+    return normalizeTelegramUsername(payload.result?.username)
+  } catch {
+    return null
+  }
+}
+
+export const resolveTelegramBotUsername = async () => {
+  if (telegramBotUsername) return telegramBotUsername
+  if (!telegramBotToken) return null
+  if (resolvedTelegramBotUsername !== undefined) return resolvedTelegramBotUsername
+  if (resolvingTelegramBotUsername) return resolvingTelegramBotUsername
+
+  resolvingTelegramBotUsername = fetchTelegramBotUsername()
+    .then((username) => {
+      resolvedTelegramBotUsername = username
+      return username
+    })
+    .finally(() => {
+      resolvingTelegramBotUsername = null
+    })
+
+  return resolvingTelegramBotUsername
+}
+
+export const resolveTelegramLinkingConfigured = async () =>
+  Boolean(telegramBotToken && (await resolveTelegramBotUsername()))
+
 export const getTelegramWebhookSecret = () => telegramWebhookSecret || null
 
 export const createTelegramLinkToken = () => `tg_${randomBytes(18).toString("base64url")}`
@@ -46,6 +94,12 @@ export const createTelegramRequestId = () => `tgr_${randomBytes(18).toString("ba
 export const createTelegramDeepLink = (token: string) => {
   if (!telegramBotUsername) return null
   return `https://t.me/${telegramBotUsername}?start=${encodeURIComponent(token)}`
+}
+
+export const resolveTelegramDeepLink = async (token: string) => {
+  const username = await resolveTelegramBotUsername()
+  if (!username) return null
+  return `https://t.me/${username}?start=${encodeURIComponent(token)}`
 }
 
 export const extractTelegramStartToken = (text: string | undefined | null) => {

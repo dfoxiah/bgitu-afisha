@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server"
-import { getTelegramBotUsername, isTelegramLinkingConfigured } from "@/lib/telegram"
+import { resolveTelegramBotUsername, resolveTelegramLinkingConfigured } from "@/lib/telegram"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
+  const [configured, botUsername] = await Promise.all([
+    resolveTelegramLinkingConfigured(),
+    resolveTelegramBotUsername(),
+  ])
+
   return NextResponse.json(
     {
-      configured: isTelegramLinkingConfigured(),
-      botUsername: getTelegramBotUsername(),
+      configured,
+      botUsername,
     },
     {
       headers: { "Cache-Control": "no-store" },

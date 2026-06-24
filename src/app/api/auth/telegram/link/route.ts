@@ -5,12 +5,12 @@ import { buildAuditMeta, logAuditEvent } from "@/lib/audit"
 import { prisma } from "@/lib/prisma"
 import { asPrismaUserCompat, prismaUserCompat, type UserWithTelegram } from "@/lib/prisma-user-compat"
 import {
-  createTelegramDeepLink,
   createTelegramLinkToken,
-  getTelegramBotUsername,
-  isTelegramLinkingConfigured,
   isTelegramMessagingConfigured,
   maskTelegramChatId,
+  resolveTelegramBotUsername,
+  resolveTelegramDeepLink,
+  resolveTelegramLinkingConfigured,
 } from "@/lib/telegram"
 import { errorJson, successJson } from "@/server/shared/http-response"
 
@@ -40,6 +40,11 @@ export async function GET(_req: NextRequest) {
     return errorJson(401, "UNAUTHORIZED", "Не авторизован")
   }
 
+  const [configured, botUsername] = await Promise.all([
+    resolveTelegramLinkingConfigured(),
+    resolveTelegramBotUsername(),
+  ])
+
   const [user, pendingLink] = await Promise.all([
     prismaUserCompat.findUnique<TelegramLinkStatusUser>({
       where: { id: session.user.id },
@@ -63,9 +68,9 @@ export async function GET(_req: NextRequest) {
   }
 
   return successJson({
-    configured: isTelegramLinkingConfigured(),
+    configured,
     messagingConfigured: isTelegramMessagingConfigured(),
-    botUsername: getTelegramBotUsername(),
+    botUsername,
     connected: Boolean(user.telegramChatId),
     notifyTelegram: user.notifyTelegram,
     telegramUsername: user.telegramUsername,
@@ -81,11 +86,16 @@ export async function POST(req: NextRequest) {
     return errorJson(401, "UNAUTHORIZED", "Не авторизован")
   }
 
-  if (!isTelegramLinkingConfigured()) {
+  const [configured, botUsername] = await Promise.all([
+    resolveTelegramLinkingConfigured(),
+    resolveTelegramBotUsername(),
+  ])
+
+  if (!configured) {
     return errorJson(
       503,
       "SERVER_ERROR",
-      "Telegram-бот не настроен. Заполните TELEGRAM_BOT_TOKEN и TELEGRAM_BOT_USERNAME."
+      "Telegram-бот не настроен. Проверьте TELEGRAM_BOT_TOKEN и доступ к Telegram API."
     )
   }
 
@@ -101,7 +111,7 @@ export async function POST(req: NextRequest) {
   const token = createTelegramLinkToken()
   const expires = new Date(Date.now() + TELEGRAM_LINK_TTL_MS)
   const identifier = getTelegramLinkIdentifier(user.id)
-  const url = createTelegramDeepLink(token)
+  const url = await resolveTelegramDeepLink(token)
 
   if (!url) {
     return errorJson(503, "SERVER_ERROR", "Не удалось собрать ссылку для Telegram-бота")
@@ -137,7 +147,7 @@ export async function POST(req: NextRequest) {
   return successJson({
     success: true,
     url,
-    botUsername: getTelegramBotUsername(),
+    botUsername,
     expiresAt: expires.toISOString(),
   })
 }

@@ -16,11 +16,11 @@ import { ParticipantStatus } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { prismaUserCompat } from "@/lib/prisma-user-compat"
 import {
-  createTelegramDeepLink,
-  getTelegramBotUsername,
   getTelegramWebhookSecret,
-  isTelegramLinkingConfigured,
   isTelegramMessagingConfigured,
+  resolveTelegramBotUsername,
+  resolveTelegramDeepLink,
+  resolveTelegramLinkingConfigured,
 } from "@/lib/telegram"
 import { ADMIN_SIMULATION_SCENARIOS } from "@/features/admin/simulation-catalog"
 import type {
@@ -176,23 +176,23 @@ const runRegistrationFlowScenario = async (): Promise<ScenarioPayload> => {
 }
 
 const runTelegramAuthScenario = async (): Promise<ScenarioPayload> => {
-  const botUsername = getTelegramBotUsername()
-  const deepLink = createTelegramDeepLink("admin_diag_check")
   const webhookSecret = getTelegramWebhookSecret()
-  const [linkedUsers, linkingConfigured, messagingConfigured] = await Promise.all([
+  const [linkedUsers, linkingConfigured, messagingConfigured, botUsername, deepLink] = await Promise.all([
     prismaUserCompat
       .findMany<Pick<UserNotificationSnapshot, "telegramChatId">>({
         select: { telegramChatId: true },
       })
       .then((users) => users.filter((user) => hasNonEmptyValue(user.telegramChatId)).length),
-    Promise.resolve(isTelegramLinkingConfigured()),
+    resolveTelegramLinkingConfigured(),
     Promise.resolve(isTelegramMessagingConfigured()),
+    resolveTelegramBotUsername(),
+    resolveTelegramDeepLink("admin_diag_check"),
   ])
 
   if (!linkingConfigured) {
     return {
       status: "error",
-      summary: "Telegram-вход не готов: не хватает токена бота или username.",
+      summary: "Telegram-вход не готов: проверьте токен бота и доступ к Telegram API.",
       details: [
         `Бот: ${botUsername ? `@${botUsername}` : "не указан"}.`,
         `Deep-link: ${deepLink ? "создается" : "недоступен"}.`,

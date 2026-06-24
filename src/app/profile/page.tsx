@@ -688,8 +688,8 @@ export default function ProfilePage() {
       if (telegramWindow) {
         telegramWindow.opener = null
         telegramWindow.location.href = payload.url
-      } else {
-        window.open(payload.url, '_blank', 'noopener,noreferrer')
+      } else if (typeof window !== 'undefined') {
+        window.location.assign(payload.url)
       }
       showToast('Открыл бота Telegram. Нажмите Start и вернитесь на сайт.', 'success')
       void loadTelegramState()

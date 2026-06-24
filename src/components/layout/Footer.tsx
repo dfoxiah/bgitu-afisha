@@ -75,7 +75,7 @@ export default function Footer() {
       </div>
 
       <div className="mx-auto max-w-7xl px-3 sm:px-6">
-        <div className="grid gap-8 py-6 lg:grid-cols-[minmax(0,1.18fr)_minmax(0,1fr)_360px] lg:gap-6 lg:py-7">
+        <div className="grid gap-6 py-5 lg:grid-cols-[minmax(0,1.18fr)_minmax(0,1fr)_360px] lg:gap-5 lg:py-6">
           <section className="lg:border-r lg:border-primary/10 lg:pr-6">
             <Link href="/" className="group flex min-w-0 items-center gap-3">
               <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent text-xs font-bold text-white shadow-[0_16px_28px_rgba(36,88,198,0.24)]">
@@ -99,10 +99,9 @@ export default function Footer() {
             <div className="mt-4 flex flex-wrap gap-2">
               <span className="liquid-chip px-3 py-1.5 text-xs">События и новости</span>
               <span className="liquid-chip px-3 py-1.5 text-xs">Telegram-уведомления</span>
-              <span className="liquid-chip px-3 py-1.5 text-xs">Проверка сценариев ролей</span>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-primary/10 bg-gradient-to-br from-primary/[0.06] via-white to-white px-4 py-3">
                 <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary/50">
                   Для студентов и сотрудников
@@ -123,7 +122,7 @@ export default function Footer() {
             </div>
           </section>
 
-          <section className="grid gap-5 sm:grid-cols-2 lg:pr-6">
+          <section className="grid gap-4 sm:grid-cols-2 lg:pr-6">
             <div className="space-y-3 lg:border-r lg:border-primary/10 lg:pr-5">
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-primary/48">
                 Основные разделы
@@ -209,7 +208,7 @@ export default function Footer() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-primary/10 bg-white/66 px-4 py-3">
+            <div className="mt-3 rounded-2xl border border-primary/10 bg-white/66 px-4 py-3">
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary/50">
                 Что внутри
               </div>

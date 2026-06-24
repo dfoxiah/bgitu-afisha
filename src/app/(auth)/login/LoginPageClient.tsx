@@ -354,8 +354,8 @@ export default function LoginPageClient({
       if (telegramWindow) {
         telegramWindow.opener = null
         telegramWindow.location.href = payload.url
-      } else {
-        window.open(payload.url, "_blank", "noopener,noreferrer")
+      } else if (typeof window !== "undefined") {
+        window.location.assign(payload.url)
       }
     } catch {
       telegramWindow?.close()
