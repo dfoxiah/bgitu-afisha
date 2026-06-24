@@ -12,8 +12,8 @@
  */
 "use client"
 
-import { useRouter } from "next/navigation"
 import { EventCategory } from "@prisma/client"
+import { useRouter } from "next/navigation"
 import { CategoryDisplayMap, Event } from "@/types"
 
 interface UpcomingEventsProps {
@@ -24,48 +24,47 @@ interface UpcomingEventsProps {
 const UpcomingEvents = ({ events, plain = false }: UpcomingEventsProps) => {
   const router = useRouter()
   const now = new Date()
-  const weekAhead = new Date(now)
-  weekAhead.setDate(now.getDate() + 7)
 
-  const weekEvents = events
+  const nearestEvents = events
     .filter((event) => {
       try {
         const eventDate = event.date instanceof Date ? event.date : new Date(event.date)
-        return eventDate >= now && eventDate <= weekAhead
+        return eventDate >= now
       } catch {
         return false
       }
     })
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .sort((left, right) => new Date(left.date).getTime() - new Date(right.date).getTime())
+    .slice(0, 6)
 
   return (
     <section className={plain ? "" : "liquid-section p-4 sm:p-5"}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-primary">Ближайшие мероприятия</h2>
-          <p className="mt-1 text-sm text-primary/62">Расписание на ближайшие 7 дней.</p>
+          <p className="mt-1 text-sm text-primary/62">Показываем ближайшие запланированные события.</p>
         </div>
 
         <span className="liquid-chip px-3 py-1 text-xs font-semibold uppercase tracking-[0.09em] text-primary/62">
-          {weekEvents.length} записей
+          {nearestEvents.length} записей
         </span>
       </div>
 
-      {weekEvents.length === 0 ? (
+      {nearestEvents.length === 0 ? (
         <div className="liquid-card py-8 text-center text-primary/62">
           <i className="fas fa-calendar-plus mb-3 text-4xl" />
-          <p>На ближайшую неделю пока нет событий.</p>
+          <p>Пока нет запланированных событий.</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-primary/12 bg-white/82">
-          {weekEvents.map((event, index) => {
+          {nearestEvents.map((event, index) => {
             const date = new Date(event.date)
 
             return (
               <article
                 key={event.id}
                 className={`grid cursor-pointer gap-3 px-3 py-3 transition-colors hover:bg-primary/5 sm:grid-cols-[68px_minmax(0,1fr)_auto] sm:items-center ${
-                  index !== weekEvents.length - 1 ? "border-b border-primary/12" : ""
+                  index !== nearestEvents.length - 1 ? "border-b border-primary/12" : ""
                 }`}
                 onClick={() => router.push(`/events/${event.id}`)}
               >
