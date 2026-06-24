@@ -19,6 +19,7 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { useAppContext } from '@/contexts/AppContext'
 import Button from '@/components/ui/Button'
+import { openTelegram } from '@/lib/open-telegram'
 import { showToast } from '@/lib/toast'
 import {
   createTelegramLinkApi,
@@ -685,12 +686,11 @@ export default function ProfilePage() {
     try {
       const payload = await createTelegramLinkApi()
       setTelegramState(prev => prev ? { ...prev, pendingExpiresAt: payload.expiresAt } : prev)
-      if (telegramWindow) {
-        telegramWindow.opener = null
-        telegramWindow.location.href = payload.url
-      } else if (typeof window !== 'undefined') {
-        window.location.assign(payload.url)
-      }
+      openTelegram({
+        appUrl: payload.appUrl,
+        webUrl: payload.webUrl,
+        targetWindow: telegramWindow,
+      })
       showToast('Открыл бота Telegram. Нажмите Start и вернитесь на сайт.', 'success')
       void loadTelegramState()
     } catch (error) {

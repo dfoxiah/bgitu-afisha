@@ -18,6 +18,7 @@ import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "re
 import Link from "next/link"
 import { signIn, useSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { openTelegram } from "@/lib/open-telegram"
 import { isProfileComplete } from "@/lib/profile-completion"
 
 export type LoginPageConfig = {
@@ -36,6 +37,8 @@ type TelegramBotLoginCreateResponse = {
   success: boolean
   requestId: string
   url: string
+  webUrl: string
+  appUrl: string | null
   botUsername: string | null
   expiresAt: string
 }
@@ -325,7 +328,7 @@ export default function LoginPageClient({
   const handleTelegramBotLogin = async () => {
     setLocalError("")
 
-    if (!initialConfig.telegram.configured || !initialConfig.telegram.botUsername) {
+    if (!initialConfig.telegram.configured) {
       setLocalError("Telegram-бот для входа пока не настроен на сервере.")
       return
     }
@@ -349,14 +352,13 @@ export default function LoginPageClient({
 
       const payload = (await response.json()) as TelegramBotLoginCreateResponse
       setTelegramBotRequestId(payload.requestId)
-      setTelegramBotLink(payload.url)
+      setTelegramBotLink(payload.webUrl)
       setTelegramBotPendingUntil(payload.expiresAt)
-      if (telegramWindow) {
-        telegramWindow.opener = null
-        telegramWindow.location.href = payload.url
-      } else if (typeof window !== "undefined") {
-        window.location.assign(payload.url)
-      }
+      openTelegram({
+        appUrl: payload.appUrl,
+        webUrl: payload.webUrl,
+        targetWindow: telegramWindow,
+      })
     } catch {
       telegramWindow?.close()
       setTelegramBotStatus("idle")

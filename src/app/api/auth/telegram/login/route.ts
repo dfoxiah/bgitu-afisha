@@ -5,6 +5,7 @@ import {
   createTelegramRequestId,
   getTelegramLoginCompletePrefix,
   getTelegramLoginIdentifier,
+  resolveTelegramAppLink,
   resolveTelegramBotUsername,
   resolveTelegramDeepLink,
   resolveTelegramLinkingConfigured,
@@ -88,9 +89,12 @@ export async function POST() {
   const requestId = createTelegramRequestId()
   const token = createTelegramLinkToken()
   const expires = new Date(Date.now() + TELEGRAM_LOGIN_TTL_MS)
-  const url = await resolveTelegramDeepLink(token)
+  const [webUrl, appUrl] = await Promise.all([
+    resolveTelegramDeepLink(token),
+    resolveTelegramAppLink(token),
+  ])
 
-  if (!url) {
+  if (!webUrl) {
     return errorJson(503, "SERVER_ERROR", "Не удалось собрать ссылку для Telegram-бота")
   }
 
@@ -105,7 +109,9 @@ export async function POST() {
   return successJson({
     success: true,
     requestId,
-    url,
+    url: webUrl,
+    webUrl,
+    appUrl,
     botUsername,
     expiresAt: expires.toISOString(),
   })

@@ -59,6 +59,8 @@ export type TelegramLinkStatusResponse = {
 export type TelegramLinkCreateResponse = {
   success: boolean
   url: string
+  webUrl: string
+  appUrl: string | null
   botUsername: string | null
   expiresAt: string
 }

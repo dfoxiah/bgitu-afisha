@@ -96,10 +96,21 @@ export const createTelegramDeepLink = (token: string) => {
   return `https://t.me/${telegramBotUsername}?start=${encodeURIComponent(token)}`
 }
 
+export const createTelegramAppLink = (token: string) => {
+  if (!telegramBotUsername) return null
+  return `tg://resolve?domain=${encodeURIComponent(telegramBotUsername)}&start=${encodeURIComponent(token)}`
+}
+
 export const resolveTelegramDeepLink = async (token: string) => {
   const username = await resolveTelegramBotUsername()
   if (!username) return null
   return `https://t.me/${username}?start=${encodeURIComponent(token)}`
+}
+
+export const resolveTelegramAppLink = async (token: string) => {
+  const username = await resolveTelegramBotUsername()
+  if (!username) return null
+  return `tg://resolve?domain=${encodeURIComponent(username)}&start=${encodeURIComponent(token)}`
 }
 
 export const extractTelegramStartToken = (text: string | undefined | null) => {
